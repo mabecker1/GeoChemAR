@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Methan</title>
+  <title>GeoChemAR – Methan Test ohne Bindungen</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -131,7 +131,6 @@
   </style>
 </head>
 
-
 <body>
 
   <div id="sceneHost"></div>
@@ -165,49 +164,40 @@
 
 
 /* ==========================================================
-   Methan CH4
+   DIAGNOSEMODELL
+
+   Nur die fünf Atomkugeln.
+   KEINE Bindungsstäbe.
    ========================================================== */
 
 AFRAME.registerComponent("methane-model", {
 
   init: function () {
 
-    const THREE = AFRAME.THREE;
-
-    const group = new THREE.Group();
-
-
-    /* ==================================================
-       Größen
-       ================================================== */
-
-    const carbonRadius = 0.22;
-
-    const hydrogenRadius = 0.14;
-
-    const hydrogenDistance = 0.72;
-
-    const bondRadius = 0.040;
+    const THREE =
+      AFRAME.THREE;
 
 
-    /*
-      Die Stäbe enden exakt an den
-      Kugeloberflächen.
-    */
+    const group =
+      new THREE.Group();
 
-    const bondStart =
-      carbonRadius;
 
-    const bondEnd =
-      hydrogenDistance
-      -
-      hydrogenRadius;
+    /* Größen exakt wie bisher */
+
+    const carbonRadius =
+      0.22;
+
+
+    const hydrogenRadius =
+      0.14;
+
+
+    const hydrogenDistance =
+      0.72;
 
 
 
-    /* ==================================================
-       Materialien
-       ================================================== */
+    /* Materialien exakt wie bisher */
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
@@ -227,18 +217,6 @@ AFRAME.registerComponent("methane-model", {
         color: 0xffffff,
 
         roughness: 0.45,
-
-        metalness: 0
-
-      });
-
-
-    const bondMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0xb8bec7,
-
-        roughness: 0.50,
 
         metalness: 0
 
@@ -279,7 +257,7 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Wasserstoff-Geometrie
+       Wasserstoff
        ================================================== */
 
     const hydrogenGeometry =
@@ -295,24 +273,7 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-    /* ==================================================
-       Zylinder-Ausgangsachse
-       ================================================== */
-
-    const yAxis =
-      new THREE.Vector3(
-
-        0,
-        1,
-        0
-
-      );
-
-
-
-    /* ==================================================
-       Tetraederrichtungen
-       ================================================== */
+    /* Exakte Tetraederrichtungen */
 
     const directions = [
 
@@ -344,19 +305,10 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-    /* ==================================================
-       Vier Wasserstoffatome + Bindungen
-       ================================================== */
-
     directions.forEach(function (direction) {
 
       direction.normalize();
 
-
-
-      /* ----------------------------------------------
-         Wasserstoffatom
-         ---------------------------------------------- */
 
       const hydrogen =
         new THREE.Mesh(
@@ -381,116 +333,6 @@ AFRAME.registerComponent("methane-model", {
 
       group.add(
         hydrogen
-      );
-
-
-
-      /* ----------------------------------------------
-         Anfang und Ende der Bindung
-         ---------------------------------------------- */
-
-      const startPoint =
-
-        direction
-          .clone()
-          .multiplyScalar(
-            bondStart
-          );
-
-
-      const endPoint =
-
-        direction
-          .clone()
-          .multiplyScalar(
-            bondEnd
-          );
-
-
-      const bondVector =
-
-        endPoint
-          .clone()
-          .sub(
-            startPoint
-          );
-
-
-      const bondLength =
-        bondVector.length();
-
-
-
-      /* ----------------------------------------------
-         Bindungszylinder
-
-         WICHTIG:
-         openEnded = true
-
-         Dadurch besitzen die Stäbe keine
-         kreisförmigen Deckflächen/Kappen.
-         ---------------------------------------------- */
-
-      const bondGeometry =
-
-        new THREE.CylinderGeometry(
-
-          bondRadius,   // oberer Radius
-
-          bondRadius,   // unterer Radius
-
-          bondLength,   // Länge
-
-          32,           // Umfangssegmente
-
-          1,            // Höhensegmente
-
-          true          // OPEN ENDED = keine Kappen
-
-        );
-
-
-      const bond =
-        new THREE.Mesh(
-
-          bondGeometry,
-
-          bondMaterial
-
-        );
-
-
-
-      /* Mittelpunkt */
-
-      bond.position.copy(
-
-        startPoint
-          .clone()
-          .add(
-            endPoint
-          )
-          .multiplyScalar(
-            0.5
-          )
-
-      );
-
-
-
-      /* Orientierung */
-
-      bond.quaternion.setFromUnitVectors(
-
-        yAxis,
-
-        direction
-
-      );
-
-
-      group.add(
-        bond
       );
 
     });
@@ -521,7 +363,7 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   Tracking-Aussetzer kurz überbrücken
+   Tracking-Aussetzer überbrücken
    ========================================================== */
 
 AFRAME.registerComponent("marker-hold", {
@@ -1086,9 +928,7 @@ function enforceLayers() {
     );
 
 
-  if (
-    host
-  ) {
+  if (host) {
 
     host.style.setProperty(
       "position",
@@ -1106,9 +946,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    scene
-  ) {
+  if (scene) {
 
     scene.style.setProperty(
       "position",
@@ -1140,9 +978,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    video
-  ) {
+  if (video) {
 
     video.style.setProperty(
       "position",
@@ -1190,9 +1026,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    canvas
-  ) {
+  if (canvas) {
 
     canvas.style.setProperty(
       "position",
@@ -1583,11 +1417,8 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
-
   "click",
-
   startMobileAR
-
 );
 
 
@@ -1598,11 +1429,8 @@ window.addEventListener(
   function () {
 
     setTimeout(
-
       orientationChanged,
-
       250
-
     );
 
   }
@@ -1621,11 +1449,8 @@ window.addEventListener(
     ) {
 
       setTimeout(
-
         updateStartScreen,
-
         150
-
       );
 
     }
