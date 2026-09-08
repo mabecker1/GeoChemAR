@@ -1,1661 +1,332 @@
 <!DOCTYPE html>
 <html lang="de">
-
 <head>
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width,
-             initial-scale=1.0,
-             maximum-scale=1.0,
-             user-scalable=no,
-             viewport-fit=cover"
-  >
-
-  <title>GeoChemAR – Methan</title>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+  <title>GeoChemAR – Phase 4a – Custom Marker</title>
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
-
   <style>
-
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #111;
-      font-family: Arial, sans-serif;
-    }
-
-    .a-enter-vr,
-    .a-enter-ar {
-      display: none !important;
-    }
-
-    #sceneHost {
-      position: fixed !important;
-      inset: 0 !important;
-      z-index: 10 !important;
-      width: 100%;
-      height: 100%;
-      pointer-events: none !important;
-    }
-
-    #arScene {
-      position: fixed !important;
-      inset: 0 !important;
-      z-index: 10 !important;
-      width: 100% !important;
-      height: 100% !important;
-      pointer-events: none !important;
-      background: transparent !important;
-    }
-
-    #arjs-video {
-      position: fixed !important;
-      z-index: 1 !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-
-    canvas.a-canvas {
-      position: fixed !important;
-      z-index: 11 !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-      display: block !important;
-      background: transparent !important;
-      pointer-events: none !important;
-    }
-
-    #startScreen {
-      position: fixed;
-      inset: 0;
-      z-index: 2147483647;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      padding: 30px;
-      background: #111;
-      color: white;
-      text-align: center;
-    }
-
-    #startScreen.visible {
-      display: flex;
-    }
-
-    #startContent {
-      width: 100%;
-      max-width: 420px;
-    }
-
-    #rotateIcon {
-      margin-bottom: 20px;
-      font-size: 64px;
-      line-height: 1;
-    }
-
-    #startTitle {
-      display: block;
-      margin-bottom: 12px;
-      font-size: 23px;
-      font-weight: bold;
-    }
-
-    #startText {
-      margin-bottom: 22px;
-      font-size: 15px;
-      line-height: 1.45;
-      opacity: 0.9;
-    }
-
-    #startButton {
-      display: none;
-      margin: 0 auto;
-      padding: 13px 25px;
-      border: 0;
-      border-radius: 8px;
-      font-size: 17px;
-      font-weight: bold;
-      cursor: pointer;
-      background: white;
-      color: #111;
-    }
-
+    html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial,sans-serif}
+    .a-enter-vr,.a-enter-ar{display:none!important}
+    #sceneHost{position:fixed!important;inset:0!important;z-index:10!important;width:100%;height:100%;pointer-events:none!important}
+    #arScene{position:fixed!important;inset:0!important;z-index:10!important;width:100%!important;height:100%!important;pointer-events:none!important;background:transparent!important}
+    #arjs-video{position:fixed!important;z-index:1!important;visibility:visible!important;opacity:1!important}
+    canvas.a-canvas{position:fixed!important;z-index:11!important;visibility:visible!important;opacity:1!important;display:block!important;background:transparent!important;pointer-events:none!important}
+    #startScreen{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;box-sizing:border-box;padding:30px;background:#111;color:white;text-align:center}
+    #startScreen.visible{display:flex}
+    #startContent{width:100%;max-width:420px}
+    #rotateIcon{margin-bottom:20px;font-size:64px;line-height:1}
+    #startTitle{display:block;margin-bottom:12px;font-size:23px;font-weight:bold}
+    #startText{margin-bottom:22px;font-size:15px;line-height:1.45;opacity:.9}
+    #startButton{display:none;margin:0 auto;padding:13px 25px;border:0;border-radius:8px;font-size:17px;font-weight:bold;cursor:pointer;background:white;color:#111}
   </style>
 </head>
-
 <body>
-
   <div id="sceneHost"></div>
-
   <div id="startScreen">
-
     <div id="startContent">
-
-      <div id="rotateIcon">
-        ↻
-      </div>
-
-      <div id="startTitle">
-        Bitte Smartphone drehen
-      </div>
-
-      <div id="startText">
-        GeoChemAR wird im Querformat verwendet.
-      </div>
-
-      <button id="startButton">
-        AR starten
-      </button>
-
+      <div id="rotateIcon">↻</div>
+      <div id="startTitle">Bitte Smartphone drehen</div>
+      <div id="startText">GeoChemAR wird im Querformat verwendet.</div>
+      <button id="startButton">AR starten</button>
     </div>
-
   </div>
 
-
 <script>
-
-
-/* ==========================================================
-   Methan CH4
-   ========================================================== */
-
 AFRAME.registerComponent("methane-model", {
-
   init: function () {
-
     const THREE = AFRAME.THREE;
-
     const group = new THREE.Group();
 
-
-    /* ==================================================
-       Größen
-       ================================================== */
-
     const carbonRadius = 0.22;
-
     const hydrogenRadius = 0.14;
-
     const hydrogenDistance = 0.72;
-
     const bondRadius = 0.040;
 
+    const carbonMaterial = new THREE.MeshStandardMaterial({color:0x202020,roughness:0.55,metalness:0});
+    const hydrogenMaterial = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.45,metalness:0});
+    const bondMaterial = new THREE.MeshStandardMaterial({color:0xb8bec7,roughness:0.50,metalness:0});
 
+    const carbonGeometry = new THREE.SphereGeometry(carbonRadius,48,32);
+    const carbon = new THREE.Mesh(carbonGeometry,carbonMaterial);
+    group.add(carbon);
 
-    /* ==================================================
-       Materialien
-       ================================================== */
-
-    const carbonMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0x202020,
-
-        roughness: 0.55,
-
-        metalness: 0
-
-      });
-
-
-    const hydrogenMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0xffffff,
-
-        roughness: 0.45,
-
-        metalness: 0
-
-      });
-
-
-    const bondMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0xb8bec7,
-
-        roughness: 0.50,
-
-        metalness: 0
-
-      });
-
-
-
-    /* ==================================================
-       Kohlenstoff
-       ================================================== */
-
-    const carbonGeometry =
-      new THREE.SphereGeometry(
-
-        carbonRadius,
-
-        48,
-
-        32
-
-      );
-
-
-    const carbon =
-      new THREE.Mesh(
-
-        carbonGeometry,
-
-        carbonMaterial
-
-      );
-
-
-    group.add(
-      carbon
-    );
-
-
-
-    /* ==================================================
-       Wasserstoff
-       ================================================== */
-
-    const hydrogenGeometry =
-      new THREE.SphereGeometry(
-
-        hydrogenRadius,
-
-        40,
-
-        28
-
-      );
-
-
-
-    /* ==================================================
-       Tetraederrichtungen
-       ================================================== */
-
+    const hydrogenGeometry = new THREE.SphereGeometry(hydrogenRadius,40,28);
     const directions = [
-
-      new THREE.Vector3(
-        1,
-        1,
-        1
-      ),
-
-      new THREE.Vector3(
-        1,
-        -1,
-        -1
-      ),
-
-      new THREE.Vector3(
-        -1,
-        1,
-        -1
-      ),
-
-      new THREE.Vector3(
-        -1,
-        -1,
-        1
-      )
-
+      new THREE.Vector3(1,1,1),
+      new THREE.Vector3(1,-1,-1),
+      new THREE.Vector3(-1,1,-1),
+      new THREE.Vector3(-1,-1,1)
     ];
+    directions.forEach(d => d.normalize());
 
+    const yAxis = new THREE.Vector3(0,1,0);
 
-    directions.forEach(function (direction) {
+    directions.forEach(function(direction){
+      const hydrogen = new THREE.Mesh(hydrogenGeometry,hydrogenMaterial);
+      hydrogen.position.copy(direction.clone().multiplyScalar(hydrogenDistance));
+      group.add(hydrogen);
 
-      direction.normalize();
+      // Exakt von Kugeloberfläche zu Kugeloberfläche, ohne Überlappung.
+      const startDistance = carbonRadius;
+      const endDistance = hydrogenDistance - hydrogenRadius;
+      const startPoint = direction.clone().multiplyScalar(startDistance);
+      const endPoint = direction.clone().multiplyScalar(endDistance);
+      const bondVector = endPoint.clone().sub(startPoint);
+      const bondLength = bondVector.length();
 
+      const bondGeometry = new THREE.CylinderGeometry(bondRadius,bondRadius,bondLength,32,1,false);
+      const bond = new THREE.Mesh(bondGeometry,bondMaterial);
+      bond.position.copy(startPoint.clone().add(endPoint).multiplyScalar(0.5));
+      bond.quaternion.setFromUnitVectors(yAxis,direction);
+      group.add(bond);
     });
 
-
-
-    /* ==================================================
-       Bindungen
-       ================================================== */
-
-    const yAxis =
-      new THREE.Vector3(
-        0,
-        1,
-        0
-      );
-
-
-    directions.forEach(function (direction) {
-
-
-      /* ----------------------------------------------
-         Wasserstoff
-         ---------------------------------------------- */
-
-      const hydrogen =
-        new THREE.Mesh(
-
-          hydrogenGeometry,
-
-          hydrogenMaterial
-
-        );
-
-
-      hydrogen.position.copy(
-
-        direction
-          .clone()
-          .multiplyScalar(
-            hydrogenDistance
-          )
-
-      );
-
-
-      group.add(
-        hydrogen
-      );
-
-
-
-      /* ----------------------------------------------
-         Bindungsstab
-
-         Exakt von Kugeloberfläche zu Kugeloberfläche.
-         Keine Überlappung mit den Kugeln.
-         ---------------------------------------------- */
-
-      const startDistance =
-        carbonRadius;
-
-
-      const endDistance =
-        hydrogenDistance
-        -
-        hydrogenRadius;
-
-
-      const startPoint =
-
-        direction
-          .clone()
-          .multiplyScalar(
-            startDistance
-          );
-
-
-      const endPoint =
-
-        direction
-          .clone()
-          .multiplyScalar(
-            endDistance
-          );
-
-
-      const bondVector =
-
-        endPoint
-          .clone()
-          .sub(
-            startPoint
-          );
-
-
-      const bondLength =
-        bondVector.length();
-
-
-      const bondGeometry =
-        new THREE.CylinderGeometry(
-
-          bondRadius,
-
-          bondRadius,
-
-          bondLength,
-
-          32,
-
-          1,
-
-          false
-
-        );
-
-
-      const bond =
-        new THREE.Mesh(
-
-          bondGeometry,
-
-          bondMaterial
-
-        );
-
-
-      bond.position.copy(
-
-        startPoint
-          .clone()
-          .add(
-            endPoint
-          )
-          .multiplyScalar(
-            0.5
-          )
-
-      );
-
-
-      bond.quaternion.setFromUnitVectors(
-
-        yAxis,
-
-        direction
-
-      );
-
-
-      group.add(
-        bond
-      );
-
-    });
-
-
-
-    this.el.setObject3D(
-
-      "methaneMesh",
-
-      group
-
-    );
-
+    this.el.setObject3D("methaneMesh",group);
   },
-
-
-  remove: function () {
-
-    this.el.removeObject3D(
-      "methaneMesh"
-    );
-
+  remove: function(){
+    this.el.removeObject3D("methaneMesh");
   }
-
 });
-
-
-
-/* ==========================================================
-   Tracking-Aussetzer kurz überbrücken
-   ========================================================== */
 
 AFRAME.registerComponent("marker-hold", {
-
-  schema: {
-
-    holdTime: {
-
-      type: "number",
-
-      default: 250
-
-    }
-
+  schema:{holdTime:{type:"number",default:250}},
+  init:function(){
+    this.markerDetected=false;
+    this.lostAt=0;
+    this.el.addEventListener("markerFound",()=>{
+      this.markerDetected=true;
+      this.lostAt=0;
+      this.el.object3D.visible=true;
+    });
+    this.el.addEventListener("markerLost",()=>{
+      this.markerDetected=false;
+      this.lostAt=performance.now();
+      this.el.object3D.visible=true;
+    });
   },
-
-
-  init: function () {
-
-    this.markerDetected =
-      false;
-
-
-    this.lostAt =
-      0;
-
-
-    this.el.addEventListener(
-
-      "markerFound",
-
-      () => {
-
-        this.markerDetected =
-          true;
-
-        this.lostAt =
-          0;
-
-        this.el.object3D.visible =
-          true;
-
-      }
-
-    );
-
-
-    this.el.addEventListener(
-
-      "markerLost",
-
-      () => {
-
-        this.markerDetected =
-          false;
-
-        this.lostAt =
-          performance.now();
-
-        this.el.object3D.visible =
-          true;
-
-      }
-
-    );
-
-  },
-
-
-  tick: function () {
-
-    if (
-      this.markerDetected
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      this.lostAt === 0
-    ) {
-
-      return;
-
-    }
-
-
-    const elapsed =
-
-      performance.now()
-      -
-      this.lostAt;
-
-
-    if (
-      elapsed <
-      this.data.holdTime
-    ) {
-
-      this.el.object3D.visible =
-        true;
-
-    }
-
-    else {
-
-      this.el.object3D.visible =
-        false;
-
-    }
-
+  tick:function(){
+    if(this.markerDetected||this.lostAt===0)return;
+    const elapsed=performance.now()-this.lostAt;
+    this.el.object3D.visible=elapsed<this.data.holdTime;
   }
-
 });
 
+const sceneHost=document.getElementById("sceneHost");
+const startScreen=document.getElementById("startScreen");
+const rotateIcon=document.getElementById("rotateIcon");
+const startTitle=document.getElementById("startTitle");
+const startText=document.getElementById("startText");
+const startButton=document.getElementById("startButton");
+let arStarted=false;
+let cameraOptimized=false;
 
-
-/* ==========================================================
-   Hauptprogramm
-   ========================================================== */
-
-const sceneHost =
-  document.getElementById(
-    "sceneHost"
-  );
-
-
-const startScreen =
-  document.getElementById(
-    "startScreen"
-  );
-
-
-const rotateIcon =
-  document.getElementById(
-    "rotateIcon"
-  );
-
-
-const startTitle =
-  document.getElementById(
-    "startTitle"
-  );
-
-
-const startText =
-  document.getElementById(
-    "startText"
-  );
-
-
-const startButton =
-  document.getElementById(
-    "startButton"
-  );
-
-
-let arStarted =
-  false;
-
-let cameraOptimized =
-  false;
-
-
-
-/* ==================================================
-   Gerät erkennen
-   ================================================== */
-
-function isMobileDevice() {
-
-  return (
-
-    /Android|iPhone|iPad|iPod/i.test(
-      navigator.userAgent
-    )
-
-    ||
-
-    (
-      navigator.maxTouchPoints > 1
-      &&
-      Math.min(
-        screen.width,
-        screen.height
-      ) < 1000
-    )
-
-  );
-
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||
+    (navigator.maxTouchPoints>1&&Math.min(screen.width,screen.height)<1000);
 }
 
-
-
-/* ==================================================
-   Orientierung
-   ================================================== */
-
-function isLandscape() {
-
-  return (
-
-    window.innerWidth >
-    window.innerHeight
-
-  );
-
+function isLandscape(){
+  return window.innerWidth>window.innerHeight;
 }
 
-
-
-/* ==================================================
-   Startbildschirm
-   ================================================== */
-
-function updateStartScreen() {
-
-  if (
-    !isMobileDevice()
-  ) {
-
-    startScreen.classList.remove(
-      "visible"
-    );
-
+function updateStartScreen(){
+  if(!isMobileDevice()){
+    startScreen.classList.remove("visible");
     return;
-
   }
-
-
-  if (
-    arStarted
-  ) {
-
-    startScreen.classList.remove(
-      "visible"
-    );
-
+  if(arStarted){
+    startScreen.classList.remove("visible");
     return;
-
   }
-
-
-  startScreen.classList.add(
-    "visible"
-  );
-
-
-  if (
-    !isLandscape()
-  ) {
-
-    rotateIcon.style.display =
-      "block";
-
-
-    startTitle.textContent =
-      "Bitte Smartphone drehen";
-
-
-    startText.textContent =
-      "GeoChemAR wird im Querformat verwendet.";
-
-
-    startButton.style.display =
-      "none";
-
+  startScreen.classList.add("visible");
+  if(!isLandscape()){
+    rotateIcon.style.display="block";
+    startTitle.textContent="Bitte Smartphone drehen";
+    startText.textContent="GeoChemAR wird im Querformat verwendet.";
+    startButton.style.display="none";
+  }else{
+    rotateIcon.style.display="none";
+    startTitle.textContent="GeoChemAR";
+    startText.textContent="Das Smartphone ist im Querformat. GeoChemAR kann jetzt gestartet werden.";
+    startButton.style.display="block";
   }
-
-  else {
-
-    rotateIcon.style.display =
-      "none";
-
-
-    startTitle.textContent =
-      "GeoChemAR";
-
-
-    startText.textContent =
-      "Das Smartphone ist im Querformat. GeoChemAR kann jetzt gestartet werden.";
-
-
-    startButton.style.display =
-      "block";
-
-  }
-
 }
 
-
-
-/* ==================================================
-   AR-Szene
-   ================================================== */
-
-function createARScene() {
-
-  if (
-    arStarted
-  ) {
-
-    return;
-
-  }
-
-
-  arStarted =
-    true;
-
-
-  sceneHost.innerHTML = `
-
+function createARScene(){
+  if(arStarted)return;
+  arStarted=true;
+  sceneHost.innerHTML=`
     <a-scene
-
       id="arScene"
-
       embedded
-
       vr-mode-ui="enabled: false"
-
       device-orientation-permission-ui="enabled: false"
-
-      renderer="
-        alpha: true;
-        antialias: true;
-      "
-
-      arjs="
-        sourceType: webcam;
-        sourceWidth: 640;
-        sourceHeight: 480;
-        debugUIEnabled: false;
-        detectionMode: mono;
-      "
-
+      renderer="alpha: true; antialias: true;"
+      arjs="sourceType: webcam; sourceWidth: 640; sourceHeight: 480; debugUIEnabled: false; detectionMode: mono; patternRatio: 0.5;"
     >
-
-
       <a-marker
-
-        id="hiroMarker"
-
-        preset="hiro"
-
+        id="marker1"
+        type="pattern"
+        url="markers/marker1.patt"
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
         smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
+        marker-hold="holdTime: 250;"
       >
-
-
-        <a-entity
-
-          id="methane"
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
-
+        <a-entity id="methane" position="0 0.55 0" methane-model></a-entity>
       </a-marker>
 
-
-
-      <a-entity
-
-        light="
-          type: ambient;
-          intensity: 1.0;
-          color: #ffffff;
-        "
-
-      >
-      </a-entity>
-
-
-      <a-entity
-
-        light="
-          type: directional;
-          intensity: 0.8;
-          color: #ffffff;
-        "
-
-        position="1 2 1"
-
-      >
-      </a-entity>
-
-
+      <a-entity light="type: ambient; intensity: 1.0; color: #ffffff;"></a-entity>
+      <a-entity light="type: directional; intensity: 0.8; color: #ffffff;" position="1 2 1"></a-entity>
       <a-entity camera></a-entity>
-
-
-    </a-scene>
-
-  `;
-
-
-  startScreen.classList.remove(
-    "visible"
-  );
-
+    </a-scene>`;
+  startScreen.classList.remove("visible");
 }
 
-
-
-/* ==================================================
-   Mobiler Start
-   ================================================== */
-
-async function startMobileAR() {
-
-  if (
-    !isLandscape()
-  ) {
-
+async function startMobileAR(){
+  if(!isLandscape()){
     updateStartScreen();
-
     return;
-
   }
-
-
-  try {
-
-    const element =
-      document.documentElement;
-
-
-    if (
-      element.requestFullscreen
-    ) {
-
-      await element.requestFullscreen();
-
+  try{
+    const element=document.documentElement;
+    if(element.requestFullscreen)await element.requestFullscreen();
+    else if(element.webkitRequestFullscreen)element.webkitRequestFullscreen();
+  }catch(error){
+    console.log("GeoChemAR: Vollbildmodus nicht verfügbar.",error);
+  }
+  try{
+    if(screen.orientation&&screen.orientation.lock){
+      await screen.orientation.lock("landscape");
     }
-
-    else if (
-      element.webkitRequestFullscreen
-    ) {
-
-      element.webkitRequestFullscreen();
-
-    }
-
+  }catch(error){
+    console.log("GeoChemAR: Orientierung konnte nicht gesperrt werden.",error);
   }
-
-  catch (error) {
-
-    console.log(
-      "GeoChemAR: Vollbildmodus nicht verfügbar.",
-      error
-    );
-
-  }
-
-
-  try {
-
-    if (
-
-      screen.orientation
-      &&
-      screen.orientation.lock
-
-    ) {
-
-      await screen.orientation.lock(
-        "landscape"
-      );
-
-    }
-
-  }
-
-  catch (error) {
-
-    console.log(
-      "GeoChemAR: Orientierung konnte nicht gesperrt werden.",
-      error
-    );
-
-  }
-
-
-  setTimeout(
-
-    createARScene,
-
-    400
-
-  );
-
+  setTimeout(createARScene,400);
 }
 
-
-
-/* ==================================================
-   AR-Video
-   ================================================== */
-
-function getARVideo() {
-
-  return (
-
-    document.getElementById(
-      "arjs-video"
-    )
-
-    ||
-
-    document.querySelector(
-      "video"
-    )
-
-  );
-
+function getARVideo(){
+  return document.getElementById("arjs-video")||document.querySelector("video");
 }
 
+function enforceLayers(){
+  const host=document.getElementById("sceneHost");
+  const scene=document.getElementById("arScene");
+  const video=getARVideo();
+  const canvas=document.querySelector("canvas.a-canvas");
 
-
-/* ==================================================
-   Ebenen
-   ================================================== */
-
-function enforceLayers() {
-
-  const host =
-    document.getElementById(
-      "sceneHost"
-    );
-
-
-  const scene =
-    document.getElementById(
-      "arScene"
-    );
-
-
-  const video =
-    getARVideo();
-
-
-  const canvas =
-    document.querySelector(
-      "canvas.a-canvas"
-    );
-
-
-  if (host) {
-
-    host.style.setProperty(
-      "position",
-      "fixed",
-      "important"
-    );
-
-
-    host.style.setProperty(
-      "z-index",
-      "10",
-      "important"
-    );
-
+  if(host){
+    host.style.setProperty("position","fixed","important");
+    host.style.setProperty("z-index","10","important");
   }
-
-
-  if (scene) {
-
-    scene.style.setProperty(
-      "position",
-      "fixed",
-      "important"
-    );
-
-
-    scene.style.setProperty(
-      "z-index",
-      "10",
-      "important"
-    );
-
-
-    scene.style.setProperty(
-      "visibility",
-      "visible",
-      "important"
-    );
-
-
-    scene.style.setProperty(
-      "opacity",
-      "1",
-      "important"
-    );
-
+  if(scene){
+    scene.style.setProperty("position","fixed","important");
+    scene.style.setProperty("z-index","10","important");
+    scene.style.setProperty("visibility","visible","important");
+    scene.style.setProperty("opacity","1","important");
   }
-
-
-  if (video) {
-
-    video.style.setProperty(
-      "position",
-      "fixed",
-      "important"
-    );
-
-
-    video.style.setProperty(
-      "z-index",
-      "1",
-      "important"
-    );
-
-
-    video.style.setProperty(
-      "visibility",
-      "visible",
-      "important"
-    );
-
-
-    video.style.setProperty(
-      "opacity",
-      "1",
-      "important"
-    );
-
-
-    video.setAttribute(
-      "playsinline",
-      ""
-    );
-
-
-    video.setAttribute(
-      "webkit-playsinline",
-      ""
-    );
-
-
-    video.muted =
-      true;
-
+  if(video){
+    video.style.setProperty("position","fixed","important");
+    video.style.setProperty("z-index","1","important");
+    video.style.setProperty("visibility","visible","important");
+    video.style.setProperty("opacity","1","important");
+    video.setAttribute("playsinline","");
+    video.setAttribute("webkit-playsinline","");
+    video.muted=true;
   }
-
-
-  if (canvas) {
-
-    canvas.style.setProperty(
-      "position",
-      "fixed",
-      "important"
-    );
-
-
-    canvas.style.setProperty(
-      "z-index",
-      "11",
-      "important"
-    );
-
-
-    canvas.style.setProperty(
-      "visibility",
-      "visible",
-      "important"
-    );
-
-
-    canvas.style.setProperty(
-      "opacity",
-      "1",
-      "important"
-    );
-
-
-    canvas.style.setProperty(
-      "display",
-      "block",
-      "important"
-    );
-
-
-    canvas.style.setProperty(
-      "background",
-      "transparent",
-      "important"
-    );
-
+  if(canvas){
+    canvas.style.setProperty("position","fixed","important");
+    canvas.style.setProperty("z-index","11","important");
+    canvas.style.setProperty("visibility","visible","important");
+    canvas.style.setProperty("opacity","1","important");
+    canvas.style.setProperty("display","block","important");
+    canvas.style.setProperty("background","transparent","important");
   }
-
 }
 
-
-
-/* ==================================================
-   Video und Canvas synchronisieren
-   ================================================== */
-
-function synchronizeVisualGeometry() {
-
-  const video =
-    getARVideo();
-
-
-  const canvas =
-    document.querySelector(
-      "canvas.a-canvas"
-    );
-
-
-  if (
-    !video
-    ||
-    !canvas
-  ) {
-
-    return;
-
-  }
-
-
-  const rect =
-    video.getBoundingClientRect();
-
-
-  if (
-    rect.width <= 0
-    ||
-    rect.height <= 0
-  ) {
-
-    return;
-
-  }
-
-
-  canvas.style.setProperty(
-    "left",
-    rect.left + "px",
-    "important"
-  );
-
-
-  canvas.style.setProperty(
-    "top",
-    rect.top + "px",
-    "important"
-  );
-
-
-  canvas.style.setProperty(
-    "width",
-    rect.width + "px",
-    "important"
-  );
-
-
-  canvas.style.setProperty(
-    "height",
-    rect.height + "px",
-    "important"
-  );
-
-
-  canvas.style.setProperty(
-    "right",
-    "auto",
-    "important"
-  );
-
-
-  canvas.style.setProperty(
-    "bottom",
-    "auto",
-    "important"
-  );
-
+function synchronizeVisualGeometry(){
+  const video=getARVideo();
+  const canvas=document.querySelector("canvas.a-canvas");
+  if(!video||!canvas)return;
+  const rect=video.getBoundingClientRect();
+  if(rect.width<=0||rect.height<=0)return;
+  canvas.style.setProperty("left",rect.left+"px","important");
+  canvas.style.setProperty("top",rect.top+"px","important");
+  canvas.style.setProperty("width",rect.width+"px","important");
+  canvas.style.setProperty("height",rect.height+"px","important");
+  canvas.style.setProperty("right","auto","important");
+  canvas.style.setProperty("bottom","auto","important");
 }
 
-
-
-/* ==================================================
-   Smartphone-Kamera
-   ================================================== */
-
-async function optimizeMobileCamera() {
-
-  if (
-    cameraOptimized
-  ) {
-
+async function optimizeMobileCamera(){
+  if(cameraOptimized||!arStarted)return;
+  if(!isMobileDevice()){
+    cameraOptimized=true;
     return;
-
   }
+  const video=getARVideo();
+  if(!video||!video.srcObject)return;
+  const tracks=video.srcObject.getVideoTracks();
+  if(!tracks.length)return;
+  const track=tracks[0];
 
-
-  if (
-    !arStarted
-  ) {
-
-    return;
-
-  }
-
-
-  if (
-    !isMobileDevice()
-  ) {
-
-    cameraOptimized =
-      true;
-
-    return;
-
-  }
-
-
-  const video =
-    getARVideo();
-
-
-  if (
-    !video
-  ) {
-
-    return;
-
-  }
-
-
-  const stream =
-    video.srcObject;
-
-
-  if (
-    !stream
-  ) {
-
-    return;
-
-  }
-
-
-  const tracks =
-    stream.getVideoTracks();
-
-
-  if (
-    !tracks.length
-  ) {
-
-    return;
-
-  }
-
-
-  const track =
-    tracks[0];
-
-
-  try {
-
+  try{
     await track.applyConstraints({
-
-      width: {
-        ideal: 1280
-      },
-
-      height: {
-        ideal: 720
-      },
-
-      aspectRatio: {
-        ideal: 16 / 9
-      },
-
-      frameRate: {
-        ideal: 30,
-        max: 30
-      }
-
+      width:{ideal:1280},
+      height:{ideal:720},
+      aspectRatio:{ideal:16/9},
+      frameRate:{ideal:30,max:30}
     });
-
+  }catch(error){
+    console.log("GeoChemAR: Kameraauflösung konnte nicht angepasst werden.",error);
   }
 
-  catch (error) {
-
-    console.log(
-      "GeoChemAR: Kameraauflösung konnte nicht angepasst werden.",
-      error
-    );
-
-  }
-
-
-  try {
-
-    if (
-
-      track.getCapabilities
-      &&
-      track.applyConstraints
-
-    ) {
-
-      const capabilities =
-        track.getCapabilities();
-
-
-      if (
-
-        capabilities.zoom
-        &&
-        capabilities.zoom.min !== undefined
-
-      ) {
-
-        const desiredZoom =
-
-          Math.max(
-
-            capabilities.zoom.min,
-
-            Math.min(
-              1,
-              capabilities.zoom.max
-            )
-
-          );
-
-
-        await track.applyConstraints({
-
-          advanced: [
-
-            {
-              zoom: desiredZoom
-            }
-
-          ]
-
-        });
-
+  try{
+    if(track.getCapabilities&&track.applyConstraints){
+      const capabilities=track.getCapabilities();
+      if(capabilities.zoom&&capabilities.zoom.min!==undefined){
+        const desiredZoom=Math.max(capabilities.zoom.min,Math.min(1,capabilities.zoom.max));
+        await track.applyConstraints({advanced:[{zoom:desiredZoom}]});
       }
-
     }
-
+  }catch(error){
+    console.log("GeoChemAR: Zoom konnte nicht angepasst werden.",error);
   }
 
-  catch (error) {
-
-    console.log(
-      "GeoChemAR: Zoom konnte nicht angepasst werden.",
-      error
-    );
-
-  }
-
-
-  cameraOptimized =
-    true;
-
+  cameraOptimized=true;
 }
 
-
-
-/* ==================================================
-   Orientierungswechsel
-   ================================================== */
-
-function orientationChanged() {
-
-  if (
-    !arStarted
-  ) {
-
-    setTimeout(
-      updateStartScreen,
-      200
-    );
-
+function orientationChanged(){
+  if(!arStarted){
+    setTimeout(updateStartScreen,200);
     return;
-
   }
-
-
-  if (
-    !isMobileDevice()
-  ) {
-
-    return;
-
-  }
-
-
-  if (
-    !isLandscape()
-  ) {
-
-    const video =
-      getARVideo();
-
-
-    if (
-
-      video
-      &&
-      video.srcObject
-
-    ) {
-
-      video.srcObject
-        .getTracks()
-        .forEach(
-
-          track =>
-            track.stop()
-
-        );
-
+  if(!isMobileDevice())return;
+  if(!isLandscape()){
+    const video=getARVideo();
+    if(video&&video.srcObject){
+      video.srcObject.getTracks().forEach(track=>track.stop());
     }
-
-
     location.reload();
-
   }
-
 }
 
+startButton.addEventListener("click",startMobileAR);
+window.addEventListener("orientationchange",()=>setTimeout(orientationChanged,250));
+window.addEventListener("resize",()=>{if(!arStarted)setTimeout(updateStartScreen,150);});
 
+if(isMobileDevice())updateStartScreen();
+else createARScene();
 
-/* ==================================================
-   Events
-   ================================================== */
-
-startButton.addEventListener(
-
-  "click",
-
-  startMobileAR
-
-);
-
-
-window.addEventListener(
-
-  "orientationchange",
-
-  function () {
-
-    setTimeout(
-
-      orientationChanged,
-
-      250
-
-    );
-
-  }
-
-);
-
-
-window.addEventListener(
-
-  "resize",
-
-  function () {
-
-    if (
-      !arStarted
-    ) {
-
-      setTimeout(
-
-        updateStartScreen,
-
-        150
-
-      );
-
-    }
-
-  }
-
-);
-
-
-
-/* ==================================================
-   Start
-   ================================================== */
-
-if (
-  isMobileDevice()
-) {
-
-  updateStartScreen();
-
-}
-
-else {
-
-  createARScene();
-
-}
-
-
-
-/* ==================================================
-   Laufende Pflege
-   ================================================== */
-
-setInterval(
-
-  function () {
-
-    if (
-      !arStarted
-    ) {
-
-      return;
-
-    }
-
-
-    enforceLayers();
-
-    optimizeMobileCamera();
-
-    synchronizeVisualGeometry();
-
-  },
-
-  250
-
-);
-
-
+setInterval(function(){
+  if(!arStarted)return;
+  enforceLayers();
+  optimizeMobileCamera();
+  synchronizeVisualGeometry();
+},250);
 </script>
-
 </body>
-
 </html>
