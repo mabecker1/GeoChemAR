@@ -452,238 +452,23 @@ function createARScene() {
       >
 
 
-        <!-- =========================================
-             KLEINER KONTROLLWÜRFEL
-
-             Nur vorübergehend zur Kontrolle.
-             ========================================= -->
-
         <a-box
 
-          position="-0.75 0.20 0"
+          position="0 0.3 0"
 
-          width="0.18"
-          height="0.18"
-          depth="0.18"
+          width="0.6"
+          height="0.6"
+          depth="0.6"
 
           material="
             color: #2563eb;
-            opacity: 0.9;
+            opacity: 0.8;
             transparent: true;
             side: double;
           "
 
-        ></a-box>
-
-
-
-        <!-- =========================================
-             METHAN CH4
-
-             Mittelpunkt des Kohlenstoffatoms:
-             y = 0.60
-
-             Die vier H-Atome liegen tetraedrisch.
-
-             Grundlage:
-             (+1,+1,+1)
-             (+1,-1,-1)
-             (-1,+1,-1)
-             (-1,-1,+1)
-
-             H-C-H = 109,47°
-             ========================================= -->
-
-
-        <!-- Kohlenstoff -->
-
-        <a-sphere
-
-          position="0 0.60 0"
-
-          radius="0.17"
-
-          segments-width="32"
-          segments-height="24"
-
-          material="
-            color: #202020;
-            side: double;
-          "
-
-        ></a-sphere>
-
-
-
-        <!-- =========================================
-             Bindung 1
-             Richtung (+1,+1,+1)
-             ========================================= -->
-
-        <a-cylinder
-
-          position="0.1386 0.7386 0.1386"
-
-          radius="0.035"
-
-          height="0.48"
-
-          rotation="54.7356 0 -45"
-
-          material="
-            color: #b8b8b8;
-            side: double;
-          "
-
-        ></a-cylinder>
-
-
-        <!-- Wasserstoff 1 -->
-
-        <a-sphere
-
-          position="0.2771 0.8771 0.2771"
-
-          radius="0.11"
-
-          segments-width="24"
-          segments-height="18"
-
-          material="
-            color: #ffffff;
-            side: double;
-          "
-
-        ></a-sphere>
-
-
-
-        <!-- =========================================
-             Bindung 2
-             Richtung (+1,-1,-1)
-             ========================================= -->
-
-        <a-cylinder
-
-          position="0.1386 0.4614 -0.1386"
-
-          radius="0.035"
-
-          height="0.48"
-
-          rotation="125.2644 0 -45"
-
-          material="
-            color: #b8b8b8;
-            side: double;
-          "
-
-        ></a-cylinder>
-
-
-        <!-- Wasserstoff 2 -->
-
-        <a-sphere
-
-          position="0.2771 0.3229 -0.2771"
-
-          radius="0.11"
-
-          segments-width="24"
-          segments-height="18"
-
-          material="
-            color: #ffffff;
-            side: double;
-          "
-
-        ></a-sphere>
-
-
-
-        <!-- =========================================
-             Bindung 3
-             Richtung (-1,+1,-1)
-             ========================================= -->
-
-        <a-cylinder
-
-          position="-0.1386 0.7386 -0.1386"
-
-          radius="0.035"
-
-          height="0.48"
-
-          rotation="54.7356 0 45"
-
-          material="
-            color: #b8b8b8;
-            side: double;
-          "
-
-        ></a-cylinder>
-
-
-        <!-- Wasserstoff 3 -->
-
-        <a-sphere
-
-          position="-0.2771 0.8771 -0.2771"
-
-          radius="0.11"
-
-          segments-width="24"
-          segments-height="18"
-
-          material="
-            color: #ffffff;
-            side: double;
-          "
-
-        ></a-sphere>
-
-
-
-        <!-- =========================================
-             Bindung 4
-             Richtung (-1,-1,+1)
-             ========================================= -->
-
-        <a-cylinder
-
-          position="-0.1386 0.4614 0.1386"
-
-          radius="0.035"
-
-          height="0.48"
-
-          rotation="125.2644 0 45"
-
-          material="
-            color: #b8b8b8;
-            side: double;
-          "
-
-        ></a-cylinder>
-
-
-        <!-- Wasserstoff 4 -->
-
-        <a-sphere
-
-          position="-0.2771 0.3229 0.2771"
-
-          radius="0.11"
-
-          segments-width="24"
-          segments-height="18"
-
-          material="
-            color: #ffffff;
-            side: double;
-          "
-
-        ></a-sphere>
+        >
+        </a-box>
 
 
       </a-marker>
@@ -727,10 +512,6 @@ async function startMobileAR() {
 
   /*
     1. Vollbild versuchen
-
-    Besonders bei Samsung-Browsern kann
-    das die problematische Seitenskalierung
-    vermeiden.
   */
 
   try {
@@ -766,10 +547,7 @@ async function startMobileAR() {
 
 
   /*
-    2. Querformat sperren, falls der Browser
-       das unterstützt.
-
-    Nicht alle Browser erlauben das.
+    2. Querformat sperren
   */
 
   try {
@@ -799,13 +577,7 @@ async function startMobileAR() {
 
 
   /*
-    3. Kurze Pause.
-
-    Der Browser darf zuerst den
-    Vollbild-/Querformatzustand fertig
-    berechnen.
-
-    ERST DANACH wird AR.js erzeugt.
+    3. Kurze Pause
   */
 
   setTimeout(
@@ -933,9 +705,6 @@ function keepVideoVisible() {
 
 /* ==================================================
    Smartphone-Kamera optimieren
-
-   Diese Einstellungen stammen aus der
-   Version, die bei dir funktioniert hat.
    ================================================== */
 
 async function optimizeMobileCamera() {
@@ -1277,22 +1046,9 @@ function updateStatus() {
 
 /* ==================================================
    Orientierungswechsel während AR
-
-   Wir versuchen NICHT, AR.js live
-   umzubauen.
-
-   Falls das Gerät trotz Sperre ins
-   Hochformat kommt, wird die Sitzung
-   beendet und die Seite neu geladen.
-
    ================================================== */
 
 function orientationChanged() {
-
-  /*
-    Vor AR-Start:
-    nur Startbildschirm aktualisieren.
-  */
 
   if (!arStarted) {
 
@@ -1306,24 +1062,10 @@ function orientationChanged() {
   }
 
 
-  /*
-    Computer:
-    nichts tun.
-  */
-
   if (!isMobileDevice()) {
     return;
   }
 
-
-  /*
-    Smartphone wurde während AR
-    ins Hochformat gedreht.
-
-    Statt eine kaputte AR-Projektion
-    weiterzuverwenden, setzen wir die
-    Sitzung vollständig zurück.
-  */
 
   if (!isLandscape()) {
 
@@ -1413,23 +1155,11 @@ window.addEventListener(
 
 if (isMobileDevice()) {
 
-  /*
-    Smartphone:
-
-    Noch KEIN AR.js.
-  */
-
   updateStartScreen();
 
 }
 
 else {
-
-  /*
-    Computer:
-
-    Wie bisher direkt starten.
-  */
 
   createARScene();
 
