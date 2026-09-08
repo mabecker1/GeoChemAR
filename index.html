@@ -14,7 +14,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Renderer-Diagnose</title>
+  <title>GeoChemAR – Ebenentest</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -32,10 +32,12 @@
       font-family: Arial, sans-serif;
     }
 
+
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
     }
+
 
     #sceneHost {
       position: fixed;
@@ -44,39 +46,79 @@
       height: 100%;
     }
 
+
+    /*
+      WICHTIG:
+
+      Wir ändern hier NICHT Breite, Höhe,
+      object-fit oder Transformation des Videos.
+
+      Wir sorgen ausschließlich dafür,
+      dass Video und Canvas eindeutig in
+      verschiedenen Ebenen liegen.
+    */
+
     #arjs-video {
-      z-index: 0 !important;
+
+      position: fixed !important;
+
+      z-index: 1 !important;
+
       visibility: visible !important;
       opacity: 1 !important;
+
     }
+
 
     canvas.a-canvas {
-      z-index: 1 !important;
+
+      position: fixed !important;
+
+      z-index: 2 !important;
+
       background: transparent !important;
+
+      pointer-events: none !important;
+
     }
 
+
     #startScreen {
+
       position: fixed;
+
       inset: 0;
+
       z-index: 2147483647;
+
       display: none;
+
       align-items: center;
       justify-content: center;
+
       box-sizing: border-box;
+
       padding: 30px;
+
       background: #111;
+
       color: white;
+
       text-align: center;
+
     }
+
 
     #startScreen.visible {
       display: flex;
     }
 
+
     #startContent {
       width: 100%;
       max-width: 420px;
     }
+
 
     #rotateIcon {
       margin-bottom: 20px;
@@ -84,52 +126,85 @@
       line-height: 1;
     }
 
+
     #startTitle {
+
       display: block;
+
       margin-bottom: 12px;
+
       font-size: 23px;
       font-weight: bold;
+
     }
+
 
     #startText {
+
       margin-bottom: 22px;
+
       font-size: 15px;
       line-height: 1.45;
+
       opacity: 0.9;
+
     }
+
 
     #startButton {
+
       display: none;
+
       margin: 0 auto;
+
       padding: 13px 25px;
+
       border: 0;
       border-radius: 8px;
+
       font-size: 17px;
       font-weight: bold;
+
       cursor: pointer;
+
       background: white;
       color: #111;
+
     }
 
+
     #status {
+
       position: fixed;
+
       top: max(6px, env(safe-area-inset-top));
       left: max(6px, env(safe-area-inset-left));
       right: max(6px, env(safe-area-inset-right));
+
       z-index: 100000;
+
       box-sizing: border-box;
+
       padding: 9px 11px;
+
       background: rgba(0, 0, 0, 0.82);
+
       color: white;
+
       font-size: 11px;
       line-height: 1.5;
+
       border-radius: 6px;
+
       pointer-events: none;
+
     }
+
 
     #markerStatus {
       font-weight: bold;
     }
+
 
     #renderStatus,
     #projectionStatus {
@@ -142,6 +217,7 @@
 
 
 <body>
+
 
   <div id="sceneHost"></div>
 
@@ -171,7 +247,9 @@
 
     <div id="startContent">
 
-      <div id="rotateIcon">↻</div>
+      <div id="rotateIcon">
+        ↻
+      </div>
 
       <div id="startTitle">
         Bitte Smartphone drehen
@@ -190,7 +268,9 @@
   </div>
 
 
+
 <script>
+
 
 const sceneHost =
   document.getElementById("sceneHost");
@@ -224,12 +304,20 @@ const startButton =
 
 
 let arStarted = false;
+
 let cameraOptimized = false;
+
 let sceneLoaded = false;
+
 let markerFound = false;
+
 let markerFoundCount = 0;
 
 
+
+/* ==================================================
+   Gerät erkennen
+   ================================================== */
 
 function isMobileDevice() {
 
@@ -256,6 +344,10 @@ function isMobileDevice() {
 
 
 
+/* ==================================================
+   Orientierung
+   ================================================== */
+
 function isLandscape() {
 
   return (
@@ -267,11 +359,17 @@ function isLandscape() {
 
 
 
+/* ==================================================
+   Startbildschirm
+   ================================================== */
+
 function updateStartScreen() {
 
   if (!isMobileDevice()) {
 
-    startScreen.classList.remove("visible");
+    startScreen.classList.remove(
+      "visible"
+    );
 
     return;
 
@@ -280,19 +378,24 @@ function updateStartScreen() {
 
   if (arStarted) {
 
-    startScreen.classList.remove("visible");
+    startScreen.classList.remove(
+      "visible"
+    );
 
     return;
 
   }
 
 
-  startScreen.classList.add("visible");
+  startScreen.classList.add(
+    "visible"
+  );
 
 
   if (!isLandscape()) {
 
-    rotateIcon.style.display = "block";
+    rotateIcon.style.display =
+      "block";
 
     startTitle.textContent =
       "Bitte Smartphone drehen";
@@ -326,25 +429,37 @@ function updateStartScreen() {
 
 
 /* ==================================================
-   Rendering- und Projektionsdiagnose
+   Diagnose
    ================================================== */
 
 function updateRenderingDiagnostics() {
 
   const scene =
-    document.getElementById("arScene");
+    document.getElementById(
+      "arScene"
+    );
 
   const marker =
-    document.getElementById("hiroMarker");
+    document.getElementById(
+      "hiroMarker"
+    );
 
   const box =
-    document.getElementById("testBox");
+    document.getElementById(
+      "testBox"
+    );
 
   const rendererTest =
-    document.getElementById("rendererTest");
+    document.getElementById(
+      "rendererTest"
+    );
 
 
-  if (!scene || !marker || !box) {
+  if (
+    !scene ||
+    !marker ||
+    !box
+  ) {
 
     renderStatus.textContent =
       "Rendering: Szene/Marker/Box fehlt";
@@ -355,7 +470,10 @@ function updateRenderingDiagnostics() {
 
 
   const mesh =
-    box.getObject3D("mesh");
+    box.getObject3D(
+      "mesh"
+    );
+
 
   const rendererTestMesh =
     rendererTest
@@ -404,7 +522,10 @@ function updateRenderingDiagnostics() {
     scene.canvas;
 
 
-  if (!camera || !canvas) {
+  if (
+    !camera ||
+    !canvas
+  ) {
 
     projectionStatus.textContent =
       "Projektion: Kamera oder Canvas fehlt";
@@ -414,9 +535,13 @@ function updateRenderingDiagnostics() {
   }
 
 
-  scene.object3D.updateMatrixWorld(true);
+  scene.object3D.updateMatrixWorld(
+    true
+  );
 
-  camera.updateMatrixWorld(true);
+  camera.updateMatrixWorld(
+    true
+  );
 
 
   const worldPosition =
@@ -432,7 +557,9 @@ function updateRenderingDiagnostics() {
     worldPosition.clone();
 
 
-  projected.project(camera);
+  projected.project(
+    camera
+  );
 
 
   const inside =
@@ -487,7 +614,9 @@ function updateRenderingDiagnostics() {
 function installMarkerDiagnostics() {
 
   const marker =
-    document.getElementById("hiroMarker");
+    document.getElementById(
+      "hiroMarker"
+    );
 
 
   if (!marker) {
@@ -501,6 +630,7 @@ function installMarkerDiagnostics() {
 
 
   marker.addEventListener(
+
     "markerFound",
 
     function () {
@@ -520,10 +650,12 @@ function installMarkerDiagnostics() {
       updateRenderingDiagnostics();
 
     }
+
   );
 
 
   marker.addEventListener(
+
     "markerLost",
 
     function () {
@@ -541,6 +673,7 @@ function installMarkerDiagnostics() {
       updateRenderingDiagnostics();
 
     }
+
   );
 
 
@@ -606,7 +739,8 @@ function createARScene() {
 
       >
 
-        <!-- Originaler blauer Testwürfel -->
+
+        <!-- Blauer Marker-Würfel -->
 
         <a-box
 
@@ -628,24 +762,21 @@ function createARScene() {
         >
         </a-box>
 
+
       </a-marker>
 
 
 
-      <!--
-        UNABHÄNGIGER RENDERER-TEST
-
-        Das pinke Quadrat ist direkt an
-        die Kamera gekoppelt und liegt
-        2 Einheiten vor ihr.
-
-        Es benötigt keine Beleuchtung.
-      -->
+      <!-- AR-Kamera + pinker Renderer-Test -->
 
       <a-entity
+
         id="arCamera"
+
         camera
+
       >
+
 
         <a-plane
 
@@ -667,6 +798,7 @@ function createARScene() {
         >
         </a-plane>
 
+
       </a-entity>
 
 
@@ -684,12 +816,15 @@ function createARScene() {
 
 
   const scene =
-    document.getElementById("arScene");
+    document.getElementById(
+      "arScene"
+    );
 
 
   if (scene) {
 
     scene.addEventListener(
+
       "loaded",
 
       function () {
@@ -699,6 +834,7 @@ function createARScene() {
         updateRenderingDiagnostics();
 
       }
+
     );
 
 
@@ -737,7 +873,9 @@ async function startMobileAR() {
       document.documentElement;
 
 
-    if (element.requestFullscreen) {
+    if (
+      element.requestFullscreen
+    ) {
 
       await element.requestFullscreen();
 
@@ -790,8 +928,11 @@ async function startMobileAR() {
 
 
   setTimeout(
+
     createARScene,
+
     400
+
   );
 
 }
@@ -822,6 +963,10 @@ function getARVideo() {
 
 
 
+/* ==================================================
+   Ebenen zuverlässig setzen
+   ================================================== */
+
 function keepVideoVisible() {
 
   if (!arStarted) {
@@ -833,45 +978,51 @@ function keepVideoVisible() {
     getARVideo();
 
 
-  if (!video) {
-    return;
+  if (video) {
+
+    video.style.setProperty(
+      "position",
+      "fixed",
+      "important"
+    );
+
+
+    video.style.setProperty(
+      "z-index",
+      "1",
+      "important"
+    );
+
+
+    video.style.setProperty(
+      "visibility",
+      "visible",
+      "important"
+    );
+
+
+    video.style.setProperty(
+      "opacity",
+      "1",
+      "important"
+    );
+
+
+    video.setAttribute(
+      "playsinline",
+      ""
+    );
+
+
+    video.setAttribute(
+      "webkit-playsinline",
+      ""
+    );
+
+
+    video.muted = true;
+
   }
-
-
-  video.style.setProperty(
-    "visibility",
-    "visible",
-    "important"
-  );
-
-
-  video.style.setProperty(
-    "opacity",
-    "1",
-    "important"
-  );
-
-
-  video.style.setProperty(
-    "z-index",
-    "0",
-    "important"
-  );
-
-
-  video.setAttribute(
-    "playsinline",
-    ""
-  );
-
-
-  video.setAttribute(
-    "webkit-playsinline",
-    ""
-  );
-
-
-  video.muted = true;
 
 
   const canvas =
@@ -883,8 +1034,15 @@ function keepVideoVisible() {
   if (canvas) {
 
     canvas.style.setProperty(
+      "position",
+      "fixed",
+      "important"
+    );
+
+
+    canvas.style.setProperty(
       "z-index",
-      "1",
+      "2",
       "important"
     );
 
@@ -892,6 +1050,13 @@ function keepVideoVisible() {
     canvas.style.setProperty(
       "background",
       "transparent",
+      "important"
+    );
+
+
+    canvas.style.setProperty(
+      "pointer-events",
+      "none",
       "important"
     );
 
@@ -1080,8 +1245,11 @@ function updateStatus() {
 
 
   text +=
+
     typeof AFRAME !== "undefined"
+
       ? "A-Frame: OK"
+
       : "A-Frame: FEHLT";
 
 
@@ -1102,20 +1270,27 @@ function updateStatus() {
 
 
   text +=
+
     arjsOK
+
       ? " | AR.js: OK"
+
       : " | AR.js: ?";
 
 
   text +=
+
     sceneLoaded
+
       ? " | Szene: OK"
+
       : " | Szene: lädt";
 
 
   if (video) {
 
     text +=
+
       " | Video "
       +
       video.videoWidth
@@ -1213,9 +1388,13 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
+
   "click",
+
   startMobileAR
+
 );
+
 
 
 window.addEventListener(
@@ -1232,6 +1411,7 @@ window.addEventListener(
   }
 
 );
+
 
 
 window.addEventListener(
