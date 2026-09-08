@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Methan Test ohne Bindungen</title>
+  <title>GeoChemAR – Methan</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -131,6 +131,7 @@
   </style>
 </head>
 
+
 <body>
 
   <div id="sceneHost"></div>
@@ -164,40 +165,35 @@
 
 
 /* ==========================================================
-   DIAGNOSEMODELL
-
-   Nur die fünf Atomkugeln.
-   KEINE Bindungsstäbe.
+   Methan CH4
    ========================================================== */
 
 AFRAME.registerComponent("methane-model", {
 
   init: function () {
 
-    const THREE =
-      AFRAME.THREE;
+    const THREE = AFRAME.THREE;
+
+    const group = new THREE.Group();
 
 
-    const group =
-      new THREE.Group();
+    /* ==================================================
+       Größen
+       ================================================== */
 
+    const carbonRadius = 0.22;
 
-    /* Größen exakt wie bisher */
+    const hydrogenRadius = 0.14;
 
-    const carbonRadius =
-      0.22;
+    const hydrogenDistance = 0.72;
 
-
-    const hydrogenRadius =
-      0.14;
-
-
-    const hydrogenDistance =
-      0.72;
+    const bondRadius = 0.040;
 
 
 
-    /* Materialien exakt wie bisher */
+    /* ==================================================
+       Materialien
+       ================================================== */
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
@@ -219,6 +215,20 @@ AFRAME.registerComponent("methane-model", {
         roughness: 0.45,
 
         metalness: 0
+
+      });
+
+
+    const bondMaterial =
+      new THREE.MeshStandardMaterial({
+
+        color: 0xb8bec7,
+
+        roughness: 0.50,
+
+        metalness: 0,
+
+        side: THREE.DoubleSide
 
       });
 
@@ -273,7 +283,252 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-    /* Exakte Tetraederrichtungen */
+    /* ==================================================
+       NEUE BINDUNGSGEOMETRIE
+
+       Die Enden werden exakt an die beiden
+       Kugeloberflächen angepasst.
+       ================================================== */
+
+    function createBondGeometry(
+
+      startSphereRadius,
+      endSphereRadius,
+      centerDistance,
+      radius,
+      segments = 48
+
+    ) {
+
+      const geometry =
+        new THREE.BufferGeometry();
+
+
+      const positions = [];
+
+      const indices = [];
+
+
+      /*
+        Für einen Punkt des Zylindermantels mit
+
+        x² + z² = radius²
+
+        muss der Abstand vom Kugelmittelpunkt exakt
+        dem Kugelradius entsprechen.
+
+        Daraus folgt entlang der Bindungsachse:
+
+        y = sqrt(
+          Kugelradius² - Bindungsradius²
+        )
+
+        Dadurch liegt der gesamte Rand des
+        Bindungsstabs exakt auf der Kugeloberfläche.
+      */
+
+
+      const startY =
+        Math.sqrt(
+
+          startSphereRadius
+          *
+          startSphereRadius
+
+          -
+
+          radius
+          *
+          radius
+
+        );
+
+
+      const endY =
+        centerDistance
+        -
+        Math.sqrt(
+
+          endSphereRadius
+          *
+          endSphereRadius
+
+          -
+
+          radius
+          *
+          radius
+
+        );
+
+
+
+      /* ==================================================
+         Vertices
+
+         Zwei Ringe:
+         Ring 1 = C-Seite
+         Ring 2 = H-Seite
+         ================================================== */
+
+      for (
+        let i = 0;
+        i <= segments;
+        i++
+      ) {
+
+        const angle =
+
+          (
+            i / segments
+          )
+          *
+          Math.PI
+          *
+          2;
+
+
+        const x =
+          Math.cos(angle)
+          *
+          radius;
+
+
+        const z =
+          Math.sin(angle)
+          *
+          radius;
+
+
+
+        /* C-seitiger Rand */
+
+        positions.push(
+
+          x,
+
+          startY,
+
+          z
+
+        );
+
+
+
+        /* H-seitiger Rand */
+
+        positions.push(
+
+          x,
+
+          endY,
+
+          z
+
+        );
+
+      }
+
+
+
+      /* ==================================================
+         Dreiecke des Mantels
+         ================================================== */
+
+      for (
+        let i = 0;
+        i < segments;
+        i++
+      ) {
+
+        const a =
+          i * 2;
+
+
+        const b =
+          a + 1;
+
+
+        const c =
+          a + 2;
+
+
+        const d =
+          a + 3;
+
+
+
+        indices.push(
+
+          a,
+          b,
+          c
+
+        );
+
+
+        indices.push(
+
+          c,
+          b,
+          d
+
+        );
+
+      }
+
+
+
+      geometry.setAttribute(
+
+        "position",
+
+        new THREE.Float32BufferAttribute(
+
+          positions,
+
+          3
+
+        )
+
+      );
+
+
+      geometry.setIndex(
+        indices
+      );
+
+
+      geometry.computeVertexNormals();
+
+
+      geometry.computeBoundingSphere();
+
+
+      return geometry;
+
+    }
+
+
+
+    /* ==================================================
+       Ausgangsachse der Bindungsgeometrie
+       ================================================== */
+
+    const yAxis =
+      new THREE.Vector3(
+
+        0,
+        1,
+        0
+
+      );
+
+
+
+    /* ==================================================
+       Tetraederrichtungen
+       ================================================== */
 
     const directions = [
 
@@ -305,10 +560,41 @@ AFRAME.registerComponent("methane-model", {
 
 
 
+    /* ==================================================
+       Bindungsgeometrie kann für alle vier
+       Bindungen wiederverwendet werden.
+       ================================================== */
+
+    const bondGeometry =
+      createBondGeometry(
+
+        carbonRadius,
+
+        hydrogenRadius,
+
+        hydrogenDistance,
+
+        bondRadius,
+
+        48
+
+      );
+
+
+
+    /* ==================================================
+       Vier Wasserstoffatome + Bindungen
+       ================================================== */
+
     directions.forEach(function (direction) {
 
       direction.normalize();
 
+
+
+      /* ----------------------------------------------
+         Wasserstoffatom
+         ---------------------------------------------- */
 
       const hydrogen =
         new THREE.Mesh(
@@ -333,6 +619,44 @@ AFRAME.registerComponent("methane-model", {
 
       group.add(
         hydrogen
+      );
+
+
+
+      /* ----------------------------------------------
+         Bindung
+
+         Die Geometrie läuft zunächst entlang
+         der lokalen Y-Achse.
+         ---------------------------------------------- */
+
+      const bond =
+        new THREE.Mesh(
+
+          bondGeometry,
+
+          bondMaterial
+
+        );
+
+
+
+      /*
+        Y-Achse auf die jeweilige
+        tetraedrische Richtung drehen.
+      */
+
+      bond.quaternion.setFromUnitVectors(
+
+        yAxis,
+
+        direction
+
+      );
+
+
+      group.add(
+        bond
       );
 
     });
@@ -363,7 +687,7 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   Tracking-Aussetzer überbrücken
+   Tracking-Aussetzer kurz überbrücken
    ========================================================== */
 
 AFRAME.registerComponent("marker-hold", {
@@ -1417,8 +1741,11 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
+
   "click",
+
   startMobileAR
+
 );
 
 
@@ -1429,8 +1756,11 @@ window.addEventListener(
   function () {
 
     setTimeout(
+
       orientationChanged,
+
       250
+
     );
 
   }
@@ -1449,8 +1779,11 @@ window.addEventListener(
     ) {
 
       setTimeout(
+
         updateStartScreen,
+
         150
+
       );
 
     }
