@@ -57,12 +57,16 @@
     }
 
 
+    /* --------------------------------
+       Diagnoseanzeige
+       -------------------------------- */
+
     #status {
       position: fixed;
 
-      top: 6px;
-      left: 6px;
-      right: 6px;
+      top: max(6px, env(safe-area-inset-top));
+      left: max(6px, env(safe-area-inset-left));
+      right: max(6px, env(safe-area-inset-right));
 
       z-index: 100000;
 
@@ -83,54 +87,66 @@
     }
 
 
+    /* --------------------------------
+       Querformat-Warnung
+       -------------------------------- */
+
     #rotateMessage {
+
       display: none;
 
       position: fixed;
+
       inset: 0;
 
       z-index: 200000;
 
-      align-items: center;
-      justify-content: center;
+      box-sizing: border-box;
 
       padding: 30px;
 
-      box-sizing: border-box;
-
       background: #111;
+
       color: white;
+
+      align-items: center;
+      justify-content: center;
 
       text-align: center;
     }
 
 
+    #rotateMessage .rotateContent {
+      max-width: 420px;
+    }
+
+
+    #rotateIcon {
+      font-size: 64px;
+      line-height: 1;
+
+      margin-bottom: 22px;
+    }
+
+
     #rotateMessage strong {
+
       display: block;
 
-      margin-bottom: 10px;
+      margin-bottom: 12px;
 
       font-size: 22px;
     }
 
 
-    /*
-      Nur auf kleinen Geräten zeigen wir
-      den Querformat-Hinweis.
-      Am Computer gibt es diesen Hinweis nicht.
-    */
-    @media
-      (orientation: portrait)
-      and (max-width: 900px) {
+    #rotateMessage span {
 
-      #rotateMessage {
-        display: flex;
-      }
+      display: block;
 
-      #status {
-        display: none;
-      }
+      font-size: 15px;
+      line-height: 1.45;
 
+      opacity: 0.9;
     }
 
   </style>
@@ -141,25 +157,46 @@
 <body>
 
 
+  <!-- --------------------------------
+       Querformat-Warnung
+       -------------------------------- -->
+
   <div id="rotateMessage">
-    <div>
+
+    <div class="rotateContent">
+
+      <div id="rotateIcon">
+        ↻
+      </div>
 
       <strong>
         Bitte Smartphone drehen
       </strong>
 
-      GeoChemAR wird auf mobilen Geräten
-      im Querformat verwendet.
+      <span>
+        GeoChemAR funktioniert auf mobilen Geräten
+        im Querformat.
+      </span>
 
     </div>
+
   </div>
 
+
+
+  <!-- --------------------------------
+       Diagnose
+       -------------------------------- -->
 
   <div id="status">
     GeoChemAR startet …
   </div>
 
 
+
+  <!-- --------------------------------
+       AR-Szene
+       -------------------------------- -->
 
   <a-scene
 
@@ -185,6 +222,8 @@
   >
 
 
+    <!-- Hiro-Marker -->
+
     <a-marker
 
       preset="hiro"
@@ -196,6 +235,8 @@
 
     >
 
+
+      <!-- Testwürfel -->
 
       <a-box
 
@@ -219,6 +260,8 @@
     </a-marker>
 
 
+    <!-- AR-Kamera -->
+
     <a-entity camera></a-entity>
 
 
@@ -231,13 +274,16 @@
 const status =
   document.getElementById("status");
 
+const rotateMessage =
+  document.getElementById("rotateMessage");
+
 
 let cameraOptimized = false;
 
 
 /*
   ----------------------------------------------------
-  Prüfen, ob wir vermutlich auf einem Mobilgerät sind
+  Mobilgerät erkennen
   ----------------------------------------------------
 */
 
@@ -261,6 +307,62 @@ function isMobileDevice() {
     )
 
   );
+
+}
+
+
+
+/*
+  ----------------------------------------------------
+  Querformat prüfen
+  ----------------------------------------------------
+*/
+
+function isLandscape() {
+
+  return (
+    window.innerWidth >
+    window.innerHeight
+  );
+
+}
+
+
+
+/*
+  ----------------------------------------------------
+  Querformat-Warnung anzeigen/verstecken
+
+  Nur Mobilgeräte sind betroffen.
+  Computer bleiben unverändert.
+  ----------------------------------------------------
+*/
+
+function updateOrientationWarning() {
+
+  if (
+    isMobileDevice()
+    &&
+    !isLandscape()
+  ) {
+
+    rotateMessage.style.display =
+      "flex";
+
+    status.style.display =
+      "none";
+
+  }
+
+  else {
+
+    rotateMessage.style.display =
+      "none";
+
+    status.style.display =
+      "block";
+
+  }
 
 }
 
@@ -367,16 +469,6 @@ function keepVideoVisible() {
 /*
   ----------------------------------------------------
   Smartphone-Kamera optimieren
-
-  AR.js hat die Kamera bereits geöffnet.
-
-  Wir greifen anschließend auf den
-  tatsächlich verwendeten Video-Track zu
-  und bitten den Browser um bessere
-  Einstellungen.
-
-  Am Computer lassen wir die Webcam
-  praktisch unangetastet.
   ----------------------------------------------------
 */
 
@@ -431,14 +523,8 @@ async function optimizeMobileCamera() {
 
 
   /*
-    Erst einmal versuchen wir NICHT,
-    eine andere Kamera zu öffnen.
-
-    Wir verbessern zunächst die aktuelle
-    Rückkamera.
-
-    Dadurch bleibt AR.js vollständig
-    mit seinem vorhandenen Stream verbunden.
+    Höhere Kameraauflösung auf
+    mobilen Geräten anfordern.
   */
 
   try {
@@ -477,10 +563,8 @@ async function optimizeMobileCamera() {
 
 
   /*
-    Falls die Kamera Zoom unterstützt,
-    versuchen wir explizit Zoom 1×.
-
-    Nicht alle Browser unterstützen das.
+    Wenn unterstützt:
+    Kamera auf 1× Zoom setzen.
   */
 
   try {
@@ -503,12 +587,6 @@ async function optimizeMobileCamera() {
 
         let desiredZoom = 1;
 
-
-        /*
-          Falls 1 außerhalb des möglichen
-          Bereichs liegt, nehmen wir den
-          kleinsten möglichen Wert.
-        */
 
         desiredZoom =
           Math.max(
@@ -719,10 +797,48 @@ function updateStatus() {
 
 /*
   ----------------------------------------------------
-  Regelmäßige Initialisierung
+  Orientierung überwachen
+  ----------------------------------------------------
+*/
 
-  AR.js erzeugt das Video erst etwas
-  nach dem Laden der Seite.
+window.addEventListener(
+  "resize",
+  updateOrientationWarning
+);
+
+
+window.addEventListener(
+  "orientationchange",
+  function () {
+
+    /*
+      Kleine Verzögerung, damit der Browser
+      zuerst seine neue Fenstergröße kennt.
+    */
+
+    setTimeout(
+      updateOrientationWarning,
+      200
+    );
+
+  }
+);
+
+
+
+/*
+  ----------------------------------------------------
+  Start
+  ----------------------------------------------------
+*/
+
+updateOrientationWarning();
+
+
+
+/*
+  ----------------------------------------------------
+  Regelmäßige Initialisierung / Diagnose
   ----------------------------------------------------
 */
 
@@ -735,6 +851,8 @@ setInterval(
     optimizeMobileCamera();
 
     updateStatus();
+
+    updateOrientationWarning();
 
   },
 
