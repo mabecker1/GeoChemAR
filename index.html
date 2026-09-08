@@ -2,6 +2,7 @@
 <html lang="de">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -31,7 +32,7 @@
 
       overflow: hidden;
 
-      background: transparent;
+      background: #111;
 
       font-family: Arial, sans-serif;
     }
@@ -40,6 +41,12 @@
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
+    }
+
+
+    #sceneHost {
+      width: 100%;
+      height: 100%;
     }
 
 
@@ -53,22 +60,24 @@
 
     canvas.a-canvas {
       z-index: 1 !important;
+
       background: transparent !important;
     }
 
 
     /* --------------------------------
-       Diagnoseanzeige
+       Diagnose
        -------------------------------- */
 
     #status {
+
       position: fixed;
 
       top: max(6px, env(safe-area-inset-top));
       left: max(6px, env(safe-area-inset-left));
       right: max(6px, env(safe-area-inset-right));
 
-      z-index: 100000;
+      z-index: 2147483646;
 
       box-sizing: border-box;
 
@@ -95,17 +104,20 @@
 
       display: none;
 
-      position: fixed;
+      position: fixed !important;
 
-      inset: 0;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: 0 !important;
 
-      z-index: 200000;
+      z-index: 2147483647 !important;
 
       box-sizing: border-box;
 
       padding: 30px;
 
-      background: #111;
+      background: #111 !important;
 
       color: white;
 
@@ -116,16 +128,22 @@
     }
 
 
-    #rotateMessage .rotateContent {
+    #rotateMessage.visible {
+      display: flex !important;
+    }
+
+
+    #rotateMessage .content {
       max-width: 420px;
     }
 
 
     #rotateIcon {
-      font-size: 64px;
-      line-height: 1;
 
       margin-bottom: 22px;
+
+      font-size: 64px;
+      line-height: 1;
     }
 
 
@@ -157,13 +175,26 @@
 <body>
 
 
-  <!-- --------------------------------
-       Querformat-Warnung
-       -------------------------------- -->
+  <!-- Hier wird die AR-Szene nur dann eingefügt,
+       wenn sie wirklich gestartet werden darf. -->
+
+  <div id="sceneHost"></div>
+
+
+
+  <!-- Diagnose -->
+
+  <div id="status">
+    GeoChemAR startet …
+  </div>
+
+
+
+  <!-- Querformat-Warnung -->
 
   <div id="rotateMessage">
 
-    <div class="rotateContent">
+    <div class="content">
 
       <div id="rotateIcon">
         ↻
@@ -174,8 +205,8 @@
       </strong>
 
       <span>
-        GeoChemAR funktioniert auf mobilen Geräten
-        im Querformat.
+        GeoChemAR wird auf dem Smartphone
+        im Querformat verwendet.
       </span>
 
     </div>
@@ -184,92 +215,10 @@
 
 
 
-  <!-- --------------------------------
-       Diagnose
-       -------------------------------- -->
-
-  <div id="status">
-    GeoChemAR startet …
-  </div>
-
-
-
-  <!-- --------------------------------
-       AR-Szene
-       -------------------------------- -->
-
-  <a-scene
-
-    embedded
-
-    vr-mode-ui="enabled: false"
-
-    device-orientation-permission-ui="enabled: false"
-
-    renderer="
-      alpha: true;
-      antialias: true;
-    "
-
-    arjs="
-      sourceType: webcam;
-      sourceWidth: 640;
-      sourceHeight: 480;
-      debugUIEnabled: false;
-      detectionMode: mono;
-    "
-
-  >
-
-
-    <!-- Hiro-Marker -->
-
-    <a-marker
-
-      preset="hiro"
-
-      smooth="true"
-      smoothCount="5"
-      smoothTolerance="0.01"
-      smoothThreshold="2"
-
-    >
-
-
-      <!-- Testwürfel -->
-
-      <a-box
-
-        position="0 0.3 0"
-
-        width="0.6"
-        height="0.6"
-        depth="0.6"
-
-        material="
-          color: #2563eb;
-          opacity: 0.8;
-          transparent: true;
-          side: double;
-        "
-
-      >
-      </a-box>
-
-
-    </a-marker>
-
-
-    <!-- AR-Kamera -->
-
-    <a-entity camera></a-entity>
-
-
-  </a-scene>
-
-
-
 <script>
+
+const sceneHost =
+  document.getElementById("sceneHost");
 
 const status =
   document.getElementById("status");
@@ -280,12 +229,19 @@ const rotateMessage =
 
 let cameraOptimized = false;
 
+let arStarted = false;
 
 /*
-  ----------------------------------------------------
-  Mobilgerät erkennen
-  ----------------------------------------------------
+  Merkt sich, ob während einer laufenden
+  AR-Sitzung die Orientierung geändert wurde.
 */
+let orientationChangedDuringAR = false;
+
+
+
+/* ====================================================
+   Gerät erkennen
+   ==================================================== */
 
 function isMobileDevice() {
 
@@ -312,11 +268,9 @@ function isMobileDevice() {
 
 
 
-/*
-  ----------------------------------------------------
-  Querformat prüfen
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Querformat erkennen
+   ==================================================== */
 
 function isLandscape() {
 
@@ -329,58 +283,137 @@ function isLandscape() {
 
 
 
-/*
-  ----------------------------------------------------
-  Querformat-Warnung anzeigen/verstecken
+/* ====================================================
+   Warnung
+   ==================================================== */
 
-  Nur Mobilgeräte sind betroffen.
-  Computer bleiben unverändert.
-  ----------------------------------------------------
-*/
+function showRotateWarning() {
 
-function updateOrientationWarning() {
+  rotateMessage.classList.add(
+    "visible"
+  );
 
-  if (
-    isMobileDevice()
-    &&
-    !isLandscape()
-  ) {
+  status.style.display =
+    "none";
 
-    rotateMessage.style.display =
-      "flex";
+}
 
-    status.style.display =
-      "none";
 
-  }
+function hideRotateWarning() {
 
-  else {
+  rotateMessage.classList.remove(
+    "visible"
+  );
 
-    rotateMessage.style.display =
-      "none";
-
-    status.style.display =
-      "block";
-
-  }
+  status.style.display =
+    "block";
 
 }
 
 
 
-/*
-  ----------------------------------------------------
-  AR.js-Videoelement finden
-  ----------------------------------------------------
-*/
+/* ====================================================
+   AR-Szene erzeugen
+   ==================================================== */
+
+function startAR() {
+
+  if (arStarted) {
+    return;
+  }
+
+
+  arStarted = true;
+
+
+  sceneHost.innerHTML = `
+
+    <a-scene
+
+      embedded
+
+      vr-mode-ui="enabled: false"
+
+      device-orientation-permission-ui="enabled: false"
+
+      renderer="
+        alpha: true;
+        antialias: true;
+      "
+
+      arjs="
+        sourceType: webcam;
+        sourceWidth: 640;
+        sourceHeight: 480;
+        debugUIEnabled: false;
+        detectionMode: mono;
+      "
+
+    >
+
+
+      <a-marker
+
+        preset="hiro"
+
+        smooth="true"
+        smoothCount="5"
+        smoothTolerance="0.01"
+        smoothThreshold="2"
+
+      >
+
+
+        <a-box
+
+          position="0 0.3 0"
+
+          width="0.6"
+          height="0.6"
+          depth="0.6"
+
+          material="
+            color: #2563eb;
+            opacity: 0.8;
+            transparent: true;
+            side: double;
+          "
+
+        >
+        </a-box>
+
+
+      </a-marker>
+
+
+      <a-entity camera></a-entity>
+
+
+    </a-scene>
+
+  `;
+
+}
+
+
+
+/* ====================================================
+   AR.js-Video finden
+   ==================================================== */
 
 function getARVideo() {
 
   return (
 
-    document.getElementById("arjs-video")
+    document.getElementById(
+      "arjs-video"
+    )
+
     ||
-    document.querySelector("video")
+
+    document.querySelector(
+      "video"
+    )
 
   );
 
@@ -388,19 +421,20 @@ function getARVideo() {
 
 
 
-/*
-  ----------------------------------------------------
-  Sichtbarkeit absichern
-
-  WICHTIG:
-  Keine Größenänderung.
-  Keine Änderung der Projektion.
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Video sichtbar halten
+   ==================================================== */
 
 function keepVideoVisible() {
 
-  const video = getARVideo();
+  if (!arStarted) {
+    return;
+  }
+
+
+  const video =
+    getARVideo();
+
 
   if (!video) {
     return;
@@ -413,11 +447,13 @@ function keepVideoVisible() {
     "important"
   );
 
+
   video.style.setProperty(
     "opacity",
     "1",
     "important"
   );
+
 
   video.style.setProperty(
     "z-index",
@@ -430,6 +466,7 @@ function keepVideoVisible() {
     "playsinline",
     ""
   );
+
 
   video.setAttribute(
     "webkit-playsinline",
@@ -454,6 +491,7 @@ function keepVideoVisible() {
       "important"
     );
 
+
     canvas.style.setProperty(
       "background",
       "transparent",
@@ -466,15 +504,21 @@ function keepVideoVisible() {
 
 
 
-/*
-  ----------------------------------------------------
-  Smartphone-Kamera optimieren
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Smartphone-Kamera optimieren
+
+   Dies ist dieselbe Logik wie in unserer
+   funktionierenden Version.
+   ==================================================== */
 
 async function optimizeMobileCamera() {
 
   if (cameraOptimized) {
+    return;
+  }
+
+
+  if (!arStarted) {
     return;
   }
 
@@ -492,7 +536,8 @@ async function optimizeMobileCamera() {
   }
 
 
-  const video = getARVideo();
+  const video =
+    getARVideo();
 
 
   if (!video) {
@@ -522,10 +567,10 @@ async function optimizeMobileCamera() {
     tracks[0];
 
 
-  /*
-    Höhere Kameraauflösung auf
-    mobilen Geräten anfordern.
-  */
+
+  /* --------------------------------
+     Kameraauflösung
+     -------------------------------- */
 
   try {
 
@@ -555,17 +600,17 @@ async function optimizeMobileCamera() {
   catch (error) {
 
     console.log(
-      "GeoChemAR: Auflösungs-Constraints nicht übernommen:",
+      "GeoChemAR: Kameraauflösung konnte nicht angepasst werden.",
       error
     );
 
   }
 
 
-  /*
-    Wenn unterstützt:
-    Kamera auf 1× Zoom setzen.
-  */
+
+  /* --------------------------------
+     Zoom möglichst 1×
+     -------------------------------- */
 
   try {
 
@@ -590,11 +635,14 @@ async function optimizeMobileCamera() {
 
         desiredZoom =
           Math.max(
+
             capabilities.zoom.min,
+
             Math.min(
               desiredZoom,
               capabilities.zoom.max
             )
+
           );
 
 
@@ -619,7 +667,7 @@ async function optimizeMobileCamera() {
   catch (error) {
 
     console.log(
-      "GeoChemAR: Zoom konnte nicht gesetzt werden:",
+      "GeoChemAR: Zoom konnte nicht angepasst werden.",
       error
     );
 
@@ -632,24 +680,28 @@ async function optimizeMobileCamera() {
 
 
 
-/*
-  ----------------------------------------------------
-  Diagnose
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Diagnose
+   ==================================================== */
 
 function updateStatus() {
 
-  const video = getARVideo();
+  if (!arStarted) {
+    return;
+  }
+
+
+  const video =
+    getARVideo();
 
 
   let text =
 
     isMobileDevice()
 
-    ? "Mobil"
+      ? "Mobil"
 
-    : "Computer";
+      : "Computer";
 
 
   text +=
@@ -795,64 +847,235 @@ function updateStatus() {
 
 
 
-/*
-  ----------------------------------------------------
-  Orientierung überwachen
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Startentscheidung
+
+   PC:
+   sofort starten
+
+   Smartphone Querformat:
+   sofort starten
+
+   Smartphone Hochformat:
+   KEINE Kamera starten
+   ==================================================== */
+
+function initialStart() {
+
+  if (!isMobileDevice()) {
+
+    hideRotateWarning();
+
+    startAR();
+
+    return;
+
+  }
+
+
+  if (isLandscape()) {
+
+    hideRotateWarning();
+
+    startAR();
+
+  }
+
+  else {
+
+    /*
+      Ganz wichtig:
+
+      Im Hochformat wird AR überhaupt
+      nicht initialisiert.
+
+      Dadurch gibt es keine falsche
+      Portrait-Kalibrierung.
+    */
+
+    showRotateWarning();
+
+  }
+
+}
+
+
+
+/* ====================================================
+   Orientierungswechsel
+   ==================================================== */
+
+function handleOrientationChange() {
+
+  /*
+    Am PC interessiert uns die
+    Geräteorientierung nicht.
+  */
+
+  if (!isMobileDevice()) {
+    return;
+  }
+
+
+  /*
+    Smartphone steht jetzt hochkant.
+  */
+
+  if (!isLandscape()) {
+
+    showRotateWarning();
+
+
+    /*
+      Falls AR bereits lief, merken wir uns,
+      dass diese Sitzung jetzt nicht mehr
+      sicher weiterverwendet werden soll.
+    */
+
+    if (arStarted) {
+
+      orientationChangedDuringAR =
+        true;
+
+    }
+
+
+    return;
+
+  }
+
+
+
+  /*
+    Smartphone steht jetzt quer.
+  */
+
+
+  hideRotateWarning();
+
+
+  /*
+    Fall 1:
+    Seite wurde ursprünglich im Hochformat
+    geöffnet.
+
+    AR läuft noch gar nicht.
+
+    Wir laden einmal neu, damit AR.js
+    direkt im Querformat initialisiert wird.
+  */
+
+  if (!arStarted) {
+
+    location.reload();
+
+    return;
+
+  }
+
+
+
+  /*
+    Fall 2:
+    AR lief bereits, danach wurde das Gerät
+    hochkant gehalten und jetzt wieder quer.
+
+    Auch hier laden wir neu.
+
+    Das verhindert:
+    - falsche Projektion
+    - verzerrte Objekte
+    - falsche Position
+    - Pixel-/Scaling-Probleme
+  */
+
+  if (orientationChangedDuringAR) {
+
+    location.reload();
+
+  }
+
+}
+
+
+
+/* ====================================================
+   Events
+   ==================================================== */
 
 window.addEventListener(
-  "resize",
-  updateOrientationWarning
-);
 
-
-window.addEventListener(
   "orientationchange",
+
   function () {
 
     /*
-      Kleine Verzögerung, damit der Browser
-      zuerst seine neue Fenstergröße kennt.
+      Der Browser braucht kurz, bis
+      innerWidth und innerHeight zur
+      neuen Orientierung passen.
     */
 
     setTimeout(
-      updateOrientationWarning,
-      200
+      handleOrientationChange,
+      350
     );
 
   }
+
 );
 
 
 
-/*
-  ----------------------------------------------------
-  Start
-  ----------------------------------------------------
-*/
+window.addEventListener(
 
-updateOrientationWarning();
+  "resize",
+
+  function () {
+
+    /*
+      Manche Android-Browser feuern kein
+      zuverlässiges orientationchange.
+
+      Deshalb prüfen wir zusätzlich resize.
+    */
+
+    setTimeout(
+      handleOrientationChange,
+      150
+    );
+
+  }
+
+);
 
 
 
-/*
-  ----------------------------------------------------
-  Regelmäßige Initialisierung / Diagnose
-  ----------------------------------------------------
-*/
+/* ====================================================
+   Start
+   ==================================================== */
+
+initialStart();
+
+
+
+/* ====================================================
+   Laufende AR-Pflege
+   ==================================================== */
 
 setInterval(
 
   function () {
+
+    if (!arStarted) {
+      return;
+    }
+
 
     keepVideoVisible();
 
     optimizeMobileCamera();
 
     updateStatus();
-
-    updateOrientationWarning();
 
   },
 
