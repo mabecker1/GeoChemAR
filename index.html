@@ -19,7 +19,6 @@
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
-
   <style>
 
     html,
@@ -102,7 +101,6 @@
     }
 
 
-
     #startScreen {
       position: fixed;
 
@@ -134,7 +132,6 @@
 
     #startContent {
       width: 100%;
-
       max-width: 420px;
     }
 
@@ -143,7 +140,6 @@
       margin-bottom: 20px;
 
       font-size: 64px;
-
       line-height: 1;
     }
 
@@ -154,7 +150,6 @@
       margin-bottom: 12px;
 
       font-size: 23px;
-
       font-weight: bold;
     }
 
@@ -163,7 +158,6 @@
       margin-bottom: 22px;
 
       font-size: 15px;
-
       line-height: 1.45;
 
       opacity: 0.9;
@@ -178,17 +172,14 @@
       padding: 13px 25px;
 
       border: 0;
-
       border-radius: 8px;
 
       font-size: 17px;
-
       font-weight: bold;
 
       cursor: pointer;
 
       background: white;
-
       color: #111;
     }
 
@@ -197,12 +188,10 @@
 </head>
 
 
-
 <body>
 
 
   <div id="sceneHost"></div>
-
 
 
   <div id="startScreen">
@@ -236,20 +225,6 @@
 
 /* ==========================================================
    METHAN-MODELL
-
-   Das Molekül wird mathematisch erzeugt.
-
-   Die vier Tetraederrichtungen sind:
-
-   ( 1,  1,  1)
-   ( 1, -1, -1)
-   (-1,  1, -1)
-   (-1, -1,  1)
-
-   Nach Normierung beträgt der Winkel zwischen
-   jeweils zwei Richtungen:
-
-   arccos(-1/3) ≈ 109,47°
    ========================================================== */
 
 
@@ -272,7 +247,7 @@ AFRAME.registerComponent(
 
 
       /* ==================================================
-         Maße des Modells
+         Größen
          ================================================== */
 
 
@@ -294,20 +269,20 @@ AFRAME.registerComponent(
 
 
       /*
-        Die Bindung beginnt etwas innerhalb
-        der Kohlenstoffkugel und endet etwas
-        innerhalb der Wasserstoffkugel.
+        Die Bindungen tauchen jetzt nur noch
+        minimal in die Kugeln ein.
 
-        Dadurch sieht man keine störenden Lücken.
+        Dadurch werden unsaubere grafische
+        Überschneidungen reduziert.
       */
 
 
       const bondStart =
-        0.15;
+        0.20;
 
 
       const bondEnd =
-        hydrogenDistance - 0.10;
+        hydrogenDistance - 0.13;
 
 
 
@@ -356,7 +331,7 @@ AFRAME.registerComponent(
 
 
       /* ==================================================
-         Kohlenstoffatom
+         Kohlenstoff
          ================================================== */
 
 
@@ -382,13 +357,6 @@ AFRAME.registerComponent(
         );
 
 
-      carbon.position.set(
-        0,
-        0,
-        0
-      );
-
-
       group.add(
         carbon
       );
@@ -396,7 +364,7 @@ AFRAME.registerComponent(
 
 
       /* ==================================================
-         Geometrien für H und Bindungen
+         Wasserstoff-Geometrie
          ================================================== */
 
 
@@ -414,8 +382,8 @@ AFRAME.registerComponent(
 
 
       /*
-        THREE.CylinderGeometry verläuft standardmäßig
-        entlang der lokalen Y-Achse.
+        CylinderGeometry verläuft entlang
+        der lokalen Y-Achse.
       */
 
 
@@ -431,7 +399,10 @@ AFRAME.registerComponent(
 
 
       /* ==================================================
-         Vier Tetraederrichtungen
+         Tetraederrichtungen
+
+         Winkel zwischen allen Bindungen:
+         arccos(-1/3) = 109,47°
          ================================================== */
 
 
@@ -466,7 +437,7 @@ AFRAME.registerComponent(
 
 
       /* ==================================================
-         Vier C-H-Bindungen erzeugen
+         Vier C-H-Bindungen
          ================================================== */
 
 
@@ -475,17 +446,12 @@ AFRAME.registerComponent(
         function (direction) {
 
 
-          /*
-            Richtungsvektor normieren
-          */
-
-
           direction.normalize();
 
 
 
           /* ----------------------------------------------
-             Wasserstoffatom
+             Wasserstoff
              ---------------------------------------------- */
 
 
@@ -517,7 +483,7 @@ AFRAME.registerComponent(
 
 
           /* ----------------------------------------------
-             Bindungszylinder
+             Anfang und Ende der Bindung
              ---------------------------------------------- */
 
 
@@ -550,9 +516,13 @@ AFRAME.registerComponent(
 
 
           const bondLength =
-
             bondVector.length();
 
+
+
+          /* ----------------------------------------------
+             Bindungszylinder
+             ---------------------------------------------- */
 
 
           const bondGeometry =
@@ -583,36 +553,15 @@ AFRAME.registerComponent(
 
 
 
-          /*
-            Mittelpunkt zwischen Anfang und Ende
-          */
-
-
           bond.position.copy(
 
-            startPoint.clone().add(
-
-              endPoint
-
-            ).multiplyScalar(
-
-              0.5
-
-            )
+            startPoint
+              .clone()
+              .add(endPoint)
+              .multiplyScalar(0.5)
 
           );
 
-
-
-          /*
-            Entscheidend:
-
-            Der Zylinder wird exakt von seiner
-            ursprünglichen Y-Achse auf den
-            Bindungsvektor gedreht.
-
-            Keine handberechneten Euler-Winkel.
-          */
 
 
           bond.quaternion.setFromUnitVectors(
@@ -635,12 +584,6 @@ AFRAME.registerComponent(
 
 
 
-      /*
-        Das fertige Molekül wird an die
-        A-Frame-Entity angehängt.
-      */
-
-
       this.el.setObject3D(
 
         "methaneMesh",
@@ -658,6 +601,194 @@ AFRAME.registerComponent(
       this.el.removeObject3D(
         "methaneMesh"
       );
+
+    }
+
+  }
+
+);
+
+
+
+/* ==========================================================
+   MARKER-HOLD
+
+   Überbrückt sehr kurze Tracking-Aussetzer.
+
+   Das Markerobjekt bleibt nach markerLost noch
+   250 ms in seiner letzten bekannten Position.
+
+   Die Pose selbst wird dabei NICHT verändert
+   oder zusätzlich geglättet.
+   ========================================================== */
+
+
+AFRAME.registerComponent(
+
+  "marker-hold",
+
+  {
+
+    schema: {
+
+      holdTime: {
+
+        type: "number",
+
+        default: 250
+
+      }
+
+    },
+
+
+    init: function () {
+
+
+      this.markerDetected =
+        false;
+
+
+      this.lostAt =
+        0;
+
+
+
+      this.el.addEventListener(
+
+        "markerFound",
+
+        () => {
+
+
+          this.markerDetected =
+            true;
+
+
+          this.lostAt =
+            0;
+
+
+          this.el.object3D.visible =
+            true;
+
+
+        }
+
+      );
+
+
+
+      this.el.addEventListener(
+
+        "markerLost",
+
+        () => {
+
+
+          this.markerDetected =
+            false;
+
+
+          this.lostAt =
+            performance.now();
+
+
+          /*
+            AR.js setzt den Marker beim Verlust
+            normalerweise sofort unsichtbar.
+
+            Wir stellen ihn zunächst wieder sichtbar,
+            damit die letzte Pose erhalten bleibt.
+          */
+
+
+          this.el.object3D.visible =
+            true;
+
+
+        }
+
+      );
+
+    },
+
+
+
+    tick: function () {
+
+
+      /*
+        Solange der Marker erkannt wird,
+        greift diese Komponente nicht ein.
+      */
+
+
+      if (this.markerDetected) {
+
+        return;
+
+      }
+
+
+
+      /*
+        Vor der allerersten Erkennung soll
+        natürlich noch kein Molekül erscheinen.
+      */
+
+
+      if (this.lostAt === 0) {
+
+        return;
+
+      }
+
+
+
+      const elapsed =
+
+        performance.now()
+        -
+        this.lostAt;
+
+
+
+      /*
+        Während der kurzen Haltezeit wird die
+        letzte bekannte Markerpose sichtbar gehalten.
+
+        AR.js kann visible zwischenzeitlich erneut
+        auf false setzen, deshalb wird true hier
+        in jedem Frame erneut gesetzt.
+      */
+
+
+      if (
+
+        elapsed <
+        this.data.holdTime
+
+      ) {
+
+        this.el.object3D.visible =
+          true;
+
+      }
+
+      else {
+
+        /*
+          Ist der Marker tatsächlich länger weg,
+          verschwindet das Molekül normal.
+        */
+
+
+        this.el.object3D.visible =
+          false;
+
+      }
+
 
     }
 
@@ -697,9 +828,12 @@ const startButton =
 
 
 
-let arStarted = false;
+let arStarted =
+  false;
 
-let cameraOptimized = false;
+
+let cameraOptimized =
+  false;
 
 
 
@@ -841,7 +975,8 @@ function createARScene() {
   }
 
 
-  arStarted = true;
+  arStarted =
+    true;
 
 
 
@@ -888,14 +1023,12 @@ function createARScene() {
 
         smoothThreshold="2"
 
+        marker-hold="
+          holdTime: 250;
+        "
+
       >
 
-
-
-        <!--
-          Das komplette Methanmolekül sitzt
-          oberhalb der Markerebene.
-        -->
 
 
         <a-entity
@@ -1062,7 +1195,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   AR-Video finden
+   AR-Video
    ================================================== */
 
 
@@ -1210,7 +1343,8 @@ function enforceLayers() {
     );
 
 
-    video.muted = true;
+    video.muted =
+      true;
 
   }
 
@@ -1267,9 +1401,6 @@ function enforceLayers() {
 
 /* ==================================================
    Video und Canvas synchronisieren
-
-   Diese funktionierende Lösung bleibt
-   unverändert.
    ================================================== */
 
 
@@ -1286,7 +1417,8 @@ function synchronizeVisualGeometry() {
 
 
   if (
-    !video ||
+    !video
+    ||
     !canvas
   ) {
 
@@ -1302,7 +1434,8 @@ function synchronizeVisualGeometry() {
 
 
   if (
-    rect.width <= 0 ||
+    rect.width <= 0
+    ||
     rect.height <= 0
   ) {
 
@@ -1380,7 +1513,8 @@ async function optimizeMobileCamera() {
 
   if (!isMobileDevice()) {
 
-    cameraOptimized = true;
+    cameraOptimized =
+      true;
 
     return;
 
@@ -1530,7 +1664,8 @@ async function optimizeMobileCamera() {
 
 
 
-  cameraOptimized = true;
+  cameraOptimized =
+    true;
 
 }
 
@@ -1569,9 +1704,11 @@ function orientationChanged() {
 
 
     if (
+
       video
       &&
       video.srcObject
+
     ) {
 
       video.srcObject
