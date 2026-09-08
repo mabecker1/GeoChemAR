@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Kameratest</title>
+  <title>GeoChemAR – Kamera-Diagnose</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -29,16 +29,35 @@
       height: 100%;
 
       overflow: hidden;
-
       background: transparent;
 
       font-family: Arial, sans-serif;
     }
 
+
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
     }
+
+
+    /*
+      Nur Sichtbarkeit korrigieren.
+      Keine Größenänderung!
+    */
+
+    #arjs-video {
+      z-index: 0 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+
+
+    canvas.a-canvas {
+      z-index: 1 !important;
+      background: transparent !important;
+    }
+
 
     #status {
 
@@ -54,12 +73,12 @@
 
       padding: 7px 9px;
 
-      background: rgba(0, 0, 0, 0.72);
+      background: rgba(0, 0, 0, 0.78);
 
       color: white;
 
-      font-size: 11px;
-      line-height: 1.3;
+      font-size: 10px;
+      line-height: 1.35;
 
       border-radius: 6px;
 
@@ -72,6 +91,7 @@
 
 
 <body>
+
 
   <div id="status">
     GeoChemAR startet …
@@ -97,21 +117,22 @@
       sourceHeight: 480;
       displayWidth: 640;
       displayHeight: 480;
+      canvasWidth: 640;
+      canvasHeight: 480;
       debugUIEnabled: false;
       detectionMode: mono;
     "
 
   >
 
-    <a-marker
 
+    <a-marker
       preset="hiro"
 
       smooth="true"
       smoothCount="5"
       smoothTolerance="0.01"
       smoothThreshold="2"
-
     >
 
       <a-box
@@ -141,6 +162,7 @@
   </a-scene>
 
 
+
   <script>
 
     const status =
@@ -158,7 +180,8 @@
     }
 
 
-    function keepVideoVisible() {
+
+    function keepVisible() {
 
       const video = getVideo();
 
@@ -167,16 +190,9 @@
       }
 
 
-      /*
-        Wir verändern NICHT die vom
-        Browser/AR.js berechnete Größe.
-
-        Nur Sichtbarkeit und Ebene.
-      */
-
       video.style.setProperty(
-        "display",
-        "block",
+        "z-index",
+        "0",
         "important"
       );
 
@@ -191,25 +207,6 @@
         "1",
         "important"
       );
-
-      video.style.setProperty(
-        "z-index",
-        "0",
-        "important"
-      );
-
-
-      video.setAttribute(
-        "playsinline",
-        ""
-      );
-
-      video.setAttribute(
-        "webkit-playsinline",
-        ""
-      );
-
-      video.muted = true;
 
 
       const canvas =
@@ -237,13 +234,24 @@
     }
 
 
-    function updateStatus() {
+
+    async function readCameraInfo() {
 
       const video = getVideo();
 
+
+      if (!video) {
+
+        status.textContent =
+          "Videoelement noch nicht vorhanden …";
+
+        return;
+      }
+
+
       let text =
 
-        "Fenster: "
+        "Fenster "
         +
         window.innerWidth
         +
@@ -252,21 +260,9 @@
         window.innerHeight;
 
 
-      if (!video) {
-
-        text +=
-          " | Video nicht gefunden";
-
-        status.textContent =
-          text;
-
-        return;
-      }
-
-
       text +=
 
-        " | Kamera: "
+        " | Video "
         +
         video.videoWidth
         +
@@ -282,110 +278,195 @@
         video.readyState;
 
 
+
+      const stream =
+        video.srcObject;
+
+
+      if (!stream) {
+
+        text +=
+          " | Kein Stream";
+
+        status.textContent =
+          text;
+
+        return;
+      }
+
+
+      const tracks =
+        stream.getVideoTracks();
+
+
+      if (tracks.length === 0) {
+
+        text +=
+          " | Kein Video-Track";
+
+        status.textContent =
+          text;
+
+        return;
+      }
+
+
+      const track =
+        tracks[0];
+
+
       /*
-        Welche Kamera wurde tatsächlich
-        vom Browser ausgewählt?
+        Kameraname
       */
 
-      try {
+      if (track.label) {
 
-        const stream =
-          video.srcObject;
+        text +=
+          " | "
+          +
+          track.label;
 
-        if (
-          stream &&
-          stream.getVideoTracks
-        ) {
-
-          const tracks =
-            stream.getVideoTracks();
+      }
 
 
-          if (tracks.length > 0) {
+      /*
+        Tatsächliche Einstellungen
+      */
 
-            const track =
-              tracks[0];
+      if (track.getSettings) {
 
-
-            const settings =
-              track.getSettings
-              ? track.getSettings()
-              : {};
+        const s =
+          track.getSettings();
 
 
-            const capabilities =
-              track.getCapabilities
-              ? track.getCapabilities()
-              : {};
+        if (s.width && s.height) {
+
+          text +=
+
+            " | Stream "
+            +
+            s.width
+            +
+            "×"
+            +
+            s.height;
+
+        }
 
 
-            if (settings.width) {
+        if (s.frameRate) {
 
-              text +=
+          text +=
 
-                " | Stream: "
-                +
-                settings.width
-                +
-                "×"
-                +
-                settings.height;
+            " @ "
+            +
+            Math.round(s.frameRate)
+            +
+            "fps";
 
-            }
+        }
 
 
-            if (
-              settings.facingMode
-            ) {
+        if (s.facingMode) {
 
-              text +=
+          text +=
 
-                " | "
-                +
-                settings.facingMode;
+            " | "
+            +
+            s.facingMode;
 
-            }
+        }
 
 
-            if (
-              settings.zoom !== undefined
-            ) {
+        if (s.zoom !== undefined) {
 
-              text +=
+          text +=
 
-                " | Zoom="
-                +
-                settings.zoom;
+            " | Zoom="
+            +
+            s.zoom;
 
-            }
+        }
 
 
-            if (
-              capabilities.zoom
-            ) {
+        if (s.deviceId) {
 
-              text +=
+          text +=
 
-                " | Zoom möglich "
-                +
-                capabilities.zoom.min
-                +
-                "–"
-                +
-                capabilities.zoom.max;
-
-            }
-
-          }
+            " | ID="
+            +
+            s.deviceId.substring(0, 8)
+            +
+            "…";
 
         }
 
       }
 
-      catch (error) {
 
-        text +=
-          " | Kamera-Diagnose nicht verfügbar";
+
+      /*
+        Fähigkeiten der Kamera
+      */
+
+      if (track.getCapabilities) {
+
+        const c =
+          track.getCapabilities();
+
+
+        if (
+          c.width &&
+          c.width.min !== undefined
+        ) {
+
+          text +=
+
+            " | Breite "
+            +
+            c.width.min
+            +
+            "–"
+            +
+            c.width.max;
+
+        }
+
+
+        if (
+          c.height &&
+          c.height.min !== undefined
+        ) {
+
+          text +=
+
+            " | Höhe "
+            +
+            c.height.min
+            +
+            "–"
+            +
+            c.height.max;
+
+        }
+
+
+        if (
+          c.zoom &&
+          c.zoom.min !== undefined
+        ) {
+
+          text +=
+
+            " | Zoombereich "
+            +
+            c.zoom.min
+            +
+            "–"
+            +
+            c.zoom.max;
+
+        }
 
       }
 
@@ -396,17 +477,22 @@
     }
 
 
+
     setInterval(
+
       function () {
 
-        keepVideoVisible();
-        updateStatus();
+        keepVisible();
+        readCameraInfo();
 
       },
+
       500
+
     );
 
   </script>
+
 
 </body>
 
