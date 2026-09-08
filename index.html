@@ -14,16 +14,20 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR</title>
+  <title>GeoChemAR – AR-Test</title>
+
 
   <!-- Lokal gespeicherte Bibliotheken -->
+
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
+
 
   <style>
 
     html,
     body {
+
       margin: 0;
       padding: 0;
 
@@ -31,98 +35,89 @@
       height: 100%;
 
       overflow: hidden;
-      background: black;
 
-      font-family: Arial, sans-serif;
+      /*
+        WICHTIG:
+        Kein schwarzer Hintergrund.
+
+        Das Kameravideo liegt bei AR.js
+        hinter dem transparenten Canvas.
+      */
+      background: transparent;
+
     }
 
 
-    /* VR-/AR-Button ausblenden */
+    /*
+      Wir verändern NICHT die Größe
+      des Videos.
+
+      Wir holen es nur vor den
+      Seitenhintergrund.
+    */
+
+    #arjs-video {
+
+      z-index: 0 !important;
+
+    }
+
+
+    /*
+      Das A-Frame-Canvas liegt
+      direkt darüber.
+
+      Auch hier verändern wir
+      KEINE Breite oder Höhe.
+    */
+
+    canvas.a-canvas {
+
+      z-index: 1 !important;
+
+    }
+
+
+    /*
+      VR-Schaltfläche ausblenden
+    */
 
     .a-enter-vr,
     .a-enter-ar {
+
       display: none !important;
+
     }
 
 
-    /* Diagnoseanzeige */
+    /*
+      Diagnoseanzeige
+    */
 
     #status {
 
       position: fixed;
 
-      top: max(6px, env(safe-area-inset-top));
-      left: max(6px, env(safe-area-inset-left));
-      right: max(6px, env(safe-area-inset-right));
+      top: 6px;
+      left: 6px;
+      right: 6px;
 
-      z-index: 99999;
+      z-index: 100000;
 
       box-sizing: border-box;
 
       padding: 6px 8px;
 
       background: rgba(0, 0, 0, 0.72);
+
       color: white;
 
-      font-size: 10px;
-      line-height: 1.25;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
 
       border-radius: 6px;
 
       pointer-events: none;
-    }
-
-
-    /* Hinweis im Hochformat */
-
-    #rotateMessage {
-
-      display: none;
-
-      position: fixed;
-      inset: 0;
-
-      z-index: 100000;
-
-      background: #111;
-      color: white;
-
-      align-items: center;
-      justify-content: center;
-
-      text-align: center;
-
-      box-sizing: border-box;
-      padding: 30px;
-    }
-
-
-    #rotateMessage strong {
-
-      display: block;
-
-      margin-bottom: 10px;
-
-      font-size: 22px;
-    }
-
-
-    #rotateMessage span {
-
-      font-size: 15px;
-      line-height: 1.4;
-    }
-
-
-    @media (orientation: portrait) {
-
-      #rotateMessage {
-        display: flex;
-      }
-
-      #status {
-        display: none;
-      }
 
     }
 
@@ -132,25 +127,6 @@
 
 
 <body>
-
-
-  <!-- Hinweis im Hochformat -->
-
-  <div id="rotateMessage">
-
-    <div>
-
-      <strong>
-        Bitte Smartphone drehen
-      </strong>
-
-      <span>
-        GeoChemAR wird im Querformat verwendet.
-      </span>
-
-    </div>
-
-  </div>
 
 
   <!-- Diagnose -->
@@ -170,12 +146,15 @@
 
     device-orientation-permission-ui="enabled: false"
 
+    renderer="
+      antialias: true;
+      alpha: true;
+    "
+
     arjs="
       sourceType: webcam;
-      sourceWidth: 640;
-      sourceHeight: 480;
-      displayWidth: 640;
-      displayHeight: 480;
+      sourceWidth: window.innerWidth > window.innerHeight ? 640 : 480;
+      sourceHeight: window.innerWidth > window.innerHeight ? 480 : 640;
       debugUIEnabled: false;
       detectionMode: mono;
     "
@@ -197,7 +176,11 @@
     >
 
 
-      <!-- Testwürfel -->
+      <!--
+        Testwürfel
+
+        0.6 × 0.6 × 0.6
+      -->
 
       <a-box
 
@@ -221,12 +204,13 @@
     </a-marker>
 
 
-    <!-- Kamera -->
+    <!-- AR-Kamera -->
 
     <a-entity camera></a-entity>
 
 
   </a-scene>
+
 
 
   <script>
@@ -236,9 +220,14 @@
 
 
     /*
-      Nur Diagnose.
-      Diese Funktion verändert NICHT
-      die AR-Projektion.
+      Diese Funktion liest NUR Informationen aus.
+
+      Sie verändert weder:
+      - Video
+      - Canvas
+      - Kamera
+      - Renderer
+      - Projektionsmatrix
     */
 
     function updateStatus() {
@@ -249,8 +238,13 @@
         document.querySelector("video");
 
 
+      const canvas =
+        document.querySelector("canvas.a-canvas");
+
+
       let text =
-        "Display: "
+
+        "Fenster: "
         +
         window.innerWidth
         +
@@ -259,19 +253,11 @@
         window.innerHeight;
 
 
-      text +=
-
-        window.innerWidth > window.innerHeight
-
-        ? " | Querformat"
-
-        : " | Hochformat";
-
-
       if (video) {
 
         text +=
-          " | Kamera: "
+
+          " | Video: "
           +
           video.videoWidth
           +
@@ -281,16 +267,44 @@
 
 
         text +=
-          " | ready: "
+
+          " | ready="
           +
           video.readyState;
+
+
+        text +=
+
+          " | video sichtbar";
 
       }
 
       else {
 
         text +=
-          " | Kamera: nicht gefunden";
+          " | Video NICHT gefunden";
+
+      }
+
+
+      if (canvas) {
+
+        text +=
+
+          " | Canvas: "
+          +
+          canvas.width
+          +
+          "×"
+          +
+          canvas.height;
+
+      }
+
+      else {
+
+        text +=
+          " | Canvas NICHT gefunden";
 
       }
 
@@ -302,7 +316,7 @@
 
     setInterval(
       updateStatus,
-      1000
+      500
     );
 
   </script>
