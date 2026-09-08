@@ -16,13 +16,9 @@
 
   <title>GeoChemAR</title>
 
-  <!--
-    Beide Bibliotheken liegen lokal
-    in unserem GitHub-Repository.
-  -->
+  <!-- Lokal gespeicherte Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
-
 
   <style>
 
@@ -35,16 +31,13 @@
       height: 100%;
 
       overflow: hidden;
-
       background: black;
 
       font-family: Arial, sans-serif;
     }
 
 
-    /*
-      A-Frame-VR-Schaltfläche ausblenden
-    */
+    /* VR-/AR-Button ausblenden */
 
     .a-enter-vr,
     .a-enter-ar {
@@ -52,11 +45,7 @@
     }
 
 
-    /*
-      Diagnoseanzeige
-
-      Diese entfernen wir später wieder.
-    */
+    /* Diagnoseanzeige */
 
     #status {
 
@@ -73,7 +62,6 @@
       padding: 6px 8px;
 
       background: rgba(0, 0, 0, 0.72);
-
       color: white;
 
       font-size: 10px;
@@ -85,22 +73,18 @@
     }
 
 
-    /*
-      Hinweis im Hochformat
-    */
+    /* Hinweis im Hochformat */
 
     #rotateMessage {
 
       display: none;
 
       position: fixed;
-
       inset: 0;
 
       z-index: 100000;
 
       background: #111;
-
       color: white;
 
       align-items: center;
@@ -109,7 +93,6 @@
       text-align: center;
 
       box-sizing: border-box;
-
       padding: 30px;
     }
 
@@ -127,15 +110,9 @@
     #rotateMessage span {
 
       font-size: 15px;
-
       line-height: 1.4;
     }
 
-
-    /*
-      Im Hochformat wird die AR-Anwendung
-      verdeckt und nur der Drehhinweis gezeigt.
-    */
 
     @media (orientation: portrait) {
 
@@ -157,7 +134,7 @@
 <body>
 
 
-  <!-- Hochformat-Hinweis -->
+  <!-- Hinweis im Hochformat -->
 
   <div id="rotateMessage">
 
@@ -176,7 +153,6 @@
   </div>
 
 
-
   <!-- Diagnose -->
 
   <div id="status">
@@ -184,24 +160,7 @@
   </div>
 
 
-
-  <!--
-    AR-Szene
-
-    WICHTIG:
-
-    Die Quellgröße wird passend zur
-    Orientierung gewählt.
-
-    Im Querformat:
-    640 × 480
-
-    Im Hochformat:
-    480 × 640
-
-    Genau dieses Prinzip verwendet auch
-    das offizielle AR.js-Minimalbeispiel.
-  -->
+  <!-- AR-Szene -->
 
   <a-scene
 
@@ -213,8 +172,10 @@
 
     arjs="
       sourceType: webcam;
-      sourceWidth: window.innerWidth > window.innerHeight ? 640 : 480;
-      sourceHeight: window.innerWidth > window.innerHeight ? 480 : 640;
+      sourceWidth: 640;
+      sourceHeight: 480;
+      displayWidth: 640;
+      displayHeight: 480;
       debugUIEnabled: false;
       detectionMode: mono;
     "
@@ -222,7 +183,7 @@
   >
 
 
-    <!-- Hiro-Testmarker -->
+    <!-- Hiro-Marker -->
 
     <a-marker
 
@@ -236,13 +197,7 @@
     >
 
 
-      <!--
-        Testwürfel
-
-        Alle drei Kanten sind exakt 0.6.
-        Damit erkennen wir Verzerrungen
-        besonders leicht.
-      -->
+      <!-- Testwürfel -->
 
       <a-box
 
@@ -266,14 +221,12 @@
     </a-marker>
 
 
-
-    <!-- AR-Kamera -->
+    <!-- Kamera -->
 
     <a-entity camera></a-entity>
 
 
   </a-scene>
-
 
 
   <script>
@@ -283,11 +236,9 @@
 
 
     /*
-      Diese Funktion dient NUR der Diagnose.
-
-      Sie verändert weder Kamera,
-      Videoelement, Renderer noch
-      Projektionsmatrix.
+      Nur Diagnose.
+      Diese Funktion verändert NICHT
+      die AR-Projektion.
     */
 
     function updateStatus() {
@@ -299,7 +250,6 @@
 
 
       let text =
-
         "Display: "
         +
         window.innerWidth
@@ -321,7 +271,6 @@
       if (video) {
 
         text +=
-
           " | Kamera: "
           +
           video.videoWidth
@@ -332,7 +281,6 @@
 
 
         text +=
-
           " | ready: "
           +
           video.readyState;
