@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Ebenen-Diagnose 2</title>
+  <title>GeoChemAR – Geometrie-Test</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -36,6 +36,14 @@
       display: none !important;
     }
 
+    /*
+      Der Host und die A-Frame-Szene müssen über
+      dem Kameravideo liegen.
+
+      Das war die Ursache dafür, dass unsere
+      3D-Objekte zuvor verschwunden waren.
+    */
+
     #sceneHost {
       position: fixed !important;
       inset: 0 !important;
@@ -55,34 +63,68 @@
       background: transparent !important;
     }
 
+    /*
+      Kameravideo unter der A-Frame-Szene.
+
+      WICHTIG:
+      Hier ändern wir NICHT width, height,
+      object-fit oder transform.
+    */
+
     #arjs-video {
       position: fixed !important;
       z-index: 1 !important;
+
       visibility: visible !important;
       opacity: 1 !important;
     }
+
+    /*
+      Der Canvas liegt über dem Video.
+
+      Position und Größe werden später per
+      JavaScript exakt an das sichtbare
+      Kameravideo angepasst.
+    */
 
     canvas.a-canvas {
       position: fixed !important;
       z-index: 11 !important;
+
       visibility: visible !important;
       opacity: 1 !important;
+
       display: block !important;
+
       background: transparent !important;
+
       pointer-events: none !important;
     }
+
+
+    /* =========================================
+       Startbildschirm Smartphone
+       ========================================= */
 
     #startScreen {
       position: fixed;
       inset: 0;
+
       z-index: 2147483647;
+
       display: none;
+
       align-items: center;
       justify-content: center;
+
       box-sizing: border-box;
+
       padding: 30px;
+
       background: #111;
+
       color: white;
+
       text-align: center;
     }
 
@@ -97,49 +139,75 @@
 
     #rotateIcon {
       margin-bottom: 20px;
+
       font-size: 64px;
+      line-height: 1;
     }
 
     #startTitle {
       display: block;
+
       margin-bottom: 12px;
+
       font-size: 23px;
       font-weight: bold;
     }
 
     #startText {
       margin-bottom: 22px;
+
       font-size: 15px;
       line-height: 1.45;
+
       opacity: 0.9;
     }
 
     #startButton {
       display: none;
+
       margin: 0 auto;
+
       padding: 13px 25px;
+
       border: 0;
       border-radius: 8px;
+
       font-size: 17px;
       font-weight: bold;
+
       cursor: pointer;
+
       background: white;
       color: #111;
     }
 
+
+    /* =========================================
+       Status
+       ========================================= */
+
     #status {
       position: fixed;
+
       top: max(6px, env(safe-area-inset-top));
       left: max(6px, env(safe-area-inset-left));
       right: max(6px, env(safe-area-inset-right));
+
       z-index: 100000;
+
       box-sizing: border-box;
+
       padding: 9px 11px;
+
       background: rgba(0, 0, 0, 0.82);
+
       color: white;
+
       font-size: 11px;
       line-height: 1.5;
+
       border-radius: 6px;
+
       pointer-events: none;
     }
 
@@ -155,16 +223,31 @@
 
   <div id="sceneHost"></div>
 
+
   <div id="status">
-    <div id="systemStatus">GeoChemAR startet …</div>
-    <div id="markerStatus">Marker: wartet …</div>
-    <div id="layerStatus">Ebenen: wartet …</div>
+
+    <div id="systemStatus">
+      GeoChemAR startet …
+    </div>
+
+    <div id="markerStatus">
+      Marker: wartet …
+    </div>
+
+    <div id="geometryStatus">
+      Geometrie: wartet …
+    </div>
+
   </div>
 
+
   <div id="startScreen">
+
     <div id="startContent">
 
-      <div id="rotateIcon">↻</div>
+      <div id="rotateIcon">
+        ↻
+      </div>
 
       <div id="startTitle">
         Bitte Smartphone drehen
@@ -179,7 +262,9 @@
       </button>
 
     </div>
+
   </div>
+
 
 
 <script>
@@ -193,8 +278,8 @@ const systemStatus =
 const markerStatus =
   document.getElementById("markerStatus");
 
-const layerStatus =
-  document.getElementById("layerStatus");
+const geometryStatus =
+  document.getElementById("geometryStatus");
 
 const startScreen =
   document.getElementById("startScreen");
@@ -213,11 +298,18 @@ const startButton =
 
 
 let arStarted = false;
+
 let cameraOptimized = false;
+
 let sceneLoaded = false;
+
 let markerFoundCount = 0;
 
 
+
+/* ==================================================
+   Gerät erkennen
+   ================================================== */
 
 function isMobileDevice() {
 
@@ -244,6 +336,10 @@ function isMobileDevice() {
 
 
 
+/* ==================================================
+   Orientierung
+   ================================================== */
+
 function isLandscape() {
 
   return (
@@ -254,6 +350,10 @@ function isLandscape() {
 }
 
 
+
+/* ==================================================
+   Startbildschirm
+   ================================================== */
 
 function updateStartScreen() {
 
@@ -362,6 +462,10 @@ function createARScene() {
     >
 
 
+      <!-- ======================================
+           Hiro-Marker
+           ====================================== -->
+
       <a-marker
 
         id="hiroMarker"
@@ -374,6 +478,12 @@ function createARScene() {
         smoothThreshold="2"
 
       >
+
+
+        <!--
+          Blauer Würfel wie in unserer
+          funktionierenden Ausgangsversion
+        -->
 
         <a-box
 
@@ -395,19 +505,27 @@ function createARScene() {
         >
         </a-box>
 
+
       </a-marker>
 
 
 
-      <!--
-        Unabhängiger Renderer-Test:
-        pinkes Quadrat direkt vor der Kamera.
-      -->
+      <!-- ======================================
+           AR-Kamera
+
+           Pinkes Quadrat bleibt vorerst drin,
+           weil man daran Verzerrung sehr gut
+           erkennen kann.
+           ====================================== -->
 
       <a-entity
+
         id="arCamera"
+
         camera
+
       >
+
 
         <a-plane
 
@@ -428,6 +546,7 @@ function createARScene() {
 
         >
         </a-plane>
+
 
       </a-entity>
 
@@ -463,6 +582,7 @@ function createARScene() {
       function () {
 
         markerFoundCount++;
+
 
         markerStatus.textContent =
 
@@ -546,7 +666,9 @@ async function startMobileAR() {
       document.documentElement;
 
 
-    if (element.requestFullscreen) {
+    if (
+      element.requestFullscreen
+    ) {
 
       await element.requestFullscreen();
 
@@ -599,8 +721,11 @@ async function startMobileAR() {
 
 
   setTimeout(
+
     createARScene,
+
     400
+
   );
 
 }
@@ -608,7 +733,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   Video
+   AR-Video finden
    ================================================== */
 
 function getARVideo() {
@@ -734,10 +859,12 @@ function enforceLayers() {
       ""
     );
 
+
     video.setAttribute(
       "webkit-playsinline",
       ""
     );
+
 
     video.muted = true;
 
@@ -789,23 +916,26 @@ function enforceLayers() {
 
 
 /* ==================================================
-   Tatsächliche Browser-Ebenen anzeigen
+   NEU:
+   Sichtbare Geometrie von Video und Canvas
+   synchronisieren
+
+   WICHTIG:
+   Wir verändern ausschließlich CSS.
+
+   NICHT verändert werden:
+   - renderer.setSize()
+   - canvas.width / canvas.height
+   - camera.aspect
+   - camera.projectionMatrix
+   - updateProjectionMatrix()
    ================================================== */
 
-function updateLayerDiagnostics() {
-
-  const host =
-    document.getElementById(
-      "sceneHost"
-    );
-
-  const scene =
-    document.getElementById(
-      "arScene"
-    );
+function synchronizeVisualGeometry() {
 
   const video =
     getARVideo();
+
 
   const canvas =
     document.querySelector(
@@ -813,56 +943,196 @@ function updateLayerDiagnostics() {
     );
 
 
-  function info(element) {
+  if (
+    !video ||
+    !canvas
+  ) {
 
-    if (!element) {
-      return "FEHLT";
-    }
-
-
-    const style =
-      getComputedStyle(
-        element
-      );
-
-
-    return (
-
-      "pos="
-      + style.position
-
-      + ", z="
-      + style.zIndex
-
-      + ", vis="
-      + style.visibility
-
-      + ", op="
-      + style.opacity
-
-      + ", display="
-      + style.display
-
-    );
+    return;
 
   }
 
 
-  layerStatus.textContent =
+  /*
+    Wir fragen den Browser:
 
-    "Host [" + info(host) + "]"
+    Wo liegt das Kameravideo TATSÄCHLICH
+    auf dem Bildschirm?
 
-    + " | Scene ["
-    + info(scene)
-    + "]"
+    getBoundingClientRect() berücksichtigt
+    die von AR.js gesetzte Position und Größe.
+  */
 
-    + " | Video ["
-    + info(video)
-    + "]"
+  const rect =
+    video.getBoundingClientRect();
 
-    + " | Canvas ["
-    + info(canvas)
-    + "]";
+
+  /*
+    Solange das Video noch nicht wirklich
+    aufgebaut wurde, machen wir nichts.
+  */
+
+  if (
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    Canvas exakt auf denselben sichtbaren
+    Ausschnitt legen.
+  */
+
+  canvas.style.setProperty(
+    "left",
+    rect.left + "px",
+    "important"
+  );
+
+
+  canvas.style.setProperty(
+    "top",
+    rect.top + "px",
+    "important"
+  );
+
+
+  canvas.style.setProperty(
+    "width",
+    rect.width + "px",
+    "important"
+  );
+
+
+  canvas.style.setProperty(
+    "height",
+    rect.height + "px",
+    "important"
+  );
+
+
+  /*
+    Falls von A-Frame bottom/right gesetzt
+    wurden, verhindern wir konkurrierende
+    CSS-Geometrie.
+
+    Auch das betrifft NUR CSS.
+  */
+
+  canvas.style.setProperty(
+    "right",
+    "auto",
+    "important"
+  );
+
+
+  canvas.style.setProperty(
+    "bottom",
+    "auto",
+    "important"
+  );
+
+}
+
+
+
+/* ==================================================
+   Geometrie-Diagnose
+   ================================================== */
+
+function updateGeometryDiagnostics() {
+
+  const video =
+    getARVideo();
+
+
+  const canvas =
+    document.querySelector(
+      "canvas.a-canvas"
+    );
+
+
+  if (!video) {
+
+    geometryStatus.textContent =
+      "Geometrie: Video fehlt";
+
+    return;
+
+  }
+
+
+  if (!canvas) {
+
+    geometryStatus.textContent =
+      "Geometrie: Canvas fehlt";
+
+    return;
+
+  }
+
+
+  const videoRect =
+    video.getBoundingClientRect();
+
+
+  const canvasRect =
+    canvas.getBoundingClientRect();
+
+
+  geometryStatus.textContent =
+
+    "Video sichtbar: "
+    +
+    Math.round(videoRect.width)
+    +
+    "×"
+    +
+    Math.round(videoRect.height)
+
+    +
+
+    " | Video pos: "
+    +
+    Math.round(videoRect.left)
+    +
+    ","
+    +
+    Math.round(videoRect.top)
+
+    +
+
+    " | Canvas sichtbar: "
+    +
+    Math.round(canvasRect.width)
+    +
+    "×"
+    +
+    Math.round(canvasRect.height)
+
+    +
+
+    " | Canvas pos: "
+    +
+    Math.round(canvasRect.left)
+    +
+    ","
+    +
+    Math.round(canvasRect.top)
+
+    +
+
+    " | Canvas intern: "
+    +
+    canvas.width
+    +
+    "×"
+    +
+    canvas.height;
 
 }
 
@@ -1115,7 +1385,7 @@ function updateStatus() {
     text;
 
 
-  updateLayerDiagnostics();
+  updateGeometryDiagnostics();
 
 }
 
@@ -1178,9 +1448,13 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
+
   "click",
+
   startMobileAR
+
 );
+
 
 
 window.addEventListener(
@@ -1197,6 +1471,7 @@ window.addEventListener(
   }
 
 );
+
 
 
 window.addEventListener(
@@ -1251,9 +1526,21 @@ setInterval(
     }
 
 
+    /*
+      Reihenfolge absichtlich:
+
+      1. Ebenen korrekt setzen
+      2. Kamera ggf. optimieren
+      3. sichtbare Canvas-Geometrie
+         ans Video anpassen
+      4. Diagnose anzeigen
+    */
+
     enforceLayers();
 
     optimizeMobileCamera();
+
+    synchronizeVisualGeometry();
 
     updateStatus();
 
