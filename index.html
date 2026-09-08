@@ -14,16 +14,18 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR</title>
+  <title>GeoChemAR – Methan</title>
 
   <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
+
   <style>
 
     html,
     body {
+
       margin: 0;
       padding: 0;
 
@@ -35,37 +37,46 @@
       background: #111;
 
       font-family: Arial, sans-serif;
+
     }
 
 
     .a-enter-vr,
     .a-enter-ar {
+
       display: none !important;
+
     }
 
 
     #sceneHost {
+
       position: fixed;
 
       inset: 0;
 
       width: 100%;
       height: 100%;
+
     }
 
 
     #arjs-video {
+
       z-index: 0 !important;
 
       visibility: visible !important;
       opacity: 1 !important;
+
     }
 
 
     canvas.a-canvas {
+
       z-index: 1 !important;
 
       background: transparent !important;
+
     }
 
 
@@ -95,17 +106,22 @@
       color: white;
 
       text-align: center;
+
     }
 
 
     #startScreen.visible {
+
       display: flex;
+
     }
 
 
     #startContent {
+
       width: 100%;
       max-width: 420px;
+
     }
 
 
@@ -115,6 +131,7 @@
 
       font-size: 64px;
       line-height: 1;
+
     }
 
 
@@ -126,6 +143,7 @@
 
       font-size: 23px;
       font-weight: bold;
+
     }
 
 
@@ -137,6 +155,7 @@
       line-height: 1.45;
 
       opacity: 0.9;
+
     }
 
 
@@ -158,6 +177,7 @@
 
       background: white;
       color: #111;
+
     }
 
 
@@ -189,48 +209,467 @@
       border-radius: 6px;
 
       pointer-events: none;
+
     }
 
   </style>
 
+
+  <script>
+
+    /*
+      ==================================================
+      Methan-Komponente
+
+      Das Molekül wird vollständig mathematisch
+      konstruiert.
+
+      Die vier H-Atome liegen in den Richtungen:
+
+       ( 1,  1,  1)
+       ( 1, -1, -1)
+       (-1,  1, -1)
+       (-1, -1,  1)
+
+      Der Winkel zwischen diesen Richtungen beträgt
+      exakt:
+
+      arccos(-1/3) = 109,47°
+      ==================================================
+    */
+
+    AFRAME.registerComponent(
+
+      "methane-model",
+
+      {
+
+        init: function () {
+
+
+          /* ------------------------------------------
+             Gesamtgruppe
+             ------------------------------------------ */
+
+          const molecule =
+            new THREE.Group();
+
+
+          /*
+            Das C-Atom liegt etwas oberhalb
+            der Markerebene.
+
+            Dadurch schneiden die H-Atome
+            nicht durch den Marker.
+          */
+
+          molecule.position.set(
+            0,
+            0.55,
+            0
+          );
+
+
+          /* ------------------------------------------
+             Größen
+             ------------------------------------------ */
+
+          const carbonRadius =
+            0.16;
+
+          const hydrogenRadius =
+            0.105;
+
+          const bondRadius =
+            0.035;
+
+          const bondLength =
+            0.46;
+
+
+          /* ------------------------------------------
+             Materialien
+             ------------------------------------------ */
+
+          const carbonMaterial =
+            new THREE.MeshStandardMaterial({
+
+              color: 0x303030,
+
+              roughness: 0.45,
+
+              metalness: 0.0
+
+            });
+
+
+          const hydrogenMaterial =
+            new THREE.MeshStandardMaterial({
+
+              color: 0xffffff,
+
+              roughness: 0.35,
+
+              metalness: 0.0
+
+            });
+
+
+          const bondMaterial =
+            new THREE.MeshStandardMaterial({
+
+              color: 0xb8b8b8,
+
+              roughness: 0.5,
+
+              metalness: 0.0
+
+            });
+
+
+
+          /* ------------------------------------------
+             Kohlenstoffatom
+             ------------------------------------------ */
+
+          const carbonGeometry =
+            new THREE.SphereGeometry(
+
+              carbonRadius,
+
+              32,
+
+              24
+
+            );
+
+
+          const carbon =
+            new THREE.Mesh(
+
+              carbonGeometry,
+
+              carbonMaterial
+
+            );
+
+
+          molecule.add(
+            carbon
+          );
+
+
+
+          /* ------------------------------------------
+             Tetraeder-Richtungen
+             ------------------------------------------ */
+
+          const directions = [
+
+            new THREE.Vector3(
+              1,
+              1,
+              1
+            ),
+
+            new THREE.Vector3(
+              1,
+              -1,
+              -1
+            ),
+
+            new THREE.Vector3(
+              -1,
+              1,
+              -1
+            ),
+
+            new THREE.Vector3(
+              -1,
+              -1,
+              1
+            )
+
+          ];
+
+
+          /*
+            Alle Richtungsvektoren werden
+            auf Länge 1 normiert.
+          */
+
+          directions.forEach(
+
+            direction => {
+
+              direction.normalize();
+
+            }
+
+          );
+
+
+
+          /* ------------------------------------------
+             Wasserstoffatome und Bindungen
+             ------------------------------------------ */
+
+          directions.forEach(
+
+            direction => {
+
+
+              /*
+                Position des H-Atoms
+              */
+
+              const hydrogenPosition =
+
+                direction
+                  .clone()
+                  .multiplyScalar(
+                    bondLength
+                  );
+
+
+              const hydrogenGeometry =
+                new THREE.SphereGeometry(
+
+                  hydrogenRadius,
+
+                  28,
+
+                  20
+
+                );
+
+
+              const hydrogen =
+                new THREE.Mesh(
+
+                  hydrogenGeometry,
+
+                  hydrogenMaterial
+
+                );
+
+
+              hydrogen.position.copy(
+                hydrogenPosition
+              );
+
+
+              molecule.add(
+                hydrogen
+              );
+
+
+
+              /*
+                ----------------------------------------
+                Bindung
+
+                THREE.CylinderGeometry zeigt
+                standardmäßig entlang der Y-Achse.
+
+                Deshalb drehen wir den Zylinder
+                mathematisch aus der Y-Richtung
+                in die jeweilige C-H-Richtung.
+                ----------------------------------------
+              */
+
+
+              /*
+                Die Bindung beginnt ungefähr an
+                der Oberfläche des C-Atoms und
+                endet ungefähr an der Oberfläche
+                des H-Atoms.
+              */
+
+              const startDistance =
+                carbonRadius * 0.78;
+
+              const endDistance =
+                bondLength -
+                hydrogenRadius * 0.72;
+
+
+              const visibleBondLength =
+
+                endDistance -
+                startDistance;
+
+
+              const bondCenterDistance =
+
+                (
+                  startDistance +
+                  endDistance
+                )
+                /
+                2;
+
+
+              const bondGeometry =
+                new THREE.CylinderGeometry(
+
+                  bondRadius,
+
+                  bondRadius,
+
+                  visibleBondLength,
+
+                  20
+
+                );
+
+
+              const bond =
+                new THREE.Mesh(
+
+                  bondGeometry,
+
+                  bondMaterial
+
+                );
+
+
+              /*
+                Mittelpunkt der Bindung
+              */
+
+              bond.position.copy(
+
+                direction
+                  .clone()
+                  .multiplyScalar(
+                    bondCenterDistance
+                  )
+
+              );
+
+
+              /*
+                Zylinder-Y-Achse in Richtung
+                der C-H-Bindung drehen.
+              */
+
+              const yAxis =
+                new THREE.Vector3(
+                  0,
+                  1,
+                  0
+                );
+
+
+              const quaternion =
+                new THREE.Quaternion();
+
+
+              quaternion.setFromUnitVectors(
+
+                yAxis,
+
+                direction
+
+              );
+
+
+              bond.quaternion.copy(
+                quaternion
+              );
+
+
+              molecule.add(
+                bond
+              );
+
+            }
+
+          );
+
+
+
+          /* ------------------------------------------
+             Gruppe an A-Frame hängen
+             ------------------------------------------ */
+
+          this.el.setObject3D(
+
+            "methane",
+
+            molecule
+
+          );
+
+        }
+
+      }
+
+    );
+
+  </script>
+
 </head>
+
 
 
 <body>
 
 
-  <!-- Hier wird AR.js erst später eingefügt -->
+  <!-- ===============================================
+       AR-Szene
+       =============================================== -->
 
   <div id="sceneHost"></div>
 
 
-  <!-- Diagnose -->
+
+  <!-- ===============================================
+       Diagnose
+       =============================================== -->
 
   <div id="status">
+
     GeoChemAR startet …
+
   </div>
 
 
-  <!-- Startbildschirm -->
+
+  <!-- ===============================================
+       Smartphone-Startbildschirm
+       =============================================== -->
 
   <div id="startScreen">
 
     <div id="startContent">
 
       <div id="rotateIcon">
+
         ↻
+
       </div>
+
 
       <div id="startTitle">
+
         Bitte Smartphone drehen
+
       </div>
+
 
       <div id="startText">
+
         GeoChemAR wird im Querformat verwendet.
+
       </div>
 
+
       <button id="startButton">
+
         AR starten
+
       </button>
 
     </div>
@@ -241,36 +680,61 @@
 
 <script>
 
+
 const sceneHost =
-  document.getElementById("sceneHost");
+  document.getElementById(
+    "sceneHost"
+  );
+
 
 const status =
-  document.getElementById("status");
+  document.getElementById(
+    "status"
+  );
+
 
 const startScreen =
-  document.getElementById("startScreen");
+  document.getElementById(
+    "startScreen"
+  );
+
 
 const rotateIcon =
-  document.getElementById("rotateIcon");
+  document.getElementById(
+    "rotateIcon"
+  );
+
 
 const startTitle =
-  document.getElementById("startTitle");
+  document.getElementById(
+    "startTitle"
+  );
+
 
 const startText =
-  document.getElementById("startText");
+  document.getElementById(
+    "startText"
+  );
+
 
 const startButton =
-  document.getElementById("startButton");
+  document.getElementById(
+    "startButton"
+  );
 
 
-let arStarted = false;
 
-let cameraOptimized = false;
+let arStarted =
+  false;
+
+
+let cameraOptimized =
+  false;
 
 
 
 /* ==================================================
-   Gerät erkennen
+   Mobilgerät erkennen
    ================================================== */
 
 function isMobileDevice() {
@@ -299,14 +763,16 @@ function isMobileDevice() {
 
 
 /* ==================================================
-   Orientierung
+   Querformat erkennen
    ================================================== */
 
 function isLandscape() {
 
   return (
+
     window.innerWidth >
     window.innerHeight
+
   );
 
 }
@@ -314,15 +780,11 @@ function isLandscape() {
 
 
 /* ==================================================
-   Startbildschirm aktualisieren
+   Startbildschirm
    ================================================== */
 
 function updateStartScreen() {
 
-  /*
-    Computer:
-    kein Startbildschirm
-  */
 
   if (!isMobileDevice()) {
 
@@ -334,10 +796,6 @@ function updateStartScreen() {
 
   }
 
-
-  /*
-    AR läuft bereits.
-  */
 
   if (arStarted) {
 
@@ -355,20 +813,22 @@ function updateStartScreen() {
   );
 
 
-  /*
-    Smartphone Hochformat
-  */
+  /* Hochformat */
 
   if (!isLandscape()) {
+
 
     rotateIcon.style.display =
       "block";
 
+
     startTitle.textContent =
       "Bitte Smartphone drehen";
 
+
     startText.textContent =
       "GeoChemAR wird im Querformat verwendet.";
+
 
     startButton.style.display =
       "none";
@@ -376,20 +836,22 @@ function updateStartScreen() {
   }
 
 
-  /*
-    Smartphone Querformat
-  */
+  /* Querformat */
 
   else {
+
 
     rotateIcon.style.display =
       "none";
 
+
     startTitle.textContent =
       "GeoChemAR";
 
+
     startText.textContent =
       "Das Smartphone ist im Querformat. GeoChemAR kann jetzt gestartet werden.";
+
 
     startButton.style.display =
       "block";
@@ -406,12 +868,15 @@ function updateStartScreen() {
 
 function createARScene() {
 
+
   if (arStarted) {
     return;
   }
 
 
-  arStarted = true;
+  arStarted =
+    true;
+
 
 
   sceneHost.innerHTML = `
@@ -440,39 +905,66 @@ function createARScene() {
     >
 
 
+      <!-- Licht -->
+
+      <a-entity
+
+        light="
+          type: ambient;
+          intensity: 1.15;
+        "
+
+      ></a-entity>
+
+
+      <a-entity
+
+        light="
+          type: directional;
+          intensity: 0.8;
+        "
+
+        position="
+          1
+          2
+          1
+        "
+
+      ></a-entity>
+
+
+
+      <!-- Hiro-Marker -->
+
       <a-marker
 
         preset="hiro"
 
         smooth="true"
-        smoothCount="5"
+
+        smoothCount="3"
+
         smoothTolerance="0.01"
+
         smoothThreshold="2"
 
       >
 
 
-        <a-box
+        <!-- Methanmolekül -->
 
-          position="0 0.3 0"
+        <a-entity
 
-          width="0.6"
-          height="0.6"
-          depth="0.6"
+          methane-model
 
-          material="
-            color: #2563eb;
-            opacity: 0.8;
-            transparent: true;
-            side: double;
-          "
-
-        >
-        </a-box>
+        ></a-entity>
 
 
       </a-marker>
 
+
+
+      <!-- AR-Kamera -->
 
       <a-entity camera></a-entity>
 
@@ -491,15 +983,11 @@ function createARScene() {
 
 
 /* ==================================================
-   AR starten
+   Smartphone-AR starten
    ================================================== */
 
 async function startMobileAR() {
 
-  /*
-    Sicherheit:
-    AR nur im Querformat starten.
-  */
 
   if (!isLandscape()) {
 
@@ -510,25 +998,26 @@ async function startMobileAR() {
   }
 
 
-  /*
-    1. Vollbild versuchen
 
-    Besonders bei Samsung-Browsern kann
-    das die problematische Seitenskalierung
-    vermeiden.
-  */
+  /* ----------------------------------------------
+     Vollbild versuchen
+     ---------------------------------------------- */
 
   try {
+
 
     const element =
       document.documentElement;
 
 
-    if (element.requestFullscreen) {
+    if (
+      element.requestFullscreen
+    ) {
 
       await element.requestFullscreen();
 
     }
+
 
     else if (
       element.webkitRequestFullscreen
@@ -540,29 +1029,34 @@ async function startMobileAR() {
 
   }
 
+
   catch (error) {
 
     console.log(
+
       "GeoChemAR: Vollbildmodus nicht verfügbar.",
+
       error
+
     );
 
   }
 
 
-  /*
-    2. Querformat sperren, falls der Browser
-       das unterstützt.
 
-    Nicht alle Browser erlauben das.
-  */
+  /* ----------------------------------------------
+     Querformat sperren, sofern möglich
+     ---------------------------------------------- */
 
   try {
 
+
     if (
+
       screen.orientation
       &&
       screen.orientation.lock
+
     ) {
 
       await screen.orientation.lock(
@@ -573,24 +1067,24 @@ async function startMobileAR() {
 
   }
 
+
   catch (error) {
 
     console.log(
+
       "GeoChemAR: Orientierung konnte nicht gesperrt werden.",
+
       error
+
     );
 
   }
 
 
+
   /*
-    3. Kurze Pause.
-
-    Der Browser darf zuerst den
-    Vollbild-/Querformatzustand fertig
-    berechnen.
-
-    ERST DANACH wird AR.js erzeugt.
+    Erst nach dem endgültigen
+    Bildschirmzustand AR initialisieren.
   */
 
   setTimeout(
@@ -610,7 +1104,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   Video finden
+   AR.js-Video finden
    ================================================== */
 
 function getARVideo() {
@@ -639,6 +1133,7 @@ function getARVideo() {
 
 function keepVideoVisible() {
 
+
   if (!arStarted) {
     return;
   }
@@ -653,40 +1148,61 @@ function keepVideoVisible() {
   }
 
 
+
   video.style.setProperty(
+
     "visibility",
+
     "visible",
+
     "important"
+
   );
 
 
   video.style.setProperty(
+
     "opacity",
+
     "1",
+
     "important"
+
   );
 
 
   video.style.setProperty(
+
     "z-index",
+
     "0",
+
     "important"
+
   );
 
 
   video.setAttribute(
+
     "playsinline",
+
     ""
+
   );
 
 
   video.setAttribute(
+
     "webkit-playsinline",
+
     ""
+
   );
 
 
-  video.muted = true;
+  video.muted =
+    true;
+
 
 
   const canvas =
@@ -697,17 +1213,26 @@ function keepVideoVisible() {
 
   if (canvas) {
 
+
     canvas.style.setProperty(
+
       "z-index",
+
       "1",
+
       "important"
+
     );
 
 
     canvas.style.setProperty(
+
       "background",
+
       "transparent",
+
       "important"
+
     );
 
   }
@@ -718,12 +1243,10 @@ function keepVideoVisible() {
 
 /* ==================================================
    Smartphone-Kamera optimieren
-
-   Diese Einstellungen stammen aus der
-   Version, die bei dir funktioniert hat.
    ================================================== */
 
 async function optimizeMobileCamera() {
+
 
   if (cameraOptimized) {
     return;
@@ -735,13 +1258,19 @@ async function optimizeMobileCamera() {
   }
 
 
+  /*
+    PC-Webcam unverändert lassen.
+  */
+
   if (!isMobileDevice()) {
 
-    cameraOptimized = true;
+    cameraOptimized =
+      true;
 
     return;
 
   }
+
 
 
   const video =
@@ -753,6 +1282,7 @@ async function optimizeMobileCamera() {
   }
 
 
+
   const stream =
     video.srcObject;
 
@@ -760,6 +1290,7 @@ async function optimizeMobileCamera() {
   if (!stream) {
     return;
   }
+
 
 
   const tracks =
@@ -771,15 +1302,18 @@ async function optimizeMobileCamera() {
   }
 
 
+
   const track =
     tracks[0];
 
 
-  /*
-    Höhere Kameraauflösung
-  */
+
+  /* ----------------------------------------------
+     Auflösung
+     ---------------------------------------------- */
 
   try {
+
 
     await track.applyConstraints({
 
@@ -804,37 +1338,49 @@ async function optimizeMobileCamera() {
 
   }
 
+
   catch (error) {
 
     console.log(
+
       "GeoChemAR: Kameraauflösung konnte nicht angepasst werden.",
+
       error
+
     );
 
   }
 
 
-  /*
-    Zoom möglichst 1×
-  */
+
+  /* ----------------------------------------------
+     Zoom möglichst 1×
+     ---------------------------------------------- */
 
   try {
 
+
     if (
+
       track.getCapabilities
       &&
       track.applyConstraints
+
     ) {
+
 
       const capabilities =
         track.getCapabilities();
 
 
       if (
+
         capabilities.zoom
         &&
         capabilities.zoom.min !== undefined
+
       ) {
+
 
         const desiredZoom =
 
@@ -843,8 +1389,11 @@ async function optimizeMobileCamera() {
             capabilities.zoom.min,
 
             Math.min(
+
               1,
+
               capabilities.zoom.max
+
             )
 
           );
@@ -853,9 +1402,14 @@ async function optimizeMobileCamera() {
         await track.applyConstraints({
 
           advanced: [
+
             {
-              zoom: desiredZoom
+
+              zoom:
+                desiredZoom
+
             }
+
           ]
 
         });
@@ -866,17 +1420,23 @@ async function optimizeMobileCamera() {
 
   }
 
+
   catch (error) {
 
     console.log(
+
       "GeoChemAR: Zoom konnte nicht angepasst werden.",
+
       error
+
     );
 
   }
 
 
-  cameraOptimized = true;
+
+  cameraOptimized =
+    true;
 
 }
 
@@ -887,6 +1447,7 @@ async function optimizeMobileCamera() {
    ================================================== */
 
 function updateStatus() {
+
 
   if (!arStarted) {
 
@@ -915,6 +1476,7 @@ function updateStatus() {
       : "Computer";
 
 
+
   text +=
 
     " | Fenster "
@@ -926,17 +1488,21 @@ function updateStatus() {
     window.innerHeight;
 
 
+
   if (!video) {
 
     text +=
       " | Kamera wird initialisiert …";
 
+
     status.textContent =
       text;
+
 
     return;
 
   }
+
 
 
   text +=
@@ -950,15 +1516,20 @@ function updateStatus() {
     video.videoHeight;
 
 
+
   const stream =
     video.srcObject;
 
 
+
   if (
+
     stream
     &&
     stream.getVideoTracks
+
   ) {
+
 
     const tracks =
       stream.getVideoTracks();
@@ -966,21 +1537,27 @@ function updateStatus() {
 
     if (tracks.length) {
 
+
       const track =
         tracks[0];
 
 
       if (track.getSettings) {
 
+
         const settings =
           track.getSettings();
 
 
+
         if (
+
           settings.width
           &&
           settings.height
+
         ) {
+
 
           text +=
 
@@ -995,7 +1572,9 @@ function updateStatus() {
         }
 
 
+
         if (settings.frameRate) {
+
 
           text +=
 
@@ -1010,9 +1589,9 @@ function updateStatus() {
         }
 
 
-        if (
-          settings.facingMode
-        ) {
+
+        if (settings.facingMode) {
+
 
           text +=
 
@@ -1023,9 +1602,11 @@ function updateStatus() {
         }
 
 
+
         if (
           settings.zoom !== undefined
         ) {
+
 
           text +=
 
@@ -1038,7 +1619,9 @@ function updateStatus() {
       }
 
 
+
       if (track.label) {
+
 
         text +=
 
@@ -1053,6 +1636,7 @@ function updateStatus() {
   }
 
 
+
   status.textContent =
     text;
 
@@ -1061,39 +1645,37 @@ function updateStatus() {
 
 
 /* ==================================================
-   Orientierungswechsel während AR
-
-   Wir versuchen NICHT, AR.js live
-   umzubauen.
-
-   Falls das Gerät trotz Sperre ins
-   Hochformat kommt, wird die Sitzung
-   beendet und die Seite neu geladen.
-
+   Orientierungswechsel
    ================================================== */
 
 function orientationChanged() {
 
+
   /*
-    Vor AR-Start:
-    nur Startbildschirm aktualisieren.
+    Noch keine AR-Sitzung:
+    Startbildschirm aktualisieren.
   */
 
   if (!arStarted) {
 
+
     setTimeout(
+
       updateStartScreen,
+
       200
+
     );
+
 
     return;
 
   }
 
 
+
   /*
-    Computer:
-    nichts tun.
+    Computer ignorieren.
   */
 
   if (!isMobileDevice()) {
@@ -1101,13 +1683,12 @@ function orientationChanged() {
   }
 
 
-  /*
-    Smartphone wurde während AR
-    ins Hochformat gedreht.
 
-    Statt eine kaputte AR-Projektion
-    weiterzuverwenden, setzen wir die
-    Sitzung vollständig zurück.
+  /*
+    Smartphone während AR ins
+    Hochformat gedreht:
+
+    aktuelle Sitzung verwerfen.
   */
 
   if (!isLandscape()) {
@@ -1118,15 +1699,21 @@ function orientationChanged() {
 
 
     if (
+
       video
       &&
       video.srcObject
+
     ) {
+
 
       video.srcObject
         .getTracks()
         .forEach(
-          track => track.stop()
+
+          track =>
+            track.stop()
+
         );
 
     }
@@ -1160,9 +1747,13 @@ window.addEventListener(
 
   function () {
 
+
     setTimeout(
+
       orientationChanged,
+
       250
+
     );
 
   }
@@ -1177,11 +1768,16 @@ window.addEventListener(
 
   function () {
 
+
     if (!arStarted) {
 
+
       setTimeout(
+
         updateStartScreen,
+
         150
+
       );
 
     }
@@ -1198,22 +1794,23 @@ window.addEventListener(
 
 if (isMobileDevice()) {
 
+
   /*
     Smartphone:
-
-    Noch KEIN AR.js.
+    zunächst Startbildschirm.
   */
 
   updateStartScreen();
 
 }
 
+
 else {
+
 
   /*
     Computer:
-
-    Wie bisher direkt starten.
+    direkt AR starten.
   */
 
   createARScene();
@@ -1229,6 +1826,7 @@ else {
 setInterval(
 
   function () {
+
 
     if (!arStarted) {
       return;
@@ -1246,6 +1844,7 @@ setInterval(
   500
 
 );
+
 
 </script>
 
