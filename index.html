@@ -14,9 +14,8 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Diagnose</title>
+  <title>GeoChemAR – Rendering-Diagnose</title>
 
-  <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
@@ -26,174 +25,114 @@
     body {
       margin: 0;
       padding: 0;
-
       width: 100%;
       height: 100%;
-
       overflow: hidden;
-
       background: #111;
-
       font-family: Arial, sans-serif;
     }
-
 
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
     }
 
-
     #sceneHost {
       position: fixed;
-
       inset: 0;
-
       width: 100%;
       height: 100%;
     }
 
-
     #arjs-video {
       z-index: 0 !important;
-
       visibility: visible !important;
       opacity: 1 !important;
     }
 
-
     canvas.a-canvas {
       z-index: 1 !important;
-
       background: transparent !important;
     }
 
-
-    /* =========================================
-       Start-/Drehbildschirm
-       ========================================= */
-
     #startScreen {
-
       position: fixed;
-
       inset: 0;
-
       z-index: 2147483647;
-
       display: none;
-
       align-items: center;
       justify-content: center;
-
       box-sizing: border-box;
-
       padding: 30px;
-
       background: #111;
-
       color: white;
-
       text-align: center;
     }
-
 
     #startScreen.visible {
       display: flex;
     }
-
 
     #startContent {
       width: 100%;
       max-width: 420px;
     }
 
-
     #rotateIcon {
-
       margin-bottom: 20px;
-
       font-size: 64px;
       line-height: 1;
     }
 
-
     #startTitle {
-
       display: block;
-
       margin-bottom: 12px;
-
       font-size: 23px;
       font-weight: bold;
     }
 
-
     #startText {
-
       margin-bottom: 22px;
-
       font-size: 15px;
       line-height: 1.45;
-
       opacity: 0.9;
     }
 
-
     #startButton {
-
       display: none;
-
       margin: 0 auto;
-
       padding: 13px 25px;
-
       border: 0;
       border-radius: 8px;
-
       font-size: 17px;
       font-weight: bold;
-
       cursor: pointer;
-
       background: white;
       color: #111;
     }
 
-
-    /* =========================================
-       Diagnose
-       ========================================= */
-
     #status {
-
       position: fixed;
-
       top: max(6px, env(safe-area-inset-top));
       left: max(6px, env(safe-area-inset-left));
       right: max(6px, env(safe-area-inset-right));
-
       z-index: 100000;
-
       box-sizing: border-box;
-
       padding: 9px 11px;
-
       background: rgba(0, 0, 0, 0.82);
-
       color: white;
-
       font-size: 11px;
       line-height: 1.45;
-
       border-radius: 6px;
-
       pointer-events: none;
     }
 
-
     #markerStatus {
       font-weight: bold;
+    }
+
+    #renderStatus {
+      margin-top: 3px;
     }
 
   </style>
@@ -202,7 +141,6 @@
 
 
 <body>
-
 
   <div id="sceneHost"></div>
 
@@ -215,6 +153,10 @@
 
     <div id="markerStatus">
       Marker: wartet …
+    </div>
+
+    <div id="renderStatus">
+      Rendering: wartet …
     </div>
 
   </div>
@@ -245,7 +187,6 @@
   </div>
 
 
-
 <script>
 
 const sceneHost =
@@ -256,6 +197,9 @@ const systemStatus =
 
 const markerStatus =
   document.getElementById("markerStatus");
+
+const renderStatus =
+  document.getElementById("renderStatus");
 
 const startScreen =
   document.getElementById("startScreen");
@@ -330,7 +274,7 @@ function isLandscape() {
 
 
 /* ==================================================
-   Startbildschirm aktualisieren
+   Startbildschirm
    ================================================== */
 
 function updateStartScreen() {
@@ -399,7 +343,138 @@ function updateStartScreen() {
 
 
 /* ==================================================
-   Diagnose-Ereignisse für Marker registrieren
+   Rendering-Diagnose
+   ================================================== */
+
+function updateRenderingDiagnostics() {
+
+  const marker =
+    document.getElementById(
+      "hiroMarker"
+    );
+
+  const box =
+    document.getElementById(
+      "testBox"
+    );
+
+
+  if (!marker) {
+
+    renderStatus.textContent =
+      "Rendering: Marker-Element fehlt";
+
+    return;
+
+  }
+
+
+  if (!marker.object3D) {
+
+    renderStatus.textContent =
+      "Rendering: marker.object3D fehlt";
+
+    return;
+
+  }
+
+
+  let text = "";
+
+
+  /* Marker-Sichtbarkeit */
+
+  text +=
+    "Marker visible: "
+    +
+    marker.object3D.visible;
+
+
+  /* Anzahl der Three.js-Kinder */
+
+  text +=
+    " | children: "
+    +
+    marker.object3D.children.length;
+
+
+  /* Würfel prüfen */
+
+  if (!box) {
+
+    text +=
+      " | Box: FEHLT";
+
+  }
+
+  else {
+
+    text +=
+      " | Box: vorhanden";
+
+
+    if (box.object3D) {
+
+      text +=
+        " | Box visible: "
+        +
+        box.object3D.visible;
+
+
+      text +=
+        " | Box pos: "
+        +
+        box.object3D.position.x.toFixed(2)
+        +
+        ","
+        +
+        box.object3D.position.y.toFixed(2)
+        +
+        ","
+        +
+        box.object3D.position.z.toFixed(2);
+
+    }
+
+    else {
+
+      text +=
+        " | box.object3D fehlt";
+
+    }
+
+  }
+
+
+  /* Markerposition */
+
+  const p =
+    marker.object3D.position;
+
+
+  text +=
+    " | Marker pos: "
+    +
+    p.x.toFixed(2)
+    +
+    ","
+    +
+    p.y.toFixed(2)
+    +
+    ","
+    +
+    p.z.toFixed(2);
+
+
+  renderStatus.textContent =
+    text;
+
+}
+
+
+
+/* ==================================================
+   Marker-Diagnose installieren
    ================================================== */
 
 function installMarkerDiagnostics() {
@@ -430,10 +505,15 @@ function installMarkerDiagnostics() {
 
       markerFoundCount++;
 
+
       markerStatus.textContent =
+
         "Marker: GEFUNDEN | Erkennungen: "
         +
         markerFoundCount;
+
+
+      updateRenderingDiagnostics();
 
     }
 
@@ -448,10 +528,15 @@ function installMarkerDiagnostics() {
 
       markerFound = false;
 
+
       markerStatus.textContent =
-        "Marker: verloren | bisher erkannt: "
+
+        "Marker: verloren | Erkennungen: "
         +
         markerFoundCount;
+
+
+      updateRenderingDiagnostics();
 
     }
 
@@ -522,11 +607,13 @@ function createARScene() {
 
 
         <!--
-          EXAKT DER WÜRFEL AUS DER
-          FUNKTIONIERENDEN VERSION
+          EXAKT DER BLAUE WÜRFEL
+          DER FUNKTIONIERENDEN VERSION
         -->
 
         <a-box
+
+          id="testBox"
 
           position="0 0.3 0"
 
@@ -561,11 +648,6 @@ function createARScene() {
   );
 
 
-  /*
-    Die Diagnose wird unmittelbar nach
-    dem Einfügen registriert.
-  */
-
   installMarkerDiagnostics();
 
 
@@ -585,6 +667,8 @@ function createARScene() {
 
         sceneLoaded = true;
 
+        updateRenderingDiagnostics();
+
       }
 
     );
@@ -593,6 +677,8 @@ function createARScene() {
     if (scene.hasLoaded) {
 
       sceneLoaded = true;
+
+      updateRenderingDiagnostics();
 
     }
 
@@ -954,7 +1040,7 @@ async function optimizeMobileCamera() {
 
 
 /* ==================================================
-   Diagnose
+   Hauptdiagnose
    ================================================== */
 
 function updateStatus() {
@@ -976,10 +1062,6 @@ function updateStatus() {
   let text = "";
 
 
-  /*
-    A-Frame prüfen
-  */
-
   if (
     typeof AFRAME !==
     "undefined"
@@ -998,27 +1080,19 @@ function updateStatus() {
   }
 
 
-  /*
-    AR.js prüfen
-  */
-
   let arjsOK = false;
 
 
   if (
     typeof AFRAME !==
     "undefined"
+    &&
+    AFRAME.components
+    &&
+    AFRAME.components.arjs
   ) {
 
-    if (
-      AFRAME.components
-      &&
-      AFRAME.components.arjs
-    ) {
-
-      arjsOK = true;
-
-    }
+    arjsOK = true;
 
   }
 
@@ -1029,19 +1103,11 @@ function updateStatus() {
       : " | AR.js: ?";
 
 
-  /*
-    Szene
-  */
-
   text +=
     sceneLoaded
       ? " | Szene: OK"
       : " | Szene: lädt";
 
-
-  /*
-    Video
-  */
 
   if (video) {
 
@@ -1069,11 +1135,6 @@ function updateStatus() {
     text;
 
 
-  /*
-    Falls noch nie ein markerFound kam,
-    Status entsprechend setzen.
-  */
-
   if (
     !markerFound
     &&
@@ -1084,6 +1145,9 @@ function updateStatus() {
       "Marker: NICHT ERKANNT";
 
   }
+
+
+  updateRenderingDiagnostics();
 
 }
 
@@ -1113,7 +1177,6 @@ function orientationChanged() {
 
 
   if (!isLandscape()) {
-
 
     const video =
       getARVideo();
