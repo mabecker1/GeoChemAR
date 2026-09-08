@@ -14,7 +14,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR</title>
+  <title>GeoChemAR – Diagnose</title>
 
   <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
@@ -177,18 +177,23 @@
 
       box-sizing: border-box;
 
-      padding: 7px 9px;
+      padding: 9px 11px;
 
-      background: rgba(0, 0, 0, 0.76);
+      background: rgba(0, 0, 0, 0.82);
 
       color: white;
 
-      font-size: 10px;
-      line-height: 1.3;
+      font-size: 11px;
+      line-height: 1.45;
 
       border-radius: 6px;
 
       pointer-events: none;
+    }
+
+
+    #markerStatus {
+      font-weight: bold;
     }
 
   </style>
@@ -199,19 +204,21 @@
 <body>
 
 
-  <!-- Hier wird AR.js erst später eingefügt -->
-
   <div id="sceneHost"></div>
 
 
-  <!-- Diagnose -->
-
   <div id="status">
-    GeoChemAR startet …
+
+    <div id="systemStatus">
+      GeoChemAR startet …
+    </div>
+
+    <div id="markerStatus">
+      Marker: wartet …
+    </div>
+
   </div>
 
-
-  <!-- Startbildschirm -->
 
   <div id="startScreen">
 
@@ -244,8 +251,11 @@
 const sceneHost =
   document.getElementById("sceneHost");
 
-const status =
-  document.getElementById("status");
+const systemStatus =
+  document.getElementById("systemStatus");
+
+const markerStatus =
+  document.getElementById("markerStatus");
 
 const startScreen =
   document.getElementById("startScreen");
@@ -266,6 +276,12 @@ const startButton =
 let arStarted = false;
 
 let cameraOptimized = false;
+
+let sceneLoaded = false;
+
+let markerFound = false;
+
+let markerFoundCount = 0;
 
 
 
@@ -319,11 +335,6 @@ function isLandscape() {
 
 function updateStartScreen() {
 
-  /*
-    Computer:
-    kein Startbildschirm
-  */
-
   if (!isMobileDevice()) {
 
     startScreen.classList.remove(
@@ -334,10 +345,6 @@ function updateStartScreen() {
 
   }
 
-
-  /*
-    AR läuft bereits.
-  */
 
   if (arStarted) {
 
@@ -355,10 +362,6 @@ function updateStartScreen() {
   );
 
 
-  /*
-    Smartphone Hochformat
-  */
-
   if (!isLandscape()) {
 
     rotateIcon.style.display =
@@ -374,11 +377,6 @@ function updateStartScreen() {
       "none";
 
   }
-
-
-  /*
-    Smartphone Querformat
-  */
 
   else {
 
@@ -401,6 +399,73 @@ function updateStartScreen() {
 
 
 /* ==================================================
+   Diagnose-Ereignisse für Marker registrieren
+   ================================================== */
+
+function installMarkerDiagnostics() {
+
+  const marker =
+    document.getElementById(
+      "hiroMarker"
+    );
+
+
+  if (!marker) {
+
+    markerStatus.textContent =
+      "Marker: Element nicht gefunden";
+
+    return;
+
+  }
+
+
+  marker.addEventListener(
+
+    "markerFound",
+
+    function () {
+
+      markerFound = true;
+
+      markerFoundCount++;
+
+      markerStatus.textContent =
+        "Marker: GEFUNDEN | Erkennungen: "
+        +
+        markerFoundCount;
+
+    }
+
+  );
+
+
+  marker.addEventListener(
+
+    "markerLost",
+
+    function () {
+
+      markerFound = false;
+
+      markerStatus.textContent =
+        "Marker: verloren | bisher erkannt: "
+        +
+        markerFoundCount;
+
+    }
+
+  );
+
+
+  markerStatus.textContent =
+    "Marker: NICHT ERKANNT";
+
+}
+
+
+
+/* ==================================================
    AR-Szene erzeugen
    ================================================== */
 
@@ -417,6 +482,8 @@ function createARScene() {
   sceneHost.innerHTML = `
 
     <a-scene
+
+      id="arScene"
 
       embedded
 
@@ -442,6 +509,8 @@ function createARScene() {
 
       <a-marker
 
+        id="hiroMarker"
+
         preset="hiro"
 
         smooth="true"
@@ -451,6 +520,11 @@ function createARScene() {
 
       >
 
+
+        <!--
+          EXAKT DER WÜRFEL AUS DER
+          FUNKTIONIERENDEN VERSION
+        -->
 
         <a-box
 
@@ -486,6 +560,44 @@ function createARScene() {
     "visible"
   );
 
+
+  /*
+    Die Diagnose wird unmittelbar nach
+    dem Einfügen registriert.
+  */
+
+  installMarkerDiagnostics();
+
+
+  const scene =
+    document.getElementById(
+      "arScene"
+    );
+
+
+  if (scene) {
+
+    scene.addEventListener(
+
+      "loaded",
+
+      function () {
+
+        sceneLoaded = true;
+
+      }
+
+    );
+
+
+    if (scene.hasLoaded) {
+
+      sceneLoaded = true;
+
+    }
+
+  }
+
 }
 
 
@@ -496,11 +608,6 @@ function createARScene() {
 
 async function startMobileAR() {
 
-  /*
-    Sicherheit:
-    AR nur im Querformat starten.
-  */
-
   if (!isLandscape()) {
 
     updateStartScreen();
@@ -509,14 +616,6 @@ async function startMobileAR() {
 
   }
 
-
-  /*
-    1. Vollbild versuchen
-
-    Besonders bei Samsung-Browsern kann
-    das die problematische Seitenskalierung
-    vermeiden.
-  */
 
   try {
 
@@ -550,13 +649,6 @@ async function startMobileAR() {
   }
 
 
-  /*
-    2. Querformat sperren, falls der Browser
-       das unterstützt.
-
-    Nicht alle Browser erlauben das.
-  */
-
   try {
 
     if (
@@ -582,16 +674,6 @@ async function startMobileAR() {
 
   }
 
-
-  /*
-    3. Kurze Pause.
-
-    Der Browser darf zuerst den
-    Vollbild-/Querformatzustand fertig
-    berechnen.
-
-    ERST DANACH wird AR.js erzeugt.
-  */
 
   setTimeout(
 
@@ -718,9 +800,6 @@ function keepVideoVisible() {
 
 /* ==================================================
    Smartphone-Kamera optimieren
-
-   Diese Einstellungen stammen aus der
-   Version, die bei dir funktioniert hat.
    ================================================== */
 
 async function optimizeMobileCamera() {
@@ -775,10 +854,6 @@ async function optimizeMobileCamera() {
     tracks[0];
 
 
-  /*
-    Höhere Kameraauflösung
-  */
-
   try {
 
     await track.applyConstraints({
@@ -813,10 +888,6 @@ async function optimizeMobileCamera() {
 
   }
 
-
-  /*
-    Zoom möglichst 1×
-  */
 
   try {
 
@@ -890,194 +961,139 @@ function updateStatus() {
 
   if (!arStarted) {
 
-    status.style.display =
-      "none";
+    systemStatus.textContent =
+      "AR noch nicht gestartet";
 
     return;
 
   }
-
-
-  status.style.display =
-    "block";
 
 
   const video =
     getARVideo();
 
 
-  let text =
-
-    isMobileDevice()
-
-      ? "Mobil"
-
-      : "Computer";
+  let text = "";
 
 
-  text +=
+  /*
+    A-Frame prüfen
+  */
 
-    " | Fenster "
-    +
-    window.innerWidth
-    +
-    "×"
-    +
-    window.innerHeight;
-
-
-  if (!video) {
+  if (
+    typeof AFRAME !==
+    "undefined"
+  ) {
 
     text +=
-      " | Kamera wird initialisiert …";
+      "A-Frame: OK";
 
-    status.textContent =
-      text;
+  }
 
-    return;
+  else {
+
+    text +=
+      "A-Frame: FEHLT";
 
   }
 
 
-  text +=
+  /*
+    AR.js prüfen
+  */
 
-    " | Video "
-    +
-    video.videoWidth
-    +
-    "×"
-    +
-    video.videoHeight;
-
-
-  const stream =
-    video.srcObject;
+  let arjsOK = false;
 
 
   if (
-    stream
-    &&
-    stream.getVideoTracks
+    typeof AFRAME !==
+    "undefined"
   ) {
 
-    const tracks =
-      stream.getVideoTracks();
+    if (
+      AFRAME.components
+      &&
+      AFRAME.components.arjs
+    ) {
 
-
-    if (tracks.length) {
-
-      const track =
-        tracks[0];
-
-
-      if (track.getSettings) {
-
-        const settings =
-          track.getSettings();
-
-
-        if (
-          settings.width
-          &&
-          settings.height
-        ) {
-
-          text +=
-
-            " | Stream "
-            +
-            settings.width
-            +
-            "×"
-            +
-            settings.height;
-
-        }
-
-
-        if (settings.frameRate) {
-
-          text +=
-
-            " @ "
-            +
-            Math.round(
-              settings.frameRate
-            )
-            +
-            "fps";
-
-        }
-
-
-        if (
-          settings.facingMode
-        ) {
-
-          text +=
-
-            " | "
-            +
-            settings.facingMode;
-
-        }
-
-
-        if (
-          settings.zoom !== undefined
-        ) {
-
-          text +=
-
-            " | Zoom "
-            +
-            settings.zoom;
-
-        }
-
-      }
-
-
-      if (track.label) {
-
-        text +=
-
-          " | "
-          +
-          track.label;
-
-      }
+      arjsOK = true;
 
     }
 
   }
 
 
-  status.textContent =
+  text +=
+    arjsOK
+      ? " | AR.js: OK"
+      : " | AR.js: ?";
+
+
+  /*
+    Szene
+  */
+
+  text +=
+    sceneLoaded
+      ? " | Szene: OK"
+      : " | Szene: lädt";
+
+
+  /*
+    Video
+  */
+
+  if (video) {
+
+    text +=
+
+      " | Video "
+      +
+      video.videoWidth
+      +
+      "×"
+      +
+      video.videoHeight;
+
+  }
+
+  else {
+
+    text +=
+      " | Video: fehlt";
+
+  }
+
+
+  systemStatus.textContent =
     text;
+
+
+  /*
+    Falls noch nie ein markerFound kam,
+    Status entsprechend setzen.
+  */
+
+  if (
+    !markerFound
+    &&
+    markerFoundCount === 0
+  ) {
+
+    markerStatus.textContent =
+      "Marker: NICHT ERKANNT";
+
+  }
 
 }
 
 
 
 /* ==================================================
-   Orientierungswechsel während AR
-
-   Wir versuchen NICHT, AR.js live
-   umzubauen.
-
-   Falls das Gerät trotz Sperre ins
-   Hochformat kommt, wird die Sitzung
-   beendet und die Seite neu geladen.
-
+   Orientierungswechsel
    ================================================== */
 
 function orientationChanged() {
-
-  /*
-    Vor AR-Start:
-    nur Startbildschirm aktualisieren.
-  */
 
   if (!arStarted) {
 
@@ -1091,24 +1107,10 @@ function orientationChanged() {
   }
 
 
-  /*
-    Computer:
-    nichts tun.
-  */
-
   if (!isMobileDevice()) {
     return;
   }
 
-
-  /*
-    Smartphone wurde während AR
-    ins Hochformat gedreht.
-
-    Statt eine kaputte AR-Projektion
-    weiterzuverwenden, setzen wir die
-    Sitzung vollständig zurück.
-  */
 
   if (!isLandscape()) {
 
@@ -1198,23 +1200,11 @@ window.addEventListener(
 
 if (isMobileDevice()) {
 
-  /*
-    Smartphone:
-
-    Noch KEIN AR.js.
-  */
-
   updateStartScreen();
 
 }
 
 else {
-
-  /*
-    Computer:
-
-    Wie bisher direkt starten.
-  */
 
   createARScene();
 
