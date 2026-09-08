@@ -189,13 +189,6 @@ AFRAME.registerComponent("methane-model", {
     const bondRadius = 0.040;
 
 
-    /*
-      Loch wieder kleiner.
-    */
-
-    const holeRadius = 0.046;
-
-
 
     /* ==================================================
        Materialien
@@ -235,6 +228,55 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
 
       });
+
+
+
+    /* ==================================================
+       Kohlenstoff
+       ================================================== */
+
+    const carbonGeometry =
+      new THREE.SphereGeometry(
+
+        carbonRadius,
+
+        48,
+
+        32
+
+      );
+
+
+    const carbon =
+      new THREE.Mesh(
+
+        carbonGeometry,
+
+        carbonMaterial
+
+      );
+
+
+    group.add(
+      carbon
+    );
+
+
+
+    /* ==================================================
+       Wasserstoff
+       ================================================== */
+
+    const hydrogenGeometry =
+      new THREE.SphereGeometry(
+
+        hydrogenRadius,
+
+        40,
+
+        28
+
+      );
 
 
 
@@ -280,296 +322,6 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Kugel mit Löchern
-       ================================================== */
-
-    function createSphereWithHoles(
-
-      sphereRadius,
-
-      holeDirections,
-
-      openingRadius,
-
-      widthSegments = 64,
-
-      heightSegments = 48
-
-    ) {
-
-      const sourceGeometry =
-        new THREE.SphereGeometry(
-
-          sphereRadius,
-
-          widthSegments,
-
-          heightSegments
-
-        );
-
-
-      const nonIndexed =
-        sourceGeometry.toNonIndexed();
-
-
-      const sourcePosition =
-        nonIndexed.getAttribute(
-          "position"
-        );
-
-
-      const newPositions = [];
-
-
-      const a =
-        new THREE.Vector3();
-
-
-      const b =
-        new THREE.Vector3();
-
-
-      const c =
-        new THREE.Vector3();
-
-
-      const center =
-        new THREE.Vector3();
-
-
-
-      function isInsideHole(point) {
-
-        for (
-          let i = 0;
-          i < holeDirections.length;
-          i++
-        ) {
-
-          const direction =
-            holeDirections[i];
-
-
-          const axialDistance =
-            point.dot(
-              direction
-            );
-
-
-          if (
-            axialDistance <= 0
-          ) {
-
-            continue;
-
-          }
-
-
-          const axisPoint =
-
-            direction
-              .clone()
-              .multiplyScalar(
-                axialDistance
-              );
-
-
-          const radialDistance =
-
-            point
-              .clone()
-              .sub(
-                axisPoint
-              )
-              .length();
-
-
-          if (
-            radialDistance <
-            openingRadius
-          ) {
-
-            return true;
-
-          }
-
-        }
-
-
-        return false;
-
-      }
-
-
-
-      for (
-        let i = 0;
-        i < sourcePosition.count;
-        i += 3
-      ) {
-
-        a.fromBufferAttribute(
-          sourcePosition,
-          i
-        );
-
-
-        b.fromBufferAttribute(
-          sourcePosition,
-          i + 1
-        );
-
-
-        c.fromBufferAttribute(
-          sourcePosition,
-          i + 2
-        );
-
-
-        center
-          .copy(a)
-          .add(b)
-          .add(c)
-          .multiplyScalar(
-            1 / 3
-          );
-
-
-        if (
-          isInsideHole(
-            center
-          )
-        ) {
-
-          continue;
-
-        }
-
-
-        newPositions.push(
-
-          a.x,
-          a.y,
-          a.z,
-
-          b.x,
-          b.y,
-          b.z,
-
-          c.x,
-          c.y,
-          c.z
-
-        );
-
-      }
-
-
-
-      const geometry =
-        new THREE.BufferGeometry();
-
-
-      geometry.setAttribute(
-
-        "position",
-
-        new THREE.Float32BufferAttribute(
-
-          newPositions,
-
-          3
-
-        )
-
-      );
-
-
-      geometry.computeVertexNormals();
-
-      geometry.computeBoundingSphere();
-
-
-      sourceGeometry.dispose();
-
-      nonIndexed.dispose();
-
-
-      return geometry;
-
-    }
-
-
-
-    /* ==================================================
-       Kohlenstoff
-       ================================================== */
-
-    const carbonGeometry =
-      createSphereWithHoles(
-
-        carbonRadius,
-
-        directions,
-
-        holeRadius,
-
-        64,
-
-        48
-
-      );
-
-
-    const carbon =
-      new THREE.Mesh(
-
-        carbonGeometry,
-
-        carbonMaterial
-
-      );
-
-
-    group.add(
-      carbon
-    );
-
-
-
-    /* ==================================================
-       Wasserstoff
-       ================================================== */
-
-    const hydrogenHoleDirection =
-      new THREE.Vector3(
-        0,
-        -1,
-        0
-      );
-
-
-    const hydrogenGeometry =
-      createSphereWithHoles(
-
-        hydrogenRadius,
-
-        [
-          hydrogenHoleDirection
-        ],
-
-        holeRadius,
-
-        56,
-
-        40
-
-      );
-
-
-
-    /* ==================================================
        Bindungen
        ================================================== */
 
@@ -609,15 +361,6 @@ AFRAME.registerComponent("methane-model", {
       );
 
 
-      hydrogen.quaternion.setFromUnitVectors(
-
-        yAxis,
-
-        direction
-
-      );
-
-
       group.add(
         hydrogen
       );
@@ -627,12 +370,8 @@ AFRAME.registerComponent("methane-model", {
       /* ----------------------------------------------
          Bindungsstab
 
-         WICHTIG:
-         Der Stab beginnt jetzt exakt an der
-         Oberfläche des C-Atoms und endet exakt
-         an der Oberfläche des H-Atoms.
-
-         Er reicht NICHT mehr in eine Kugel hinein.
+         Exakt von Kugeloberfläche zu Kugeloberfläche.
+         Keine Überlappung mit den Kugeln.
          ---------------------------------------------- */
 
       const startDistance =
