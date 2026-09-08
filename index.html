@@ -191,12 +191,8 @@ AFRAME.registerComponent("methane-model", {
 
 
     /*
-      NEU:
-
-      Die Bindungsstäbe enden exakt an den
+      Die Stäbe enden exakt an den
       Kugeloberflächen.
-
-      Keine Überlappung.
     */
 
     const bondStart =
@@ -411,7 +407,6 @@ AFRAME.registerComponent("methane-model", {
           );
 
 
-
       const bondVector =
 
         endPoint
@@ -428,23 +423,29 @@ AFRAME.registerComponent("methane-model", {
 
       /* ----------------------------------------------
          Bindungszylinder
+
+         WICHTIG:
+         openEnded = true
+
+         Dadurch besitzen die Stäbe keine
+         kreisförmigen Deckflächen/Kappen.
          ---------------------------------------------- */
 
       const bondGeometry =
 
         new THREE.CylinderGeometry(
 
-          bondRadius,
+          bondRadius,   // oberer Radius
 
-          bondRadius,
+          bondRadius,   // unterer Radius
 
-          bondLength,
+          bondLength,   // Länge
 
-          32,
+          32,           // Umfangssegmente
 
-          1,
+          1,            // Höhensegmente
 
-          false
+          true          // OPEN ENDED = keine Kappen
 
         );
 
@@ -546,7 +547,6 @@ AFRAME.registerComponent("marker-hold", {
 
     this.lostAt =
       0;
-
 
 
     this.el.addEventListener(
@@ -925,7 +925,6 @@ function createARScene() {
 
       >
       </a-entity>
-
 
 
       <a-entity camera></a-entity>
