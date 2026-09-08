@@ -454,30 +454,21 @@ function createARScene() {
 
         <a-box
 
-  position="0 0.3 0"
+          position="0 0.3 0"
 
-  width="0.6"
-  height="0.6"
-  depth="0.6"
+          width="0.6"
+          height="0.6"
+          depth="0.6"
 
-  material="
-    color: #2563eb;
-    opacity: 0.8;
-    transparent: true;
-    side: double;
-  "
+          material="
+            color: #2563eb;
+            opacity: 0.8;
+            transparent: true;
+            side: double;
+          "
 
->
-</a-box>
-
-<a-sphere
-  position="0 0.85 0"
-  radius="0.18"
-  material="
-    color: #ff0000;
-    side: double;
-  "
-></a-sphere>
+        >
+        </a-box>
 
 
       </a-marker>
@@ -521,6 +512,10 @@ async function startMobileAR() {
 
   /*
     1. Vollbild versuchen
+
+    Besonders bei Samsung-Browsern kann
+    das die problematische Seitenskalierung
+    vermeiden.
   */
 
   try {
@@ -556,7 +551,10 @@ async function startMobileAR() {
 
 
   /*
-    2. Querformat sperren
+    2. Querformat sperren, falls der Browser
+       das unterstützt.
+
+    Nicht alle Browser erlauben das.
   */
 
   try {
@@ -586,7 +584,13 @@ async function startMobileAR() {
 
 
   /*
-    3. Kurze Pause
+    3. Kurze Pause.
+
+    Der Browser darf zuerst den
+    Vollbild-/Querformatzustand fertig
+    berechnen.
+
+    ERST DANACH wird AR.js erzeugt.
   */
 
   setTimeout(
@@ -714,6 +718,9 @@ function keepVideoVisible() {
 
 /* ==================================================
    Smartphone-Kamera optimieren
+
+   Diese Einstellungen stammen aus der
+   Version, die bei dir funktioniert hat.
    ================================================== */
 
 async function optimizeMobileCamera() {
@@ -1055,9 +1062,22 @@ function updateStatus() {
 
 /* ==================================================
    Orientierungswechsel während AR
+
+   Wir versuchen NICHT, AR.js live
+   umzubauen.
+
+   Falls das Gerät trotz Sperre ins
+   Hochformat kommt, wird die Sitzung
+   beendet und die Seite neu geladen.
+
    ================================================== */
 
 function orientationChanged() {
+
+  /*
+    Vor AR-Start:
+    nur Startbildschirm aktualisieren.
+  */
 
   if (!arStarted) {
 
@@ -1071,10 +1091,24 @@ function orientationChanged() {
   }
 
 
+  /*
+    Computer:
+    nichts tun.
+  */
+
   if (!isMobileDevice()) {
     return;
   }
 
+
+  /*
+    Smartphone wurde während AR
+    ins Hochformat gedreht.
+
+    Statt eine kaputte AR-Projektion
+    weiterzuverwenden, setzen wir die
+    Sitzung vollständig zurück.
+  */
 
   if (!isLandscape()) {
 
@@ -1164,11 +1198,23 @@ window.addEventListener(
 
 if (isMobileDevice()) {
 
+  /*
+    Smartphone:
+
+    Noch KEIN AR.js.
+  */
+
   updateStartScreen();
 
 }
 
 else {
+
+  /*
+    Computer:
+
+    Wie bisher direkt starten.
+  */
 
   createARScene();
 
