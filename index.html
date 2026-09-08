@@ -190,17 +190,10 @@ AFRAME.registerComponent("methane-model", {
 
 
     /*
-      Loch jetzt etwas größer.
+      Loch wieder kleiner.
     */
 
-    const holeRadius = 0.055;
-
-
-    /*
-      Der Stab reicht ein kleines Stück in das Loch.
-    */
-
-    const bondInsertion = 0.035;
+    const holeRadius = 0.046;
 
 
 
@@ -287,7 +280,7 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Kugel mit echten Löchern erzeugen
+       Kugel mit Löchern
        ================================================== */
 
     function createSphereWithHoles(
@@ -373,22 +366,23 @@ AFRAME.registerComponent("methane-model", {
           }
 
 
-          const radialVector =
-            point
+          const axisPoint =
+
+            direction
               .clone()
-              .sub(
-
-                direction
-                  .clone()
-                  .multiplyScalar(
-                    axialDistance
-                  )
-
+              .multiplyScalar(
+                axialDistance
               );
 
 
           const radialDistance =
-            radialVector.length();
+
+            point
+              .clone()
+              .sub(
+                axisPoint
+              )
+              .length();
 
 
           if (
@@ -632,22 +626,23 @@ AFRAME.registerComponent("methane-model", {
 
       /* ----------------------------------------------
          Bindungsstab
+
+         WICHTIG:
+         Der Stab beginnt jetzt exakt an der
+         Oberfläche des C-Atoms und endet exakt
+         an der Oberfläche des H-Atoms.
+
+         Er reicht NICHT mehr in eine Kugel hinein.
          ---------------------------------------------- */
 
       const startDistance =
-
-        carbonRadius
-        -
-        bondInsertion;
+        carbonRadius;
 
 
       const endDistance =
-
         hydrogenDistance
         -
-        hydrogenRadius
-        +
-        bondInsertion;
+        hydrogenRadius;
 
 
       const startPoint =
