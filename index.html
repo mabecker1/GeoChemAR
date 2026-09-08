@@ -137,9 +137,12 @@
   <div id="sceneHost"></div>
 
   <div id="startScreen">
+
     <div id="startContent">
 
-      <div id="rotateIcon">↻</div>
+      <div id="rotateIcon">
+        ↻
+      </div>
 
       <div id="startTitle">
         Bitte Smartphone drehen
@@ -154,6 +157,7 @@
       </button>
 
     </div>
+
   </div>
 
 
@@ -168,284 +172,423 @@ AFRAME.registerComponent("methane-model", {
 
   init: function () {
 
-    const THREE = AFRAME.THREE;
+    const THREE =
+      AFRAME.THREE;
 
-    const group = new THREE.Group();
+
+    const group =
+      new THREE.Group();
 
 
-    /* Größen */
 
-    const carbonRadius = 0.22;
-    const hydrogenRadius = 0.14;
+    /* ==================================================
+       Größen
+       ================================================== */
 
-    const hydrogenDistance = 0.72;
+    const carbonRadius =
+      0.22;
+
+
+    const hydrogenRadius =
+      0.14;
+
+
+    const hydrogenDistance =
+      0.72;
+
+
+    const bondRadius =
+      0.040;
+
+
+
+    /* ==================================================
+       Mathematisch exakter Kugel-Stab-Übergang
+
+       Für eine Kugel mit Radius R und einen
+       Zylinder mit Radius r:
+
+       d = sqrt(R² - r²)
+
+       An dieser Stelle besitzt die Kugel
+       genau denselben Querschnittsradius
+       wie der Bindungsstab.
+       ================================================== */
+
+
+    const carbonContactDistance =
+
+      Math.sqrt(
+
+        carbonRadius * carbonRadius
+        -
+        bondRadius * bondRadius
+
+      );
+
+
+    const hydrogenContactDistance =
+
+      Math.sqrt(
+
+        hydrogenRadius * hydrogenRadius
+        -
+        bondRadius * bondRadius
+
+      );
+
 
     /*
-      Etwas dünnere Bindungen.
+      Position entlang der Bindungsrichtung,
+      an der der Stab am C-Atom beginnt.
     */
 
-    const bondRadius = 0.040;
+    const bondStart =
+      carbonContactDistance;
 
 
     /*
-      Nur noch sehr geringe Überlappung
-      mit den Atomkugeln.
-
-      C-Oberfläche:
-      0.220
-
-      H-Oberfläche auf C-Seite:
-      0.720 - 0.140 = 0.580
+      Position vom C-Atom aus gesehen,
+      an der der Stab am H-Atom endet.
     */
 
-    const bondStart = 0.215;
-    const bondEnd = 0.585;
+    const bondEnd =
+
+      hydrogenDistance
+      -
+      hydrogenContactDistance;
 
 
-    /*
-      Kleine abgerundete Endstücke.
-    */
 
-    const capRadius = 0.043;
+    /* ==================================================
+       Materialien
+       ================================================== */
 
-
-    /* Materialien */
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
+
         color: 0x202020,
+
         roughness: 0.55,
+
         metalness: 0
+
       });
+
 
 
     const hydrogenMaterial =
       new THREE.MeshStandardMaterial({
+
         color: 0xffffff,
+
         roughness: 0.45,
+
         metalness: 0
+
       });
+
 
 
     const bondMaterial =
       new THREE.MeshStandardMaterial({
+
         color: 0xb8bec7,
+
         roughness: 0.50,
+
         metalness: 0
+
       });
 
 
-    /* Kohlenstoff */
+
+    /* ==================================================
+       Kohlenstoff
+
+       Höhere Segmentzahl für eine rundere Oberfläche.
+       ================================================== */
+
 
     const carbonGeometry =
       new THREE.SphereGeometry(
+
         carbonRadius,
-        32,
-        24
+
+        48,
+
+        32
+
       );
 
 
     const carbon =
       new THREE.Mesh(
+
         carbonGeometry,
+
         carbonMaterial
+
       );
 
 
-    group.add(carbon);
+    group.add(
+      carbon
+    );
 
 
-    /* Wasserstoff-Geometrie */
+
+    /* ==================================================
+       Wasserstoff
+       ================================================== */
+
 
     const hydrogenGeometry =
       new THREE.SphereGeometry(
+
         hydrogenRadius,
-        24,
-        18
+
+        40,
+
+        28
+
       );
 
 
-    /* Geometrie der kleinen Bindungskappen */
 
-    const capGeometry =
-      new THREE.SphereGeometry(
-        capRadius,
-        16,
-        12
-      );
+    /* ==================================================
+       Ausgangsrichtung eines Three.js-Zylinders
+       ================================================== */
 
-
-    /*
-      CylinderGeometry zeigt standardmäßig
-      entlang der Y-Achse.
-    */
 
     const yAxis =
-      new THREE.Vector3(0, 1, 0);
+      new THREE.Vector3(
+
+        0,
+        1,
+        0
+
+      );
 
 
-    /*
-      Tetraederrichtungen.
 
-      Winkel zwischen je zwei Richtungen:
-      arccos(-1/3) = 109,47°
-    */
+    /* ==================================================
+       Exakte Tetraederrichtungen
+
+        ( 1,  1,  1)
+        ( 1, -1, -1)
+        (-1,  1, -1)
+        (-1, -1,  1)
+
+       H-C-H = 109,47°
+       ================================================== */
+
 
     const directions = [
 
-      new THREE.Vector3(1, 1, 1),
+      new THREE.Vector3(
+        1,
+        1,
+        1
+      ),
 
-      new THREE.Vector3(1, -1, -1),
+      new THREE.Vector3(
+        1,
+        -1,
+        -1
+      ),
 
-      new THREE.Vector3(-1, 1, -1),
+      new THREE.Vector3(
+        -1,
+        1,
+        -1
+      ),
 
-      new THREE.Vector3(-1, -1, 1)
+      new THREE.Vector3(
+        -1,
+        -1,
+        1
+      )
 
     ];
 
 
-    directions.forEach(function (direction) {
 
-      direction.normalize();
-
-
-      /* ------------------------------
-         Wasserstoff
-         ------------------------------ */
-
-      const hydrogen =
-        new THREE.Mesh(
-          hydrogenGeometry,
-          hydrogenMaterial
-        );
+    /* ==================================================
+       Vier Wasserstoffatome und Bindungen
+       ================================================== */
 
 
-      hydrogen.position.copy(
+    directions.forEach(
 
-        direction
-          .clone()
-          .multiplyScalar(
-            hydrogenDistance
-          )
-
-      );
+      function (direction) {
 
 
-      group.add(hydrogen);
+        direction.normalize();
 
 
 
-      /* ------------------------------
-         Bindung
-         ------------------------------ */
+        /* ----------------------------------------------
+           Wasserstoffatom
+           ---------------------------------------------- */
 
-      const startPoint =
-        direction
-          .clone()
-          .multiplyScalar(
-            bondStart
+
+        const hydrogen =
+          new THREE.Mesh(
+
+            hydrogenGeometry,
+
+            hydrogenMaterial
+
           );
 
 
-      const endPoint =
-        direction
-          .clone()
-          .multiplyScalar(
-            bondEnd
+        hydrogen.position.copy(
+
+          direction
+            .clone()
+            .multiplyScalar(
+              hydrogenDistance
+            )
+
+        );
+
+
+        group.add(
+          hydrogen
+        );
+
+
+
+        /* ----------------------------------------------
+           Exakter Anfang und Ende des Stabes
+           ---------------------------------------------- */
+
+
+        const startPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              bondStart
+            );
+
+
+        const endPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              bondEnd
+            );
+
+
+
+        const bondVector =
+
+          endPoint
+            .clone()
+            .sub(
+              startPoint
+            );
+
+
+        const bondLength =
+          bondVector.length();
+
+
+
+        /* ----------------------------------------------
+           Bindungszylinder
+
+           Mehr Segmente für einen glatteren Rand.
+           ---------------------------------------------- */
+
+
+        const bondGeometry =
+
+          new THREE.CylinderGeometry(
+
+            bondRadius,
+
+            bondRadius,
+
+            bondLength,
+
+            32,
+
+            1,
+
+            false
+
           );
 
 
-      const bondVector =
-        endPoint
-          .clone()
-          .sub(startPoint);
+
+        const bond =
+          new THREE.Mesh(
+
+            bondGeometry,
+
+            bondMaterial
+
+          );
 
 
-      const bondLength =
-        bondVector.length();
+
+        /* Mittelpunkt der beiden Kontaktpunkte */
 
 
-      const bondGeometry =
-        new THREE.CylinderGeometry(
-          bondRadius,
-          bondRadius,
-          bondLength,
-          20
+        bond.position.copy(
+
+          startPoint
+            .clone()
+            .add(
+              endPoint
+            )
+            .multiplyScalar(
+              0.5
+            )
+
         );
 
 
-      const bond =
-        new THREE.Mesh(
-          bondGeometry,
-          bondMaterial
+
+        /*
+          Zylinder exakt entlang der
+          jeweiligen C-H-Richtung ausrichten.
+        */
+
+
+        bond.quaternion.setFromUnitVectors(
+
+          yAxis,
+
+          direction
+
         );
 
 
-      bond.position.copy(
-
-        startPoint
-          .clone()
-          .add(endPoint)
-          .multiplyScalar(0.5)
-
-      );
-
-
-      bond.quaternion.setFromUnitVectors(
-        yAxis,
-        direction
-      );
-
-
-      group.add(bond);
-
-
-
-      /* ------------------------------
-         Abgerundetes C-Ende
-         ------------------------------ */
-
-      const carbonCap =
-        new THREE.Mesh(
-          capGeometry,
-          bondMaterial
+        group.add(
+          bond
         );
 
 
-      carbonCap.position.copy(
-        startPoint
-      );
+      }
 
+    );
 
-      group.add(carbonCap);
-
-
-
-      /* ------------------------------
-         Abgerundetes H-Ende
-         ------------------------------ */
-
-      const hydrogenCap =
-        new THREE.Mesh(
-          capGeometry,
-          bondMaterial
-        );
-
-
-      hydrogenCap.position.copy(
-        endPoint
-      );
-
-
-      group.add(hydrogenCap);
-
-    });
 
 
     this.el.setObject3D(
+
       "methaneMesh",
+
       group
+
     );
+
 
   },
 
@@ -471,8 +614,11 @@ AFRAME.registerComponent("marker-hold", {
   schema: {
 
     holdTime: {
+
       type: "number",
+
       default: 250
+
     }
 
   },
@@ -480,38 +626,57 @@ AFRAME.registerComponent("marker-hold", {
 
   init: function () {
 
-    this.markerDetected = false;
+    this.markerDetected =
+      false;
 
-    this.lostAt = 0;
+
+    this.lostAt =
+      0;
+
 
 
     this.el.addEventListener(
+
       "markerFound",
+
       () => {
 
-        this.markerDetected = true;
+        this.markerDetected =
+          true;
 
-        this.lostAt = 0;
-
-        this.el.object3D.visible = true;
-
-      }
-    );
-
-
-    this.el.addEventListener(
-      "markerLost",
-      () => {
-
-        this.markerDetected = false;
 
         this.lostAt =
-          performance.now();
+          0;
+
 
         this.el.object3D.visible =
           true;
 
       }
+
+    );
+
+
+
+    this.el.addEventListener(
+
+      "markerLost",
+
+      () => {
+
+        this.markerDetected =
+          false;
+
+
+        this.lostAt =
+          performance.now();
+
+
+        this.el.object3D.visible =
+          true;
+
+      }
+
     );
 
   },
@@ -519,17 +684,26 @@ AFRAME.registerComponent("marker-hold", {
 
   tick: function () {
 
-    if (this.markerDetected) {
+    if (
+      this.markerDetected
+    ) {
+
       return;
+
     }
 
 
-    if (this.lostAt === 0) {
+    if (
+      this.lostAt === 0
+    ) {
+
       return;
+
     }
 
 
     const elapsed =
+
       performance.now()
       -
       this.lostAt;
@@ -561,6 +735,7 @@ AFRAME.registerComponent("marker-hold", {
 /* ==========================================================
    Hauptprogramm
    ========================================================== */
+
 
 const sceneHost =
   document.getElementById(
@@ -598,9 +773,12 @@ const startButton =
   );
 
 
-let arStarted = false;
+let arStarted =
+  false;
 
-let cameraOptimized = false;
+
+let cameraOptimized =
+  false;
 
 
 
@@ -654,7 +832,9 @@ function isLandscape() {
 
 function updateStartScreen() {
 
-  if (!isMobileDevice()) {
+  if (
+    !isMobileDevice()
+  ) {
 
     startScreen.classList.remove(
       "visible"
@@ -665,7 +845,9 @@ function updateStartScreen() {
   }
 
 
-  if (arStarted) {
+  if (
+    arStarted
+  ) {
 
     startScreen.classList.remove(
       "visible"
@@ -681,7 +863,9 @@ function updateStartScreen() {
   );
 
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     rotateIcon.style.display =
       "block";
@@ -729,12 +913,17 @@ function updateStartScreen() {
 
 function createARScene() {
 
-  if (arStarted) {
+  if (
+    arStarted
+  ) {
+
     return;
+
   }
 
 
-  arStarted = true;
+  arStarted =
+    true;
 
 
   sceneHost.innerHTML = `
@@ -804,6 +993,7 @@ function createARScene() {
 
       <!-- Beleuchtung -->
 
+
       <a-entity
 
         light="
@@ -853,7 +1043,9 @@ function createARScene() {
 
 async function startMobileAR() {
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     updateStartScreen();
 
@@ -899,9 +1091,11 @@ async function startMobileAR() {
   try {
 
     if (
+
       screen.orientation
       &&
       screen.orientation.lock
+
     ) {
 
       await screen.orientation.lock(
@@ -923,8 +1117,11 @@ async function startMobileAR() {
 
 
   setTimeout(
+
     createARScene,
+
     400
+
   );
 
 }
@@ -983,7 +1180,9 @@ function enforceLayers() {
     );
 
 
-  if (host) {
+  if (
+    host
+  ) {
 
     host.style.setProperty(
       "position",
@@ -1001,7 +1200,9 @@ function enforceLayers() {
   }
 
 
-  if (scene) {
+  if (
+    scene
+  ) {
 
     scene.style.setProperty(
       "position",
@@ -1033,7 +1234,9 @@ function enforceLayers() {
   }
 
 
-  if (video) {
+  if (
+    video
+  ) {
 
     video.style.setProperty(
       "position",
@@ -1075,12 +1278,15 @@ function enforceLayers() {
     );
 
 
-    video.muted = true;
+    video.muted =
+      true;
 
   }
 
 
-  if (canvas) {
+  if (
+    canvas
+  ) {
 
     canvas.style.setProperty(
       "position",
@@ -1130,8 +1336,7 @@ function enforceLayers() {
 
 
 /* ==================================================
-   Sichtbare Geometrie von Video und Canvas
-   synchronisieren
+   Video und Canvas synchronisieren
    ================================================== */
 
 function synchronizeVisualGeometry() {
@@ -1223,19 +1428,30 @@ function synchronizeVisualGeometry() {
 
 async function optimizeMobileCamera() {
 
-  if (cameraOptimized) {
+  if (
+    cameraOptimized
+  ) {
+
     return;
+
   }
 
 
-  if (!arStarted) {
+  if (
+    !arStarted
+  ) {
+
     return;
+
   }
 
 
-  if (!isMobileDevice()) {
+  if (
+    !isMobileDevice()
+  ) {
 
-    cameraOptimized = true;
+    cameraOptimized =
+      true;
 
     return;
 
@@ -1246,8 +1462,12 @@ async function optimizeMobileCamera() {
     getARVideo();
 
 
-  if (!video) {
+  if (
+    !video
+  ) {
+
     return;
+
   }
 
 
@@ -1255,8 +1475,12 @@ async function optimizeMobileCamera() {
     video.srcObject;
 
 
-  if (!stream) {
+  if (
+    !stream
+  ) {
+
     return;
+
   }
 
 
@@ -1264,8 +1488,12 @@ async function optimizeMobileCamera() {
     stream.getVideoTracks();
 
 
-  if (!tracks.length) {
+  if (
+    !tracks.length
+  ) {
+
     return;
+
   }
 
 
@@ -1311,9 +1539,11 @@ async function optimizeMobileCamera() {
   try {
 
     if (
+
       track.getCapabilities
       &&
       track.applyConstraints
+
     ) {
 
       const capabilities =
@@ -1321,9 +1551,11 @@ async function optimizeMobileCamera() {
 
 
       if (
+
         capabilities.zoom
         &&
         capabilities.zoom.min !== undefined
+
       ) {
 
         const desiredZoom =
@@ -1343,9 +1575,11 @@ async function optimizeMobileCamera() {
         await track.applyConstraints({
 
           advanced: [
+
             {
               zoom: desiredZoom
             }
+
           ]
 
         });
@@ -1366,7 +1600,8 @@ async function optimizeMobileCamera() {
   }
 
 
-  cameraOptimized = true;
+  cameraOptimized =
+    true;
 
 }
 
@@ -1378,7 +1613,9 @@ async function optimizeMobileCamera() {
 
 function orientationChanged() {
 
-  if (!arStarted) {
+  if (
+    !arStarted
+  ) {
 
     setTimeout(
       updateStartScreen,
@@ -1390,27 +1627,38 @@ function orientationChanged() {
   }
 
 
-  if (!isMobileDevice()) {
+  if (
+    !isMobileDevice()
+  ) {
+
     return;
+
   }
 
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     const video =
       getARVideo();
 
 
     if (
+
       video
       &&
       video.srcObject
+
     ) {
 
       video.srcObject
         .getTracks()
         .forEach(
-          track => track.stop()
+
+          track =>
+            track.stop()
+
         );
 
     }
@@ -1429,8 +1677,11 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
+
   "click",
+
   startMobileAR
+
 );
 
 
@@ -1441,8 +1692,11 @@ window.addEventListener(
   function () {
 
     setTimeout(
+
       orientationChanged,
+
       250
+
     );
 
   }
@@ -1456,11 +1710,16 @@ window.addEventListener(
 
   function () {
 
-    if (!arStarted) {
+    if (
+      !arStarted
+    ) {
 
       setTimeout(
+
         updateStartScreen,
+
         150
+
       );
 
     }
@@ -1475,7 +1734,9 @@ window.addEventListener(
    Start
    ================================================== */
 
-if (isMobileDevice()) {
+if (
+  isMobileDevice()
+) {
 
   updateStartScreen();
 
@@ -1497,8 +1758,12 @@ setInterval(
 
   function () {
 
-    if (!arStarted) {
+    if (
+      !arStarted
+    ) {
+
       return;
+
     }
 
 
@@ -1513,6 +1778,7 @@ setInterval(
   250
 
 );
+
 
 </script>
 
