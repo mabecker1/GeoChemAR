@@ -2,7 +2,6 @@
 <html lang="de">
 
 <head>
-
   <meta charset="UTF-8">
 
   <meta
@@ -14,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Ebenentest</title>
+  <title>GeoChemAR – Ebenen-Diagnose 2</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -32,224 +31,140 @@
       font-family: Arial, sans-serif;
     }
 
-
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
     }
 
-
     #sceneHost {
-      position: fixed;
-      inset: 0;
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 10 !important;
       width: 100%;
       height: 100%;
+      pointer-events: none !important;
     }
 
-
-    /*
-      WICHTIG:
-
-      Wir ändern hier NICHT Breite, Höhe,
-      object-fit oder Transformation des Videos.
-
-      Wir sorgen ausschließlich dafür,
-      dass Video und Canvas eindeutig in
-      verschiedenen Ebenen liegen.
-    */
+    #arScene {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 10 !important;
+      width: 100% !important;
+      height: 100% !important;
+      pointer-events: none !important;
+      background: transparent !important;
+    }
 
     #arjs-video {
-
       position: fixed !important;
-
       z-index: 1 !important;
-
       visibility: visible !important;
       opacity: 1 !important;
-
     }
-
 
     canvas.a-canvas {
-
       position: fixed !important;
-
-      z-index: 2 !important;
-
+      z-index: 11 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      display: block !important;
       background: transparent !important;
-
       pointer-events: none !important;
-
     }
-
 
     #startScreen {
-
       position: fixed;
-
       inset: 0;
-
       z-index: 2147483647;
-
       display: none;
-
       align-items: center;
       justify-content: center;
-
       box-sizing: border-box;
-
       padding: 30px;
-
       background: #111;
-
       color: white;
-
       text-align: center;
-
     }
-
 
     #startScreen.visible {
       display: flex;
     }
-
 
     #startContent {
       width: 100%;
       max-width: 420px;
     }
 
-
     #rotateIcon {
       margin-bottom: 20px;
       font-size: 64px;
-      line-height: 1;
     }
-
 
     #startTitle {
-
       display: block;
-
       margin-bottom: 12px;
-
       font-size: 23px;
       font-weight: bold;
-
     }
-
 
     #startText {
-
       margin-bottom: 22px;
-
       font-size: 15px;
       line-height: 1.45;
-
       opacity: 0.9;
-
     }
-
 
     #startButton {
-
       display: none;
-
       margin: 0 auto;
-
       padding: 13px 25px;
-
       border: 0;
       border-radius: 8px;
-
       font-size: 17px;
       font-weight: bold;
-
       cursor: pointer;
-
       background: white;
       color: #111;
-
     }
 
-
     #status {
-
       position: fixed;
-
       top: max(6px, env(safe-area-inset-top));
       left: max(6px, env(safe-area-inset-left));
       right: max(6px, env(safe-area-inset-right));
-
       z-index: 100000;
-
       box-sizing: border-box;
-
       padding: 9px 11px;
-
       background: rgba(0, 0, 0, 0.82);
-
       color: white;
-
       font-size: 11px;
       line-height: 1.5;
-
       border-radius: 6px;
-
       pointer-events: none;
-
     }
-
 
     #markerStatus {
       font-weight: bold;
     }
 
-
-    #renderStatus,
-    #projectionStatus {
-      margin-top: 3px;
-    }
-
   </style>
-
 </head>
 
 
 <body>
 
-
   <div id="sceneHost"></div>
 
-
   <div id="status">
-
-    <div id="systemStatus">
-      GeoChemAR startet …
-    </div>
-
-    <div id="markerStatus">
-      Marker: wartet …
-    </div>
-
-    <div id="renderStatus">
-      Rendering: wartet …
-    </div>
-
-    <div id="projectionStatus">
-      Projektion: wartet …
-    </div>
-
+    <div id="systemStatus">GeoChemAR startet …</div>
+    <div id="markerStatus">Marker: wartet …</div>
+    <div id="layerStatus">Ebenen: wartet …</div>
   </div>
 
-
   <div id="startScreen">
-
     <div id="startContent">
 
-      <div id="rotateIcon">
-        ↻
-      </div>
+      <div id="rotateIcon">↻</div>
 
       <div id="startTitle">
         Bitte Smartphone drehen
@@ -264,13 +179,10 @@
       </button>
 
     </div>
-
   </div>
 
 
-
 <script>
-
 
 const sceneHost =
   document.getElementById("sceneHost");
@@ -281,11 +193,8 @@ const systemStatus =
 const markerStatus =
   document.getElementById("markerStatus");
 
-const renderStatus =
-  document.getElementById("renderStatus");
-
-const projectionStatus =
-  document.getElementById("projectionStatus");
+const layerStatus =
+  document.getElementById("layerStatus");
 
 const startScreen =
   document.getElementById("startScreen");
@@ -304,20 +213,11 @@ const startButton =
 
 
 let arStarted = false;
-
 let cameraOptimized = false;
-
 let sceneLoaded = false;
-
-let markerFound = false;
-
 let markerFoundCount = 0;
 
 
-
-/* ==================================================
-   Gerät erkennen
-   ================================================== */
 
 function isMobileDevice() {
 
@@ -344,10 +244,6 @@ function isMobileDevice() {
 
 
 
-/* ==================================================
-   Orientierung
-   ================================================== */
-
 function isLandscape() {
 
   return (
@@ -358,10 +254,6 @@ function isLandscape() {
 }
 
 
-
-/* ==================================================
-   Startbildschirm
-   ================================================== */
 
 function updateStartScreen() {
 
@@ -429,262 +321,6 @@ function updateStartScreen() {
 
 
 /* ==================================================
-   Diagnose
-   ================================================== */
-
-function updateRenderingDiagnostics() {
-
-  const scene =
-    document.getElementById(
-      "arScene"
-    );
-
-  const marker =
-    document.getElementById(
-      "hiroMarker"
-    );
-
-  const box =
-    document.getElementById(
-      "testBox"
-    );
-
-  const rendererTest =
-    document.getElementById(
-      "rendererTest"
-    );
-
-
-  if (
-    !scene ||
-    !marker ||
-    !box
-  ) {
-
-    renderStatus.textContent =
-      "Rendering: Szene/Marker/Box fehlt";
-
-    return;
-
-  }
-
-
-  const mesh =
-    box.getObject3D(
-      "mesh"
-    );
-
-
-  const rendererTestMesh =
-    rendererTest
-      ? rendererTest.getObject3D("mesh")
-      : null;
-
-
-  renderStatus.textContent =
-
-    "Marker visible: "
-    + marker.object3D.visible
-
-    + " | children: "
-    + marker.object3D.children.length
-
-    + " | Box vorhanden"
-
-    + " | Box visible: "
-    + box.object3D.visible
-
-    + " | Mesh: "
-    + (mesh ? "JA" : "NEIN")
-
-    + " | Kamera-Test-Mesh: "
-    + (rendererTestMesh ? "JA" : "NEIN")
-
-    + " | Box: "
-    + box.object3D.position.x.toFixed(2)
-    + ", "
-    + box.object3D.position.y.toFixed(2)
-    + ", "
-    + box.object3D.position.z.toFixed(2)
-
-    + " | Marker: "
-    + marker.object3D.position.x.toFixed(2)
-    + ", "
-    + marker.object3D.position.y.toFixed(2)
-    + ", "
-    + marker.object3D.position.z.toFixed(2);
-
-
-  const camera =
-    scene.camera;
-
-  const canvas =
-    scene.canvas;
-
-
-  if (
-    !camera ||
-    !canvas
-  ) {
-
-    projectionStatus.textContent =
-      "Projektion: Kamera oder Canvas fehlt";
-
-    return;
-
-  }
-
-
-  scene.object3D.updateMatrixWorld(
-    true
-  );
-
-  camera.updateMatrixWorld(
-    true
-  );
-
-
-  const worldPosition =
-    new THREE.Vector3();
-
-
-  box.object3D.getWorldPosition(
-    worldPosition
-  );
-
-
-  const projected =
-    worldPosition.clone();
-
-
-  projected.project(
-    camera
-  );
-
-
-  const inside =
-
-    projected.x >= -1 &&
-    projected.x <= 1 &&
-
-    projected.y >= -1 &&
-    projected.y <= 1 &&
-
-    projected.z >= -1 &&
-    projected.z <= 1;
-
-
-  projectionStatus.textContent =
-
-    "Welt: "
-    + worldPosition.x.toFixed(2)
-    + ", "
-    + worldPosition.y.toFixed(2)
-    + ", "
-    + worldPosition.z.toFixed(2)
-
-    + " | NDC: "
-    + projected.x.toFixed(4)
-    + ", "
-    + projected.y.toFixed(4)
-    + ", "
-    + projected.z.toFixed(4)
-
-    + " | Im Bild: "
-    + (inside ? "JA" : "NEIN")
-
-    + " | Canvas intern: "
-    + canvas.width
-    + "×"
-    + canvas.height
-
-    + " | Canvas sichtbar: "
-    + canvas.clientWidth
-    + "×"
-    + canvas.clientHeight;
-
-}
-
-
-
-/* ==================================================
-   Marker-Diagnose
-   ================================================== */
-
-function installMarkerDiagnostics() {
-
-  const marker =
-    document.getElementById(
-      "hiroMarker"
-    );
-
-
-  if (!marker) {
-
-    markerStatus.textContent =
-      "Marker: Element nicht gefunden";
-
-    return;
-
-  }
-
-
-  marker.addEventListener(
-
-    "markerFound",
-
-    function () {
-
-      markerFound = true;
-
-      markerFoundCount++;
-
-
-      markerStatus.textContent =
-
-        "Marker: GEFUNDEN | Erkennungen: "
-        +
-        markerFoundCount;
-
-
-      updateRenderingDiagnostics();
-
-    }
-
-  );
-
-
-  marker.addEventListener(
-
-    "markerLost",
-
-    function () {
-
-      markerFound = false;
-
-
-      markerStatus.textContent =
-
-        "Marker: verloren | Erkennungen: "
-        +
-        markerFoundCount;
-
-
-      updateRenderingDiagnostics();
-
-    }
-
-  );
-
-
-  markerStatus.textContent =
-    "Marker: NICHT ERKANNT";
-
-}
-
-
-
-/* ==================================================
    AR-Szene
    ================================================== */
 
@@ -739,9 +375,6 @@ function createARScene() {
 
       >
 
-
-        <!-- Blauer Marker-Würfel -->
-
         <a-box
 
           id="testBox"
@@ -762,21 +395,19 @@ function createARScene() {
         >
         </a-box>
 
-
       </a-marker>
 
 
 
-      <!-- AR-Kamera + pinker Renderer-Test -->
+      <!--
+        Unabhängiger Renderer-Test:
+        pinkes Quadrat direkt vor der Kamera.
+      -->
 
       <a-entity
-
         id="arCamera"
-
         camera
-
       >
-
 
         <a-plane
 
@@ -798,7 +429,6 @@ function createARScene() {
         >
         </a-plane>
 
-
       </a-entity>
 
 
@@ -812,13 +442,60 @@ function createARScene() {
   );
 
 
-  installMarkerDiagnostics();
-
-
   const scene =
     document.getElementById(
       "arScene"
     );
+
+
+  const marker =
+    document.getElementById(
+      "hiroMarker"
+    );
+
+
+  if (marker) {
+
+    marker.addEventListener(
+
+      "markerFound",
+
+      function () {
+
+        markerFoundCount++;
+
+        markerStatus.textContent =
+
+          "Marker: GEFUNDEN | Erkennungen: "
+          +
+          markerFoundCount;
+
+      }
+
+    );
+
+
+    marker.addEventListener(
+
+      "markerLost",
+
+      function () {
+
+        markerStatus.textContent =
+
+          "Marker: verloren | Erkennungen: "
+          +
+          markerFoundCount;
+
+      }
+
+    );
+
+
+    markerStatus.textContent =
+      "Marker: NICHT ERKANNT";
+
+  }
 
 
   if (scene) {
@@ -831,8 +508,6 @@ function createARScene() {
 
         sceneLoaded = true;
 
-        updateRenderingDiagnostics();
-
       }
 
     );
@@ -841,8 +516,6 @@ function createARScene() {
     if (scene.hasLoaded) {
 
       sceneLoaded = true;
-
-      updateRenderingDiagnostics();
 
     }
 
@@ -873,9 +546,7 @@ async function startMobileAR() {
       document.documentElement;
 
 
-    if (
-      element.requestFullscreen
-    ) {
+    if (element.requestFullscreen) {
 
       await element.requestFullscreen();
 
@@ -928,11 +599,8 @@ async function startMobileAR() {
 
 
   setTimeout(
-
     createARScene,
-
     400
-
   );
 
 }
@@ -964,18 +632,74 @@ function getARVideo() {
 
 
 /* ==================================================
-   Ebenen zuverlässig setzen
+   Ebenen erzwingen
    ================================================== */
 
-function keepVideoVisible() {
+function enforceLayers() {
 
-  if (!arStarted) {
-    return;
-  }
+  const host =
+    document.getElementById(
+      "sceneHost"
+    );
 
+  const scene =
+    document.getElementById(
+      "arScene"
+    );
 
   const video =
     getARVideo();
+
+  const canvas =
+    document.querySelector(
+      "canvas.a-canvas"
+    );
+
+
+  if (host) {
+
+    host.style.setProperty(
+      "position",
+      "fixed",
+      "important"
+    );
+
+    host.style.setProperty(
+      "z-index",
+      "10",
+      "important"
+    );
+
+  }
+
+
+  if (scene) {
+
+    scene.style.setProperty(
+      "position",
+      "fixed",
+      "important"
+    );
+
+    scene.style.setProperty(
+      "z-index",
+      "10",
+      "important"
+    );
+
+    scene.style.setProperty(
+      "visibility",
+      "visible",
+      "important"
+    );
+
+    scene.style.setProperty(
+      "opacity",
+      "1",
+      "important"
+    );
+
+  }
 
 
   if (video) {
@@ -986,20 +710,17 @@ function keepVideoVisible() {
       "important"
     );
 
-
     video.style.setProperty(
       "z-index",
       "1",
       "important"
     );
 
-
     video.style.setProperty(
       "visibility",
       "visible",
       "important"
     );
-
 
     video.style.setProperty(
       "opacity",
@@ -1013,22 +734,14 @@ function keepVideoVisible() {
       ""
     );
 
-
     video.setAttribute(
       "webkit-playsinline",
       ""
     );
 
-
     video.muted = true;
 
   }
-
-
-  const canvas =
-    document.querySelector(
-      "canvas.a-canvas"
-    );
 
 
   if (canvas) {
@@ -1039,13 +752,29 @@ function keepVideoVisible() {
       "important"
     );
 
-
     canvas.style.setProperty(
       "z-index",
-      "2",
+      "11",
       "important"
     );
 
+    canvas.style.setProperty(
+      "visibility",
+      "visible",
+      "important"
+    );
+
+    canvas.style.setProperty(
+      "opacity",
+      "1",
+      "important"
+    );
+
+    canvas.style.setProperty(
+      "display",
+      "block",
+      "important"
+    );
 
     canvas.style.setProperty(
       "background",
@@ -1053,14 +782,87 @@ function keepVideoVisible() {
       "important"
     );
 
+  }
 
-    canvas.style.setProperty(
-      "pointer-events",
-      "none",
-      "important"
+}
+
+
+
+/* ==================================================
+   Tatsächliche Browser-Ebenen anzeigen
+   ================================================== */
+
+function updateLayerDiagnostics() {
+
+  const host =
+    document.getElementById(
+      "sceneHost"
+    );
+
+  const scene =
+    document.getElementById(
+      "arScene"
+    );
+
+  const video =
+    getARVideo();
+
+  const canvas =
+    document.querySelector(
+      "canvas.a-canvas"
+    );
+
+
+  function info(element) {
+
+    if (!element) {
+      return "FEHLT";
+    }
+
+
+    const style =
+      getComputedStyle(
+        element
+      );
+
+
+    return (
+
+      "pos="
+      + style.position
+
+      + ", z="
+      + style.zIndex
+
+      + ", vis="
+      + style.visibility
+
+      + ", op="
+      + style.opacity
+
+      + ", display="
+      + style.display
+
     );
 
   }
+
+
+  layerStatus.textContent =
+
+    "Host [" + info(host) + "]"
+
+    + " | Scene ["
+    + info(scene)
+    + "]"
+
+    + " | Video ["
+    + info(video)
+    + "]"
+
+    + " | Canvas ["
+    + info(canvas)
+    + "]";
 
 }
 
@@ -1313,19 +1115,7 @@ function updateStatus() {
     text;
 
 
-  if (
-    !markerFound
-    &&
-    markerFoundCount === 0
-  ) {
-
-    markerStatus.textContent =
-      "Marker: NICHT ERKANNT";
-
-  }
-
-
-  updateRenderingDiagnostics();
+  updateLayerDiagnostics();
 
 }
 
@@ -1388,13 +1178,9 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
-
   "click",
-
   startMobileAR
-
 );
-
 
 
 window.addEventListener(
@@ -1411,7 +1197,6 @@ window.addEventListener(
   }
 
 );
-
 
 
 window.addEventListener(
@@ -1466,7 +1251,7 @@ setInterval(
     }
 
 
-    keepVideoVisible();
+    enforceLayers();
 
     optimizeMobileCamera();
 
@@ -1474,13 +1259,11 @@ setInterval(
 
   },
 
-  500
+  250
 
 );
 
 </script>
 
-
 </body>
-
 </html>
