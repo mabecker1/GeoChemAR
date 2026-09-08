@@ -172,98 +172,46 @@ AFRAME.registerComponent("methane-model", {
 
   init: function () {
 
-    const THREE =
-      AFRAME.THREE;
+    const THREE = AFRAME.THREE;
 
-
-    const group =
-      new THREE.Group();
-
+    const group = new THREE.Group();
 
 
     /* ==================================================
        Größen
        ================================================== */
 
-    const carbonRadius =
-      0.22;
+    const carbonRadius = 0.22;
 
+    const hydrogenRadius = 0.14;
 
-    const hydrogenRadius =
-      0.14;
+    const hydrogenDistance = 0.72;
 
-
-    const hydrogenDistance =
-      0.72;
-
-
-    const bondRadius =
-      0.040;
-
-
-
-    /* ==================================================
-       Mathematisch exakter Kugel-Stab-Übergang
-
-       Für eine Kugel mit Radius R und einen
-       Zylinder mit Radius r:
-
-       d = sqrt(R² - r²)
-
-       An dieser Stelle besitzt die Kugel
-       genau denselben Querschnittsradius
-       wie der Bindungsstab.
-       ================================================== */
-
-
-    const carbonContactDistance =
-
-      Math.sqrt(
-
-        carbonRadius * carbonRadius
-        -
-        bondRadius * bondRadius
-
-      );
-
-
-    const hydrogenContactDistance =
-
-      Math.sqrt(
-
-        hydrogenRadius * hydrogenRadius
-        -
-        bondRadius * bondRadius
-
-      );
+    const bondRadius = 0.040;
 
 
     /*
-      Position entlang der Bindungsrichtung,
-      an der der Stab am C-Atom beginnt.
+      NEU:
+
+      Die Bindungsstäbe enden exakt an den
+      Kugeloberflächen.
+
+      Keine Überlappung.
     */
 
     const bondStart =
-      carbonContactDistance;
-
-
-    /*
-      Position vom C-Atom aus gesehen,
-      an der der Stab am H-Atom endet.
-    */
+      carbonRadius;
 
     const bondEnd =
-
       hydrogenDistance
       -
-      hydrogenContactDistance;
+      hydrogenRadius;
 
 
 
     /* ==================================================
        Materialien
        ================================================== */
-
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
@@ -277,7 +225,6 @@ AFRAME.registerComponent("methane-model", {
       });
 
 
-
     const hydrogenMaterial =
       new THREE.MeshStandardMaterial({
 
@@ -288,7 +235,6 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
 
       });
-
 
 
     const bondMaterial =
@@ -306,10 +252,7 @@ AFRAME.registerComponent("methane-model", {
 
     /* ==================================================
        Kohlenstoff
-
-       Höhere Segmentzahl für eine rundere Oberfläche.
        ================================================== */
-
 
     const carbonGeometry =
       new THREE.SphereGeometry(
@@ -340,9 +283,8 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Wasserstoff
+       Wasserstoff-Geometrie
        ================================================== */
-
 
     const hydrogenGeometry =
       new THREE.SphereGeometry(
@@ -358,9 +300,8 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Ausgangsrichtung eines Three.js-Zylinders
+       Zylinder-Ausgangsachse
        ================================================== */
-
 
     const yAxis =
       new THREE.Vector3(
@@ -374,16 +315,8 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Exakte Tetraederrichtungen
-
-        ( 1,  1,  1)
-        ( 1, -1, -1)
-        (-1,  1, -1)
-        (-1, -1,  1)
-
-       H-C-H = 109,47°
+       Tetraederrichtungen
        ================================================== */
-
 
     const directions = [
 
@@ -416,168 +349,150 @@ AFRAME.registerComponent("methane-model", {
 
 
     /* ==================================================
-       Vier Wasserstoffatome und Bindungen
+       Vier Wasserstoffatome + Bindungen
        ================================================== */
 
+    directions.forEach(function (direction) {
 
-    directions.forEach(
-
-      function (direction) {
-
-
-        direction.normalize();
+      direction.normalize();
 
 
 
-        /* ----------------------------------------------
-           Wasserstoffatom
-           ---------------------------------------------- */
+      /* ----------------------------------------------
+         Wasserstoffatom
+         ---------------------------------------------- */
+
+      const hydrogen =
+        new THREE.Mesh(
+
+          hydrogenGeometry,
+
+          hydrogenMaterial
+
+        );
 
 
-        const hydrogen =
-          new THREE.Mesh(
+      hydrogen.position.copy(
 
-            hydrogenGeometry,
+        direction
+          .clone()
+          .multiplyScalar(
+            hydrogenDistance
+          )
 
-            hydrogenMaterial
+      );
 
+
+      group.add(
+        hydrogen
+      );
+
+
+
+      /* ----------------------------------------------
+         Anfang und Ende der Bindung
+         ---------------------------------------------- */
+
+      const startPoint =
+
+        direction
+          .clone()
+          .multiplyScalar(
+            bondStart
           );
 
 
-        hydrogen.position.copy(
+      const endPoint =
 
-          direction
-            .clone()
-            .multiplyScalar(
-              hydrogenDistance
-            )
-
-        );
-
-
-        group.add(
-          hydrogen
-        );
-
-
-
-        /* ----------------------------------------------
-           Exakter Anfang und Ende des Stabes
-           ---------------------------------------------- */
-
-
-        const startPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              bondStart
-            );
-
-
-        const endPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              bondEnd
-            );
-
-
-
-        const bondVector =
-
-          endPoint
-            .clone()
-            .sub(
-              startPoint
-            );
-
-
-        const bondLength =
-          bondVector.length();
-
-
-
-        /* ----------------------------------------------
-           Bindungszylinder
-
-           Mehr Segmente für einen glatteren Rand.
-           ---------------------------------------------- */
-
-
-        const bondGeometry =
-
-          new THREE.CylinderGeometry(
-
-            bondRadius,
-
-            bondRadius,
-
-            bondLength,
-
-            32,
-
-            1,
-
-            false
-
+        direction
+          .clone()
+          .multiplyScalar(
+            bondEnd
           );
 
 
 
-        const bond =
-          new THREE.Mesh(
+      const bondVector =
 
-            bondGeometry,
-
-            bondMaterial
-
+        endPoint
+          .clone()
+          .sub(
+            startPoint
           );
 
 
+      const bondLength =
+        bondVector.length();
 
-        /* Mittelpunkt der beiden Kontaktpunkte */
 
 
-        bond.position.copy(
+      /* ----------------------------------------------
+         Bindungszylinder
+         ---------------------------------------------- */
 
-          startPoint
-            .clone()
-            .add(
-              endPoint
-            )
-            .multiplyScalar(
-              0.5
-            )
+      const bondGeometry =
+
+        new THREE.CylinderGeometry(
+
+          bondRadius,
+
+          bondRadius,
+
+          bondLength,
+
+          32,
+
+          1,
+
+          false
+
+        );
+
+
+      const bond =
+        new THREE.Mesh(
+
+          bondGeometry,
+
+          bondMaterial
 
         );
 
 
 
-        /*
-          Zylinder exakt entlang der
-          jeweiligen C-H-Richtung ausrichten.
-        */
+      /* Mittelpunkt */
+
+      bond.position.copy(
+
+        startPoint
+          .clone()
+          .add(
+            endPoint
+          )
+          .multiplyScalar(
+            0.5
+          )
+
+      );
 
 
-        bond.quaternion.setFromUnitVectors(
 
-          yAxis,
+      /* Orientierung */
 
-          direction
+      bond.quaternion.setFromUnitVectors(
 
-        );
+        yAxis,
 
+        direction
 
-        group.add(
-          bond
-        );
+      );
 
 
-      }
+      group.add(
+        bond
+      );
 
-    );
+    });
 
 
 
@@ -588,7 +503,6 @@ AFRAME.registerComponent("methane-model", {
       group
 
     );
-
 
   },
 
@@ -606,7 +520,7 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   Kurze Tracking-Aussetzer überbrücken
+   Tracking-Aussetzer kurz überbrücken
    ========================================================== */
 
 AFRAME.registerComponent("marker-hold", {
@@ -644,10 +558,8 @@ AFRAME.registerComponent("marker-hold", {
         this.markerDetected =
           true;
 
-
         this.lostAt =
           0;
-
 
         this.el.object3D.visible =
           true;
@@ -655,7 +567,6 @@ AFRAME.registerComponent("marker-hold", {
       }
 
     );
-
 
 
     this.el.addEventListener(
@@ -667,10 +578,8 @@ AFRAME.registerComponent("marker-hold", {
         this.markerDetected =
           false;
 
-
         this.lostAt =
           performance.now();
-
 
         this.el.object3D.visible =
           true;
@@ -735,7 +644,6 @@ AFRAME.registerComponent("marker-hold", {
 /* ==========================================================
    Hauptprogramm
    ========================================================== */
-
 
 const sceneHost =
   document.getElementById(
@@ -818,8 +726,10 @@ function isMobileDevice() {
 function isLandscape() {
 
   return (
+
     window.innerWidth >
     window.innerHeight
+
   );
 
 }
@@ -989,9 +899,6 @@ function createARScene() {
 
       </a-marker>
 
-
-
-      <!-- Beleuchtung -->
 
 
       <a-entity
