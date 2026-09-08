@@ -14,7 +14,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Projektionsdiagnose</title>
+  <title>GeoChemAR – Renderer-Diagnose</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -271,9 +271,7 @@ function updateStartScreen() {
 
   if (!isMobileDevice()) {
 
-    startScreen.classList.remove(
-      "visible"
-    );
+    startScreen.classList.remove("visible");
 
     return;
 
@@ -282,24 +280,19 @@ function updateStartScreen() {
 
   if (arStarted) {
 
-    startScreen.classList.remove(
-      "visible"
-    );
+    startScreen.classList.remove("visible");
 
     return;
 
   }
 
 
-  startScreen.classList.add(
-    "visible"
-  );
+  startScreen.classList.add("visible");
 
 
   if (!isLandscape()) {
 
-    rotateIcon.style.display =
-      "block";
+    rotateIcon.style.display = "block";
 
     startTitle.textContent =
       "Bitte Smartphone drehen";
@@ -347,6 +340,9 @@ function updateRenderingDiagnostics() {
   const box =
     document.getElementById("testBox");
 
+  const rendererTest =
+    document.getElementById("rendererTest");
+
 
   if (!scene || !marker || !box) {
 
@@ -358,21 +354,13 @@ function updateRenderingDiagnostics() {
   }
 
 
-  if (
-    !marker.object3D ||
-    !box.object3D
-  ) {
-
-    renderStatus.textContent =
-      "Rendering: object3D fehlt";
-
-    return;
-
-  }
-
-
   const mesh =
     box.getObject3D("mesh");
+
+  const rendererTestMesh =
+    rendererTest
+      ? rendererTest.getObject3D("mesh")
+      : null;
 
 
   renderStatus.textContent =
@@ -383,13 +371,16 @@ function updateRenderingDiagnostics() {
     + " | children: "
     + marker.object3D.children.length
 
-    + " | Box: vorhanden"
+    + " | Box vorhanden"
 
     + " | Box visible: "
     + box.object3D.visible
 
     + " | Mesh: "
     + (mesh ? "JA" : "NEIN")
+
+    + " | Kamera-Test-Mesh: "
+    + (rendererTestMesh ? "JA" : "NEIN")
 
     + " | Box: "
     + box.object3D.position.x.toFixed(2)
@@ -406,13 +397,6 @@ function updateRenderingDiagnostics() {
     + marker.object3D.position.z.toFixed(2);
 
 
-  /*
-    Jetzt die entscheidende Frage:
-
-    Wo landet der Würfel nach Projektion
-    durch die aktive AR-Kamera?
-  */
-
   const camera =
     scene.camera;
 
@@ -420,38 +404,20 @@ function updateRenderingDiagnostics() {
     scene.canvas;
 
 
-  if (!camera) {
+  if (!camera || !canvas) {
 
     projectionStatus.textContent =
-      "Projektion: scene.camera fehlt";
+      "Projektion: Kamera oder Canvas fehlt";
 
     return;
 
   }
 
-
-  if (!canvas) {
-
-    projectionStatus.textContent =
-      "Projektion: Canvas fehlt";
-
-    return;
-
-  }
-
-
-  /*
-    Matrizen sicher aktualisieren
-  */
 
   scene.object3D.updateMatrixWorld(true);
 
   camera.updateMatrixWorld(true);
 
-
-  /*
-    Weltposition des Würfels
-  */
 
   const worldPosition =
     new THREE.Vector3();
@@ -462,23 +428,11 @@ function updateRenderingDiagnostics() {
   );
 
 
-  /*
-    Kopie in Normalized Device Coordinates
-    projizieren.
-
-    Sichtbarer Bereich:
-      X: -1 bis +1
-      Y: -1 bis +1
-      Z: -1 bis +1
-  */
-
   const projected =
     worldPosition.clone();
 
 
-  projected.project(
-    camera
-  );
+  projected.project(camera);
 
 
   const inside =
@@ -503,11 +457,11 @@ function updateRenderingDiagnostics() {
     + worldPosition.z.toFixed(2)
 
     + " | NDC: "
-    + projected.x.toFixed(2)
+    + projected.x.toFixed(4)
     + ", "
-    + projected.y.toFixed(2)
+    + projected.y.toFixed(4)
     + ", "
-    + projected.z.toFixed(2)
+    + projected.z.toFixed(4)
 
     + " | Im Bild: "
     + (inside ? "JA" : "NEIN")
@@ -533,9 +487,7 @@ function updateRenderingDiagnostics() {
 function installMarkerDiagnostics() {
 
   const marker =
-    document.getElementById(
-      "hiroMarker"
-    );
+    document.getElementById("hiroMarker");
 
 
   if (!marker) {
@@ -549,7 +501,6 @@ function installMarkerDiagnostics() {
 
 
   marker.addEventListener(
-
     "markerFound",
 
     function () {
@@ -569,12 +520,10 @@ function installMarkerDiagnostics() {
       updateRenderingDiagnostics();
 
     }
-
   );
 
 
   marker.addEventListener(
-
     "markerLost",
 
     function () {
@@ -592,7 +541,6 @@ function installMarkerDiagnostics() {
       updateRenderingDiagnostics();
 
     }
-
   );
 
 
@@ -658,6 +606,7 @@ function createARScene() {
 
       >
 
+        <!-- Originaler blauer Testwürfel -->
 
         <a-box
 
@@ -679,11 +628,46 @@ function createARScene() {
         >
         </a-box>
 
-
       </a-marker>
 
 
-      <a-entity camera></a-entity>
+
+      <!--
+        UNABHÄNGIGER RENDERER-TEST
+
+        Das pinke Quadrat ist direkt an
+        die Kamera gekoppelt und liegt
+        2 Einheiten vor ihr.
+
+        Es benötigt keine Beleuchtung.
+      -->
+
+      <a-entity
+        id="arCamera"
+        camera
+      >
+
+        <a-plane
+
+          id="rendererTest"
+
+          position="0 0 -2"
+
+          width="0.6"
+          height="0.6"
+
+          material="
+            color: #ff00ff;
+            shader: flat;
+            side: double;
+            opacity: 1;
+            transparent: false;
+          "
+
+        >
+        </a-plane>
+
+      </a-entity>
 
 
     </a-scene>
@@ -700,15 +684,12 @@ function createARScene() {
 
 
   const scene =
-    document.getElementById(
-      "arScene"
-    );
+    document.getElementById("arScene");
 
 
   if (scene) {
 
     scene.addEventListener(
-
       "loaded",
 
       function () {
@@ -718,7 +699,6 @@ function createARScene() {
         updateRenderingDiagnostics();
 
       }
-
     );
 
 
@@ -810,15 +790,8 @@ async function startMobileAR() {
 
 
   setTimeout(
-
-    function () {
-
-      createARScene();
-
-    },
-
+    createARScene,
     400
-
   );
 
 }
@@ -826,7 +799,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   AR-Video
+   Video
    ================================================== */
 
 function getARVideo() {
@@ -1106,30 +1079,17 @@ function updateStatus() {
   let text = "";
 
 
-  if (
-    typeof AFRAME !==
-    "undefined"
-  ) {
-
-    text +=
-      "A-Frame: OK";
-
-  }
-
-  else {
-
-    text +=
-      "A-Frame: FEHLT";
-
-  }
+  text +=
+    typeof AFRAME !== "undefined"
+      ? "A-Frame: OK"
+      : "A-Frame: FEHLT";
 
 
   let arjsOK = false;
 
 
   if (
-    typeof AFRAME !==
-    "undefined"
+    typeof AFRAME !== "undefined"
     &&
     AFRAME.components
     &&
@@ -1156,7 +1116,6 @@ function updateStatus() {
   if (video) {
 
     text +=
-
       " | Video "
       +
       video.videoWidth
@@ -1315,7 +1274,7 @@ else {
 
 
 /* ==================================================
-   Laufende Diagnose
+   Laufende Pflege
    ================================================== */
 
 setInterval(
