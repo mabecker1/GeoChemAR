@@ -7,47 +7,123 @@
     content="width=device-width, initial-scale=1.0, user-scalable=no"
   >
 
-  <title>GeoChemAR – Phase 1</title>
+  <title>GeoChemAR – Diagnose</title>
 
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1.6.0/dist/aframe-master.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.8/aframe/build/aframe-ar.js"></script>
 
   <style>
-    body {
+    html, body {
       margin: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
+    }
+
+    #status {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 99999;
+
+      background: rgba(0,0,0,0.75);
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+
+      padding: 8px;
+      border-radius: 6px;
+
+      pointer-events: none;
     }
   </style>
 </head>
 
 <body>
 
-  <a-scene
-    embedded
-    vr-mode-ui="enabled: false"
-    arjs="
-      sourceType: webcam;
-      sourceWidth: 640;
-      sourceHeight: 480;
-      displayWidth: 640;
-      displayHeight: 480;
-      debugUIEnabled: false;
-    "
-  >
+<div id="status">
+  GeoChemAR startet …
+</div>
 
-    <a-marker preset="hiro">
+<a-scene
+  embedded
+  vr-mode-ui="enabled: false"
+  arjs="
+    sourceType: webcam;
+    debugUIEnabled: false;
+  "
+>
 
-      <a-box
-        position="0 0.5 0"
-        material="color: blue; opacity: 0.7; side: double;"
-      >
-      </a-box>
+  <a-marker preset="hiro">
 
-    </a-marker>
+    <a-box
+      position="0 0.5 0"
+      scale="0.6 0.6 0.6"
+      material="color: #2563eb;"
+    ></a-box>
 
-    <a-entity camera></a-entity>
+  </a-marker>
 
-  </a-scene>
+  <a-entity camera></a-entity>
+
+</a-scene>
+
+
+<script>
+const status = document.getElementById("status");
+
+function showStatus() {
+
+  const video =
+    document.querySelector("video") ||
+    document.getElementById("arjs-video");
+
+  const scene = document.querySelector("a-scene");
+
+  let text = "";
+
+  text += "A-Frame: " +
+    (window.AFRAME ? "OK" : "FEHLT");
+
+  text += " | Szene: " +
+    (scene && scene.hasLoaded ? "geladen" : "lädt");
+
+  if (video) {
+
+    text += " | Video: vorhanden";
+
+    text += " | Größe: " +
+      video.videoWidth +
+      "×" +
+      video.videoHeight;
+
+    text += " | readyState: " +
+      video.readyState;
+
+    text += " | paused: " +
+      video.paused;
+
+  } else {
+
+    text += " | Video: NICHT GEFUNDEN";
+
+  }
+
+  status.textContent = text;
+}
+
+setInterval(showStatus, 500);
+
+window.addEventListener("error", function(event) {
+
+  status.textContent =
+    "JS-FEHLER: " +
+    event.message;
+
+});
+
+</script>
 
 </body>
 </html>
