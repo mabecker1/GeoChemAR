@@ -14,7 +14,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Rendering-Diagnose</title>
+  <title>GeoChemAR – Projektionsdiagnose</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -122,7 +122,7 @@
       background: rgba(0, 0, 0, 0.82);
       color: white;
       font-size: 11px;
-      line-height: 1.45;
+      line-height: 1.5;
       border-radius: 6px;
       pointer-events: none;
     }
@@ -131,7 +131,8 @@
       font-weight: bold;
     }
 
-    #renderStatus {
+    #renderStatus,
+    #projectionStatus {
       margin-top: 3px;
     }
 
@@ -159,6 +160,10 @@
       Rendering: wartet …
     </div>
 
+    <div id="projectionStatus">
+      Projektion: wartet …
+    </div>
+
   </div>
 
 
@@ -166,9 +171,7 @@
 
     <div id="startContent">
 
-      <div id="rotateIcon">
-        ↻
-      </div>
+      <div id="rotateIcon">↻</div>
 
       <div id="startTitle">
         Bitte Smartphone drehen
@@ -201,6 +204,9 @@ const markerStatus =
 const renderStatus =
   document.getElementById("renderStatus");
 
+const projectionStatus =
+  document.getElementById("projectionStatus");
+
 const startScreen =
   document.getElementById("startScreen");
 
@@ -218,20 +224,12 @@ const startButton =
 
 
 let arStarted = false;
-
 let cameraOptimized = false;
-
 let sceneLoaded = false;
-
 let markerFound = false;
-
 let markerFoundCount = 0;
 
 
-
-/* ==================================================
-   Gerät erkennen
-   ================================================== */
 
 function isMobileDevice() {
 
@@ -258,10 +256,6 @@ function isMobileDevice() {
 
 
 
-/* ==================================================
-   Orientierung
-   ================================================== */
-
 function isLandscape() {
 
   return (
@@ -272,10 +266,6 @@ function isLandscape() {
 }
 
 
-
-/* ==================================================
-   Startbildschirm
-   ================================================== */
 
 function updateStartScreen() {
 
@@ -343,138 +333,201 @@ function updateStartScreen() {
 
 
 /* ==================================================
-   Rendering-Diagnose
+   Rendering- und Projektionsdiagnose
    ================================================== */
 
 function updateRenderingDiagnostics() {
 
+  const scene =
+    document.getElementById("arScene");
+
   const marker =
-    document.getElementById(
-      "hiroMarker"
-    );
+    document.getElementById("hiroMarker");
 
   const box =
-    document.getElementById(
-      "testBox"
-    );
+    document.getElementById("testBox");
 
 
-  if (!marker) {
+  if (!scene || !marker || !box) {
 
     renderStatus.textContent =
-      "Rendering: Marker-Element fehlt";
+      "Rendering: Szene/Marker/Box fehlt";
 
     return;
 
   }
 
 
-  if (!marker.object3D) {
+  if (
+    !marker.object3D ||
+    !box.object3D
+  ) {
 
     renderStatus.textContent =
-      "Rendering: marker.object3D fehlt";
+      "Rendering: object3D fehlt";
 
     return;
 
   }
 
 
-  let text = "";
-
-
-  /* Marker-Sichtbarkeit */
-
-  text +=
-    "Marker visible: "
-    +
-    marker.object3D.visible;
-
-
-  /* Anzahl der Three.js-Kinder */
-
-  text +=
-    " | children: "
-    +
-    marker.object3D.children.length;
-
-
-  /* Würfel prüfen */
-
-  if (!box) {
-
-    text +=
-      " | Box: FEHLT";
-
-  }
-
-  else {
-
-    text +=
-      " | Box: vorhanden";
-
-
-    if (box.object3D) {
-
-      text +=
-        " | Box visible: "
-        +
-        box.object3D.visible;
-
-
-      text +=
-        " | Box pos: "
-        +
-        box.object3D.position.x.toFixed(2)
-        +
-        ","
-        +
-        box.object3D.position.y.toFixed(2)
-        +
-        ","
-        +
-        box.object3D.position.z.toFixed(2);
-
-    }
-
-    else {
-
-      text +=
-        " | box.object3D fehlt";
-
-    }
-
-  }
-
-
-  /* Markerposition */
-
-  const p =
-    marker.object3D.position;
-
-
-  text +=
-    " | Marker pos: "
-    +
-    p.x.toFixed(2)
-    +
-    ","
-    +
-    p.y.toFixed(2)
-    +
-    ","
-    +
-    p.z.toFixed(2);
+  const mesh =
+    box.getObject3D("mesh");
 
 
   renderStatus.textContent =
-    text;
+
+    "Marker visible: "
+    + marker.object3D.visible
+
+    + " | children: "
+    + marker.object3D.children.length
+
+    + " | Box: vorhanden"
+
+    + " | Box visible: "
+    + box.object3D.visible
+
+    + " | Mesh: "
+    + (mesh ? "JA" : "NEIN")
+
+    + " | Box: "
+    + box.object3D.position.x.toFixed(2)
+    + ", "
+    + box.object3D.position.y.toFixed(2)
+    + ", "
+    + box.object3D.position.z.toFixed(2)
+
+    + " | Marker: "
+    + marker.object3D.position.x.toFixed(2)
+    + ", "
+    + marker.object3D.position.y.toFixed(2)
+    + ", "
+    + marker.object3D.position.z.toFixed(2);
+
+
+  /*
+    Jetzt die entscheidende Frage:
+
+    Wo landet der Würfel nach Projektion
+    durch die aktive AR-Kamera?
+  */
+
+  const camera =
+    scene.camera;
+
+  const canvas =
+    scene.canvas;
+
+
+  if (!camera) {
+
+    projectionStatus.textContent =
+      "Projektion: scene.camera fehlt";
+
+    return;
+
+  }
+
+
+  if (!canvas) {
+
+    projectionStatus.textContent =
+      "Projektion: Canvas fehlt";
+
+    return;
+
+  }
+
+
+  /*
+    Matrizen sicher aktualisieren
+  */
+
+  scene.object3D.updateMatrixWorld(true);
+
+  camera.updateMatrixWorld(true);
+
+
+  /*
+    Weltposition des Würfels
+  */
+
+  const worldPosition =
+    new THREE.Vector3();
+
+
+  box.object3D.getWorldPosition(
+    worldPosition
+  );
+
+
+  /*
+    Kopie in Normalized Device Coordinates
+    projizieren.
+
+    Sichtbarer Bereich:
+      X: -1 bis +1
+      Y: -1 bis +1
+      Z: -1 bis +1
+  */
+
+  const projected =
+    worldPosition.clone();
+
+
+  projected.project(
+    camera
+  );
+
+
+  const inside =
+
+    projected.x >= -1 &&
+    projected.x <= 1 &&
+
+    projected.y >= -1 &&
+    projected.y <= 1 &&
+
+    projected.z >= -1 &&
+    projected.z <= 1;
+
+
+  projectionStatus.textContent =
+
+    "Welt: "
+    + worldPosition.x.toFixed(2)
+    + ", "
+    + worldPosition.y.toFixed(2)
+    + ", "
+    + worldPosition.z.toFixed(2)
+
+    + " | NDC: "
+    + projected.x.toFixed(2)
+    + ", "
+    + projected.y.toFixed(2)
+    + ", "
+    + projected.z.toFixed(2)
+
+    + " | Im Bild: "
+    + (inside ? "JA" : "NEIN")
+
+    + " | Canvas intern: "
+    + canvas.width
+    + "×"
+    + canvas.height
+
+    + " | Canvas sichtbar: "
+    + canvas.clientWidth
+    + "×"
+    + canvas.clientHeight;
 
 }
 
 
 
 /* ==================================================
-   Marker-Diagnose installieren
+   Marker-Diagnose
    ================================================== */
 
 function installMarkerDiagnostics() {
@@ -551,7 +604,7 @@ function installMarkerDiagnostics() {
 
 
 /* ==================================================
-   AR-Szene erzeugen
+   AR-Szene
    ================================================== */
 
 function createARScene() {
@@ -605,11 +658,6 @@ function createARScene() {
 
       >
 
-
-        <!--
-          EXAKT DER BLAUE WÜRFEL
-          DER FUNKTIONIERENDEN VERSION
-        -->
 
         <a-box
 
@@ -689,7 +737,7 @@ function createARScene() {
 
 
 /* ==================================================
-   AR starten
+   Mobiler Start
    ================================================== */
 
 async function startMobileAR() {
@@ -778,7 +826,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   Video finden
+   AR-Video
    ================================================== */
 
 function getARVideo() {
@@ -800,10 +848,6 @@ function getARVideo() {
 }
 
 
-
-/* ==================================================
-   Video sichtbar halten
-   ================================================== */
 
 function keepVideoVisible() {
 
@@ -1040,7 +1084,7 @@ async function optimizeMobileCamera() {
 
 
 /* ==================================================
-   Hauptdiagnose
+   Status
    ================================================== */
 
 function updateStatus() {
@@ -1154,7 +1198,7 @@ function updateStatus() {
 
 
 /* ==================================================
-   Orientierungswechsel
+   Orientierung
    ================================================== */
 
 function orientationChanged() {
@@ -1210,13 +1254,9 @@ function orientationChanged() {
    ================================================== */
 
 startButton.addEventListener(
-
   "click",
-
   startMobileAR
-
 );
-
 
 
 window.addEventListener(
@@ -1233,7 +1273,6 @@ window.addEventListener(
   }
 
 );
-
 
 
 window.addEventListener(
@@ -1276,7 +1315,7 @@ else {
 
 
 /* ==================================================
-   Laufende Pflege
+   Laufende Diagnose
    ================================================== */
 
 setInterval(
