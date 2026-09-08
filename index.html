@@ -1,38 +1,365 @@
-function resizeScene() {
+<!DOCTYPE html>
+<html lang="de">
 
-  const scene =
-    document.querySelector("a-scene");
+<head>
 
-  if (!scene) {
-    return;
-  }
+  <meta charset="UTF-8">
 
-  if (scene.resize) {
-    scene.resize();
-  }
+  <meta
+    name="viewport"
+    content="width=device-width,
+             initial-scale=1.0,
+             maximum-scale=1.0,
+             user-scalable=no,
+             viewport-fit=cover"
+  >
 
-  if (
-    scene.renderer &&
-    scene.camera
-  ) {
+  <title>GeoChemAR</title>
 
-    const width =
-      window.innerWidth;
+  <!--
+    Beide Bibliotheken liegen lokal
+    in unserem GitHub-Repository.
+  -->
+  <script src="libs/aframe.min.js"></script>
+  <script src="libs/aframe-ar.js"></script>
 
-    const height =
-      window.innerHeight;
 
-    scene.renderer.setSize(
-      width,
-      height,
-      false
+  <style>
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+
+      width: 100%;
+      height: 100%;
+
+      overflow: hidden;
+
+      background: black;
+
+      font-family: Arial, sans-serif;
+    }
+
+
+    /*
+      A-Frame-VR-Schaltfläche ausblenden
+    */
+
+    .a-enter-vr,
+    .a-enter-ar {
+      display: none !important;
+    }
+
+
+    /*
+      Diagnoseanzeige
+
+      Diese entfernen wir später wieder.
+    */
+
+    #status {
+
+      position: fixed;
+
+      top: max(6px, env(safe-area-inset-top));
+      left: max(6px, env(safe-area-inset-left));
+      right: max(6px, env(safe-area-inset-right));
+
+      z-index: 99999;
+
+      box-sizing: border-box;
+
+      padding: 6px 8px;
+
+      background: rgba(0, 0, 0, 0.72);
+
+      color: white;
+
+      font-size: 10px;
+      line-height: 1.25;
+
+      border-radius: 6px;
+
+      pointer-events: none;
+    }
+
+
+    /*
+      Hinweis im Hochformat
+    */
+
+    #rotateMessage {
+
+      display: none;
+
+      position: fixed;
+
+      inset: 0;
+
+      z-index: 100000;
+
+      background: #111;
+
+      color: white;
+
+      align-items: center;
+      justify-content: center;
+
+      text-align: center;
+
+      box-sizing: border-box;
+
+      padding: 30px;
+    }
+
+
+    #rotateMessage strong {
+
+      display: block;
+
+      margin-bottom: 10px;
+
+      font-size: 22px;
+    }
+
+
+    #rotateMessage span {
+
+      font-size: 15px;
+
+      line-height: 1.4;
+    }
+
+
+    /*
+      Im Hochformat wird die AR-Anwendung
+      verdeckt und nur der Drehhinweis gezeigt.
+    */
+
+    @media (orientation: portrait) {
+
+      #rotateMessage {
+        display: flex;
+      }
+
+      #status {
+        display: none;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+
+  <!-- Hochformat-Hinweis -->
+
+  <div id="rotateMessage">
+
+    <div>
+
+      <strong>
+        Bitte Smartphone drehen
+      </strong>
+
+      <span>
+        GeoChemAR wird im Querformat verwendet.
+      </span>
+
+    </div>
+
+  </div>
+
+
+
+  <!-- Diagnose -->
+
+  <div id="status">
+    GeoChemAR startet …
+  </div>
+
+
+
+  <!--
+    AR-Szene
+
+    WICHTIG:
+
+    Die Quellgröße wird passend zur
+    Orientierung gewählt.
+
+    Im Querformat:
+    640 × 480
+
+    Im Hochformat:
+    480 × 640
+
+    Genau dieses Prinzip verwendet auch
+    das offizielle AR.js-Minimalbeispiel.
+  -->
+
+  <a-scene
+
+    embedded
+
+    vr-mode-ui="enabled: false"
+
+    device-orientation-permission-ui="enabled: false"
+
+    arjs="
+      sourceType: webcam;
+      sourceWidth: window.innerWidth > window.innerHeight ? 640 : 480;
+      sourceHeight: window.innerWidth > window.innerHeight ? 480 : 640;
+      debugUIEnabled: false;
+      detectionMode: mono;
+    "
+
+  >
+
+
+    <!-- Hiro-Testmarker -->
+
+    <a-marker
+
+      preset="hiro"
+
+      smooth="true"
+      smoothCount="5"
+      smoothTolerance="0.01"
+      smoothThreshold="2"
+
+    >
+
+
+      <!--
+        Testwürfel
+
+        Alle drei Kanten sind exakt 0.6.
+        Damit erkennen wir Verzerrungen
+        besonders leicht.
+      -->
+
+      <a-box
+
+        position="0 0.3 0"
+
+        width="0.6"
+        height="0.6"
+        depth="0.6"
+
+        material="
+          color: #2563eb;
+          opacity: 0.8;
+          transparent: true;
+          side: double;
+        "
+
+      >
+      </a-box>
+
+
+    </a-marker>
+
+
+
+    <!-- AR-Kamera -->
+
+    <a-entity camera></a-entity>
+
+
+  </a-scene>
+
+
+
+  <script>
+
+    const status =
+      document.getElementById("status");
+
+
+    /*
+      Diese Funktion dient NUR der Diagnose.
+
+      Sie verändert weder Kamera,
+      Videoelement, Renderer noch
+      Projektionsmatrix.
+    */
+
+    function updateStatus() {
+
+      const video =
+        document.getElementById("arjs-video")
+        ||
+        document.querySelector("video");
+
+
+      let text =
+
+        "Display: "
+        +
+        window.innerWidth
+        +
+        "×"
+        +
+        window.innerHeight;
+
+
+      text +=
+
+        window.innerWidth > window.innerHeight
+
+        ? " | Querformat"
+
+        : " | Hochformat";
+
+
+      if (video) {
+
+        text +=
+
+          " | Kamera: "
+          +
+          video.videoWidth
+          +
+          "×"
+          +
+          video.videoHeight;
+
+
+        text +=
+
+          " | ready: "
+          +
+          video.readyState;
+
+      }
+
+      else {
+
+        text +=
+          " | Kamera: nicht gefunden";
+
+      }
+
+
+      status.textContent = text;
+
+    }
+
+
+    setInterval(
+      updateStatus,
+      1000
     );
 
-    scene.camera.aspect =
-      width / height;
+  </script>
 
-    scene.camera.updateProjectionMatrix();
 
-  }
+</body>
 
-}
+</html>
