@@ -131,7 +131,6 @@
   </style>
 </head>
 
-
 <body>
 
   <div id="sceneHost"></div>
@@ -190,6 +189,25 @@ AFRAME.registerComponent("methane-model", {
     const bondRadius = 0.040;
 
 
+    /*
+      Das Loch wird minimal größer als der Stab.
+
+      Dadurch vermeiden wir, dass Kugel und Stab
+      exakt dieselben Pixel/Tiefenwerte beanspruchen.
+    */
+
+    const holeRadius = 0.046;
+
+
+    /*
+      Der Stab reicht ein kleines Stück IN das Loch.
+
+      Dieser Teil ist von außen nicht sichtbar.
+    */
+
+    const bondInsertion = 0.035;
+
+
 
     /* ==================================================
        Materialien
@@ -226,303 +244,9 @@ AFRAME.registerComponent("methane-model", {
 
         roughness: 0.50,
 
-        metalness: 0,
-
-        side: THREE.DoubleSide
+        metalness: 0
 
       });
-
-
-
-    /* ==================================================
-       Kohlenstoff
-       ================================================== */
-
-    const carbonGeometry =
-      new THREE.SphereGeometry(
-
-        carbonRadius,
-
-        48,
-
-        32
-
-      );
-
-
-    const carbon =
-      new THREE.Mesh(
-
-        carbonGeometry,
-
-        carbonMaterial
-
-      );
-
-
-    group.add(
-      carbon
-    );
-
-
-
-    /* ==================================================
-       Wasserstoff
-       ================================================== */
-
-    const hydrogenGeometry =
-      new THREE.SphereGeometry(
-
-        hydrogenRadius,
-
-        40,
-
-        28
-
-      );
-
-
-
-    /* ==================================================
-       NEUE BINDUNGSGEOMETRIE
-
-       Die Enden werden exakt an die beiden
-       Kugeloberflächen angepasst.
-       ================================================== */
-
-    function createBondGeometry(
-
-      startSphereRadius,
-      endSphereRadius,
-      centerDistance,
-      radius,
-      segments = 48
-
-    ) {
-
-      const geometry =
-        new THREE.BufferGeometry();
-
-
-      const positions = [];
-
-      const indices = [];
-
-
-      /*
-        Für einen Punkt des Zylindermantels mit
-
-        x² + z² = radius²
-
-        muss der Abstand vom Kugelmittelpunkt exakt
-        dem Kugelradius entsprechen.
-
-        Daraus folgt entlang der Bindungsachse:
-
-        y = sqrt(
-          Kugelradius² - Bindungsradius²
-        )
-
-        Dadurch liegt der gesamte Rand des
-        Bindungsstabs exakt auf der Kugeloberfläche.
-      */
-
-
-      const startY =
-        Math.sqrt(
-
-          startSphereRadius
-          *
-          startSphereRadius
-
-          -
-
-          radius
-          *
-          radius
-
-        );
-
-
-      const endY =
-        centerDistance
-        -
-        Math.sqrt(
-
-          endSphereRadius
-          *
-          endSphereRadius
-
-          -
-
-          radius
-          *
-          radius
-
-        );
-
-
-
-      /* ==================================================
-         Vertices
-
-         Zwei Ringe:
-         Ring 1 = C-Seite
-         Ring 2 = H-Seite
-         ================================================== */
-
-      for (
-        let i = 0;
-        i <= segments;
-        i++
-      ) {
-
-        const angle =
-
-          (
-            i / segments
-          )
-          *
-          Math.PI
-          *
-          2;
-
-
-        const x =
-          Math.cos(angle)
-          *
-          radius;
-
-
-        const z =
-          Math.sin(angle)
-          *
-          radius;
-
-
-
-        /* C-seitiger Rand */
-
-        positions.push(
-
-          x,
-
-          startY,
-
-          z
-
-        );
-
-
-
-        /* H-seitiger Rand */
-
-        positions.push(
-
-          x,
-
-          endY,
-
-          z
-
-        );
-
-      }
-
-
-
-      /* ==================================================
-         Dreiecke des Mantels
-         ================================================== */
-
-      for (
-        let i = 0;
-        i < segments;
-        i++
-      ) {
-
-        const a =
-          i * 2;
-
-
-        const b =
-          a + 1;
-
-
-        const c =
-          a + 2;
-
-
-        const d =
-          a + 3;
-
-
-
-        indices.push(
-
-          a,
-          b,
-          c
-
-        );
-
-
-        indices.push(
-
-          c,
-          b,
-          d
-
-        );
-
-      }
-
-
-
-      geometry.setAttribute(
-
-        "position",
-
-        new THREE.Float32BufferAttribute(
-
-          positions,
-
-          3
-
-        )
-
-      );
-
-
-      geometry.setIndex(
-        indices
-      );
-
-
-      geometry.computeVertexNormals();
-
-
-      geometry.computeBoundingSphere();
-
-
-      return geometry;
-
-    }
-
-
-
-    /* ==================================================
-       Ausgangsachse der Bindungsgeometrie
-       ================================================== */
-
-    const yAxis =
-      new THREE.Vector3(
-
-        0,
-        1,
-        0
-
-      );
 
 
 
@@ -559,41 +283,379 @@ AFRAME.registerComponent("methane-model", {
     ];
 
 
+    directions.forEach(function (direction) {
+
+      direction.normalize();
+
+    });
+
+
 
     /* ==================================================
-       Bindungsgeometrie kann für alle vier
-       Bindungen wiederverwendet werden.
+       Kugel mit echten Löchern erzeugen
+
+       Wir erzeugen eine normale Kugel als Dreiecksnetz.
+
+       Anschließend entfernen wir jedes Dreieck,
+       dessen Mittelpunkt innerhalb einer der
+       gewünschten kreisförmigen Öffnungen liegt.
        ================================================== */
 
-    const bondGeometry =
-      createBondGeometry(
+    function createSphereWithHoles(
+
+      sphereRadius,
+
+      holeDirections,
+
+      openingRadius,
+
+      widthSegments = 64,
+
+      heightSegments = 48
+
+    ) {
+
+      const sourceGeometry =
+        new THREE.SphereGeometry(
+
+          sphereRadius,
+
+          widthSegments,
+
+          heightSegments
+
+        );
+
+
+      /*
+        Index entfernen, damit jedes Dreieck seine
+        eigenen drei Vertices besitzt.
+      */
+
+      const nonIndexed =
+        sourceGeometry.toNonIndexed();
+
+
+      const sourcePosition =
+        nonIndexed.getAttribute(
+          "position"
+        );
+
+
+      const newPositions = [];
+
+
+      const a =
+        new THREE.Vector3();
+
+
+      const b =
+        new THREE.Vector3();
+
+
+      const c =
+        new THREE.Vector3();
+
+
+      const center =
+        new THREE.Vector3();
+
+
+      const centerDirection =
+        new THREE.Vector3();
+
+
+      /*
+        Ein Punkt auf der Kugel liegt innerhalb
+        einer kreisförmigen Öffnung, wenn sein
+        senkrechter Abstand zur Lochachse kleiner
+        als openingRadius ist UND er auf der
+        entsprechenden Seite der Kugel liegt.
+      */
+
+      function isInsideHole(point) {
+
+        for (
+          let i = 0;
+          i < holeDirections.length;
+          i++
+        ) {
+
+          const direction =
+            holeDirections[i];
+
+
+          /*
+            Projektion des Punktes auf die
+            Achse des Loches.
+          */
+
+          const axialDistance =
+            point.dot(
+              direction
+            );
+
+
+          /*
+            Nur die Kugelseite betrachten,
+            auf der das Loch liegen soll.
+          */
+
+          if (
+            axialDistance <= 0
+          ) {
+
+            continue;
+
+          }
+
+
+          /*
+            Abstand von der Lochachse.
+          */
+
+          const radialVector =
+            point
+              .clone()
+              .sub(
+
+                direction
+                  .clone()
+                  .multiplyScalar(
+                    axialDistance
+                  )
+
+              );
+
+
+          const radialDistance =
+            radialVector.length();
+
+
+          if (
+            radialDistance <
+            openingRadius
+          ) {
+
+            return true;
+
+          }
+
+        }
+
+
+        return false;
+
+      }
+
+
+
+      /*
+        Dreiecke einzeln untersuchen.
+      */
+
+      for (
+        let i = 0;
+        i < sourcePosition.count;
+        i += 3
+      ) {
+
+        a.fromBufferAttribute(
+          sourcePosition,
+          i
+        );
+
+
+        b.fromBufferAttribute(
+          sourcePosition,
+          i + 1
+        );
+
+
+        c.fromBufferAttribute(
+          sourcePosition,
+          i + 2
+        );
+
+
+        /*
+          Mittelpunkt des Dreiecks.
+        */
+
+        center
+          .copy(a)
+          .add(b)
+          .add(c)
+          .multiplyScalar(
+            1 / 3
+          );
+
+
+        /*
+          Wenn der Mittelpunkt im Loch liegt,
+          wird dieses Dreieck NICHT übernommen.
+        */
+
+        if (
+          isInsideHole(
+            center
+          )
+        ) {
+
+          continue;
+
+        }
+
+
+        newPositions.push(
+
+          a.x,
+          a.y,
+          a.z,
+
+          b.x,
+          b.y,
+          b.z,
+
+          c.x,
+          c.y,
+          c.z
+
+        );
+
+      }
+
+
+
+      const geometry =
+        new THREE.BufferGeometry();
+
+
+      geometry.setAttribute(
+
+        "position",
+
+        new THREE.Float32BufferAttribute(
+
+          newPositions,
+
+          3
+
+        )
+
+      );
+
+
+      geometry.computeVertexNormals();
+
+      geometry.computeBoundingSphere();
+
+
+      sourceGeometry.dispose();
+
+      nonIndexed.dispose();
+
+
+      return geometry;
+
+    }
+
+
+
+    /* ==================================================
+       Kohlenstoff
+
+       Vier Löcher – eines für jede C-H-Bindung.
+       ================================================== */
+
+    const carbonGeometry =
+      createSphereWithHoles(
 
         carbonRadius,
 
-        hydrogenRadius,
+        directions,
 
-        hydrogenDistance,
+        holeRadius,
 
-        bondRadius,
+        64,
 
         48
 
       );
 
 
+    const carbon =
+      new THREE.Mesh(
+
+        carbonGeometry,
+
+        carbonMaterial
+
+      );
+
+
+    group.add(
+      carbon
+    );
+
+
 
     /* ==================================================
-       Vier Wasserstoffatome + Bindungen
+       Wasserstoff
+
+       Jeder Wasserstoff bekommt genau ein Loch.
+
+       Die lokale Lochrichtung zeigt zunächst
+       in Richtung -Y.
+
+       Anschließend drehen wir die gesamte Kugel so,
+       dass das Loch zum Kohlenstoff zeigt.
        ================================================== */
+
+    const hydrogenHoleDirection =
+      new THREE.Vector3(
+        0,
+        -1,
+        0
+      );
+
+
+    const hydrogenGeometry =
+      createSphereWithHoles(
+
+        hydrogenRadius,
+
+        [
+          hydrogenHoleDirection
+        ],
+
+        holeRadius,
+
+        56,
+
+        40
+
+      );
+
+
+
+    /* ==================================================
+       Bindungen
+       ================================================== */
+
+    const yAxis =
+      new THREE.Vector3(
+        0,
+        1,
+        0
+      );
+
 
     directions.forEach(function (direction) {
 
-      direction.normalize();
-
-
 
       /* ----------------------------------------------
-         Wasserstoffatom
+         Wasserstoff
          ---------------------------------------------- */
 
       const hydrogen =
@@ -617,6 +679,24 @@ AFRAME.registerComponent("methane-model", {
       );
 
 
+      /*
+        Die lokale +Y-Achse wird auf die
+        Bindungsrichtung gedreht.
+
+        Da das H-Loch lokal in -Y liegt,
+        zeigt es danach automatisch zurück
+        zum Kohlenstoff.
+      */
+
+      hydrogen.quaternion.setFromUnitVectors(
+
+        yAxis,
+
+        direction
+
+      );
+
+
       group.add(
         hydrogen
       );
@@ -624,11 +704,78 @@ AFRAME.registerComponent("methane-model", {
 
 
       /* ----------------------------------------------
-         Bindung
+         Bindungsstab
 
-         Die Geometrie läuft zunächst entlang
-         der lokalen Y-Achse.
+         Er beginnt etwas INNERHALB der C-Kugel
+         und endet etwas INNERHALB der H-Kugel.
+         Die sichtbare Kugeloberfläche wurde dort
+         entfernt.
          ---------------------------------------------- */
+
+      const startDistance =
+
+        carbonRadius
+        -
+        bondInsertion;
+
+
+      const endDistance =
+
+        hydrogenDistance
+        -
+        hydrogenRadius
+        +
+        bondInsertion;
+
+
+      const startPoint =
+
+        direction
+          .clone()
+          .multiplyScalar(
+            startDistance
+          );
+
+
+      const endPoint =
+
+        direction
+          .clone()
+          .multiplyScalar(
+            endDistance
+          );
+
+
+      const bondVector =
+
+        endPoint
+          .clone()
+          .sub(
+            startPoint
+          );
+
+
+      const bondLength =
+        bondVector.length();
+
+
+      const bondGeometry =
+        new THREE.CylinderGeometry(
+
+          bondRadius,
+
+          bondRadius,
+
+          bondLength,
+
+          32,
+
+          1,
+
+          false
+
+        );
+
 
       const bond =
         new THREE.Mesh(
@@ -640,11 +787,19 @@ AFRAME.registerComponent("methane-model", {
         );
 
 
+      bond.position.copy(
 
-      /*
-        Y-Achse auf die jeweilige
-        tetraedrische Richtung drehen.
-      */
+        startPoint
+          .clone()
+          .add(
+            endPoint
+          )
+          .multiplyScalar(
+            0.5
+          )
+
+      );
+
 
       bond.quaternion.setFromUnitVectors(
 
@@ -849,7 +1004,6 @@ const startButton =
 
 let arStarted =
   false;
-
 
 let cameraOptimized =
   false;
