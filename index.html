@@ -13,9 +13,8 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Sichtbarkeitstest</title>
+  <title>GeoChemAR – Kameratest</title>
 
-  <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
@@ -32,43 +31,17 @@
       overflow: hidden;
 
       background: transparent;
+
+      font-family: Arial, sans-serif;
     }
-
-
-    /*
-      A-Frame-Schaltflächen ausblenden
-    */
 
     .a-enter-vr,
     .a-enter-ar {
       display: none !important;
     }
 
-
-    /*
-      Wichtig:
-      Wir ändern hier NICHT die Größe
-      des Videos und NICHT die Größe
-      des Canvas.
-
-      Nur die Ebenen werden festgelegt.
-    */
-
-    #arjs-video {
-      z-index: 1 !important;
-    }
-
-    canvas.a-canvas {
-      z-index: 2 !important;
-      background: transparent !important;
-    }
-
-
-    /*
-      Diagnoseanzeige
-    */
-
     #status {
+
       position: fixed;
 
       top: 6px;
@@ -81,11 +54,10 @@
 
       padding: 7px 9px;
 
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(0, 0, 0, 0.72);
 
       color: white;
 
-      font-family: Arial, sans-serif;
       font-size: 11px;
       line-height: 1.3;
 
@@ -95,6 +67,7 @@
     }
 
   </style>
+
 </head>
 
 
@@ -120,8 +93,10 @@
 
     arjs="
       sourceType: webcam;
-      sourceWidth: window.innerWidth > window.innerHeight ? 640 : 480;
-      sourceHeight: window.innerWidth > window.innerHeight ? 480 : 640;
+      sourceWidth: 640;
+      sourceHeight: 480;
+      displayWidth: 640;
+      displayHeight: 480;
       debugUIEnabled: false;
       detectionMode: mono;
     "
@@ -129,15 +104,18 @@
   >
 
     <a-marker
+
       preset="hiro"
 
       smooth="true"
       smoothCount="5"
       smoothTolerance="0.01"
       smoothThreshold="2"
+
     >
 
       <a-box
+
         position="0 0.3 0"
 
         width="0.6"
@@ -150,6 +128,7 @@
           transparent: true;
           side: double;
         "
+
       >
       </a-box>
 
@@ -158,8 +137,8 @@
 
     <a-entity camera></a-entity>
 
-  </a-scene>
 
+  </a-scene>
 
 
   <script>
@@ -168,47 +147,32 @@
       document.getElementById("status");
 
 
-    /*
-      AR.js erzeugt das Videoelement
-      erst während der Initialisierung.
+    function getVideo() {
 
-      Danach stellt AR.js teilweise
-      eigene Styles ein.
+      return (
+        document.getElementById("arjs-video")
+        ||
+        document.querySelector("video")
+      );
 
-      Wir ändern deshalb NUR:
-      - z-index
-      - Sichtbarkeit
+    }
 
-      Keine Größen!
-      Keine Projektion!
-    */
 
     function keepVideoVisible() {
 
-      const video =
-        document.getElementById("arjs-video")
-        ||
-        document.querySelector("video");
-
+      const video = getVideo();
 
       if (!video) {
         return;
       }
 
 
-      video.style.setProperty(
-        "z-index",
-        "1",
-        "important"
-      );
+      /*
+        Wir verändern NICHT die vom
+        Browser/AR.js berechnete Größe.
 
-
-      video.style.setProperty(
-        "visibility",
-        "visible",
-        "important"
-      );
-
+        Nur Sichtbarkeit und Ebene.
+      */
 
       video.style.setProperty(
         "display",
@@ -216,6 +180,11 @@
         "important"
       );
 
+      video.style.setProperty(
+        "visibility",
+        "visible",
+        "important"
+      );
 
       video.style.setProperty(
         "opacity",
@@ -223,10 +192,12 @@
         "important"
       );
 
+      video.style.setProperty(
+        "z-index",
+        "0",
+        "important"
+      );
 
-      /*
-        Wichtig für Smartphones
-      */
 
       video.setAttribute(
         "playsinline",
@@ -251,7 +222,7 @@
 
         canvas.style.setProperty(
           "z-index",
-          "2",
+          "1",
           "important"
         );
 
@@ -266,26 +237,12 @@
     }
 
 
-
-    /*
-      Diagnose
-    */
-
     function updateStatus() {
 
-      const video =
-        document.getElementById("arjs-video")
-        ||
-        document.querySelector("video");
-
-
-      const canvas =
-        document.querySelector(
-          "canvas.a-canvas"
-        );
-
+      const video = getVideo();
 
       let text =
+
         "Fenster: "
         +
         window.innerWidth
@@ -295,81 +252,140 @@
         window.innerHeight;
 
 
-      if (video) {
-
-        const videoStyle =
-          window.getComputedStyle(video);
-
-
-        text +=
-          " | Video: "
-          +
-          video.videoWidth
-          +
-          "×"
-          +
-          video.videoHeight;
-
-
-        text +=
-          " | ready="
-          +
-          video.readyState;
-
-
-        text +=
-          " | display="
-          +
-          videoStyle.display;
-
-
-        text +=
-          " | visibility="
-          +
-          videoStyle.visibility;
-
-
-        text +=
-          " | opacity="
-          +
-          videoStyle.opacity;
-
-
-        text +=
-          " | z="
-          +
-          videoStyle.zIndex;
-
-      }
-
-      else {
+      if (!video) {
 
         text +=
           " | Video nicht gefunden";
 
+        status.textContent =
+          text;
+
+        return;
       }
 
 
-      if (canvas) {
+      text +=
 
-        const canvasStyle =
-          window.getComputedStyle(canvas);
+        " | Kamera: "
+        +
+        video.videoWidth
+        +
+        "×"
+        +
+        video.videoHeight;
 
+
+      text +=
+
+        " | ready="
+        +
+        video.readyState;
+
+
+      /*
+        Welche Kamera wurde tatsächlich
+        vom Browser ausgewählt?
+      */
+
+      try {
+
+        const stream =
+          video.srcObject;
+
+        if (
+          stream &&
+          stream.getVideoTracks
+        ) {
+
+          const tracks =
+            stream.getVideoTracks();
+
+
+          if (tracks.length > 0) {
+
+            const track =
+              tracks[0];
+
+
+            const settings =
+              track.getSettings
+              ? track.getSettings()
+              : {};
+
+
+            const capabilities =
+              track.getCapabilities
+              ? track.getCapabilities()
+              : {};
+
+
+            if (settings.width) {
+
+              text +=
+
+                " | Stream: "
+                +
+                settings.width
+                +
+                "×"
+                +
+                settings.height;
+
+            }
+
+
+            if (
+              settings.facingMode
+            ) {
+
+              text +=
+
+                " | "
+                +
+                settings.facingMode;
+
+            }
+
+
+            if (
+              settings.zoom !== undefined
+            ) {
+
+              text +=
+
+                " | Zoom="
+                +
+                settings.zoom;
+
+            }
+
+
+            if (
+              capabilities.zoom
+            ) {
+
+              text +=
+
+                " | Zoom möglich "
+                +
+                capabilities.zoom.min
+                +
+                "–"
+                +
+                capabilities.zoom.max;
+
+            }
+
+          }
+
+        }
+
+      }
+
+      catch (error) {
 
         text +=
-          " | Canvas "
-          +
-          canvas.width
-          +
-          "×"
-          +
-          canvas.height;
-
-
-        text +=
-          " | z="
-          +
-          canvasStyle.zIndex;
+          " | Kamera-Diagnose nicht verfügbar";
 
       }
 
@@ -380,48 +396,10 @@
     }
 
 
-
-    /*
-      Mehrfach nach der Initialisierung,
-      weil AR.js das Videoelement erst
-      etwas später erzeugt.
-    */
-
-    setTimeout(
-      keepVideoVisible,
-      100
-    );
-
-    setTimeout(
-      keepVideoVisible,
-      300
-    );
-
-    setTimeout(
-      keepVideoVisible,
-      600
-    );
-
-    setTimeout(
-      keepVideoVisible,
-      1000
-    );
-
-    setTimeout(
-      keepVideoVisible,
-      2000
-    );
-
-
-    /*
-      Danach regelmäßig absichern.
-    */
-
     setInterval(
       function () {
 
         keepVideoVisible();
-
         updateStatus();
 
       },
