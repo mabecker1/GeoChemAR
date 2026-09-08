@@ -13,8 +13,9 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Kamera-Diagnose</title>
+  <title>GeoChemAR</title>
 
+  <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
@@ -29,6 +30,7 @@
       height: 100%;
 
       overflow: hidden;
+
       background: transparent;
 
       font-family: Arial, sans-serif;
@@ -41,13 +43,9 @@
     }
 
 
-    /*
-      Nur Sichtbarkeit korrigieren.
-      Keine Größenänderung!
-    */
-
     #arjs-video {
       z-index: 0 !important;
+
       visibility: visible !important;
       opacity: 1 !important;
     }
@@ -60,7 +58,6 @@
 
 
     #status {
-
       position: fixed;
 
       top: 6px;
@@ -73,16 +70,67 @@
 
       padding: 7px 9px;
 
-      background: rgba(0, 0, 0, 0.78);
+      background: rgba(0, 0, 0, 0.76);
 
       color: white;
 
       font-size: 10px;
-      line-height: 1.35;
+      line-height: 1.3;
 
       border-radius: 6px;
 
       pointer-events: none;
+    }
+
+
+    #rotateMessage {
+      display: none;
+
+      position: fixed;
+      inset: 0;
+
+      z-index: 200000;
+
+      align-items: center;
+      justify-content: center;
+
+      padding: 30px;
+
+      box-sizing: border-box;
+
+      background: #111;
+      color: white;
+
+      text-align: center;
+    }
+
+
+    #rotateMessage strong {
+      display: block;
+
+      margin-bottom: 10px;
+
+      font-size: 22px;
+    }
+
+
+    /*
+      Nur auf kleinen Geräten zeigen wir
+      den Querformat-Hinweis.
+      Am Computer gibt es diesen Hinweis nicht.
+    */
+    @media
+      (orientation: portrait)
+      and (max-width: 900px) {
+
+      #rotateMessage {
+        display: flex;
+      }
+
+      #status {
+        display: none;
+      }
+
     }
 
   </style>
@@ -93,9 +141,24 @@
 <body>
 
 
+  <div id="rotateMessage">
+    <div>
+
+      <strong>
+        Bitte Smartphone drehen
+      </strong>
+
+      GeoChemAR wird auf mobilen Geräten
+      im Querformat verwendet.
+
+    </div>
+  </div>
+
+
   <div id="status">
     GeoChemAR startet …
   </div>
+
 
 
   <a-scene
@@ -115,10 +178,6 @@
       sourceType: webcam;
       sourceWidth: 640;
       sourceHeight: 480;
-      displayWidth: 640;
-      displayHeight: 480;
-      canvasWidth: 640;
-      canvasHeight: 480;
       debugUIEnabled: false;
       detectionMode: mono;
     "
@@ -127,13 +186,16 @@
 
 
     <a-marker
+
       preset="hiro"
 
       smooth="true"
       smoothCount="5"
       smoothTolerance="0.01"
       smoothThreshold="2"
+
     >
+
 
       <a-box
 
@@ -153,6 +215,7 @@
       >
       </a-box>
 
+
     </a-marker>
 
 
@@ -163,335 +226,523 @@
 
 
 
-  <script>
+<script>
 
-    const status =
-      document.getElementById("status");
+const status =
+  document.getElementById("status");
 
 
-    function getVideo() {
+let cameraOptimized = false;
 
-      return (
-        document.getElementById("arjs-video")
-        ||
-        document.querySelector("video")
-      );
+
+/*
+  ----------------------------------------------------
+  Prüfen, ob wir vermutlich auf einem Mobilgerät sind
+  ----------------------------------------------------
+*/
+
+function isMobileDevice() {
+
+  return (
+
+    /Android|iPhone|iPad|iPod/i.test(
+      navigator.userAgent
+    )
+
+    ||
+
+    (
+      navigator.maxTouchPoints > 1
+      &&
+      Math.min(
+        window.screen.width,
+        window.screen.height
+      ) < 1000
+    )
+
+  );
+
+}
+
+
+
+/*
+  ----------------------------------------------------
+  AR.js-Videoelement finden
+  ----------------------------------------------------
+*/
+
+function getARVideo() {
+
+  return (
+
+    document.getElementById("arjs-video")
+    ||
+    document.querySelector("video")
+
+  );
+
+}
+
+
+
+/*
+  ----------------------------------------------------
+  Sichtbarkeit absichern
+
+  WICHTIG:
+  Keine Größenänderung.
+  Keine Änderung der Projektion.
+  ----------------------------------------------------
+*/
+
+function keepVideoVisible() {
+
+  const video = getARVideo();
+
+  if (!video) {
+    return;
+  }
+
+
+  video.style.setProperty(
+    "visibility",
+    "visible",
+    "important"
+  );
+
+  video.style.setProperty(
+    "opacity",
+    "1",
+    "important"
+  );
+
+  video.style.setProperty(
+    "z-index",
+    "0",
+    "important"
+  );
+
+
+  video.setAttribute(
+    "playsinline",
+    ""
+  );
+
+  video.setAttribute(
+    "webkit-playsinline",
+    ""
+  );
+
+
+  video.muted = true;
+
+
+  const canvas =
+    document.querySelector(
+      "canvas.a-canvas"
+    );
+
+
+  if (canvas) {
+
+    canvas.style.setProperty(
+      "z-index",
+      "1",
+      "important"
+    );
+
+    canvas.style.setProperty(
+      "background",
+      "transparent",
+      "important"
+    );
+
+  }
+
+}
+
+
+
+/*
+  ----------------------------------------------------
+  Smartphone-Kamera optimieren
+
+  AR.js hat die Kamera bereits geöffnet.
+
+  Wir greifen anschließend auf den
+  tatsächlich verwendeten Video-Track zu
+  und bitten den Browser um bessere
+  Einstellungen.
+
+  Am Computer lassen wir die Webcam
+  praktisch unangetastet.
+  ----------------------------------------------------
+*/
+
+async function optimizeMobileCamera() {
+
+  if (cameraOptimized) {
+    return;
+  }
+
+
+  if (!isMobileDevice()) {
+
+    cameraOptimized = true;
+
+    console.log(
+      "GeoChemAR: Desktop – Webcam unverändert."
+    );
+
+    return;
+
+  }
+
+
+  const video = getARVideo();
+
+
+  if (!video) {
+    return;
+  }
+
+
+  const stream =
+    video.srcObject;
+
+
+  if (!stream) {
+    return;
+  }
+
+
+  const tracks =
+    stream.getVideoTracks();
+
+
+  if (!tracks.length) {
+    return;
+  }
+
+
+  const track =
+    tracks[0];
+
+
+  /*
+    Erst einmal versuchen wir NICHT,
+    eine andere Kamera zu öffnen.
+
+    Wir verbessern zunächst die aktuelle
+    Rückkamera.
+
+    Dadurch bleibt AR.js vollständig
+    mit seinem vorhandenen Stream verbunden.
+  */
+
+  try {
+
+    await track.applyConstraints({
+
+      width: {
+        ideal: 1280
+      },
+
+      height: {
+        ideal: 720
+      },
+
+      aspectRatio: {
+        ideal: 16 / 9
+      },
+
+      frameRate: {
+        ideal: 30,
+        max: 30
+      }
+
+    });
+
+  }
+
+  catch (error) {
+
+    console.log(
+      "GeoChemAR: Auflösungs-Constraints nicht übernommen:",
+      error
+    );
+
+  }
+
+
+  /*
+    Falls die Kamera Zoom unterstützt,
+    versuchen wir explizit Zoom 1×.
+
+    Nicht alle Browser unterstützen das.
+  */
+
+  try {
+
+    if (
+      track.getCapabilities
+      &&
+      track.applyConstraints
+    ) {
+
+      const capabilities =
+        track.getCapabilities();
+
+
+      if (
+        capabilities.zoom
+        &&
+        capabilities.zoom.min !== undefined
+      ) {
+
+        let desiredZoom = 1;
+
+
+        /*
+          Falls 1 außerhalb des möglichen
+          Bereichs liegt, nehmen wir den
+          kleinsten möglichen Wert.
+        */
+
+        desiredZoom =
+          Math.max(
+            capabilities.zoom.min,
+            Math.min(
+              desiredZoom,
+              capabilities.zoom.max
+            )
+          );
+
+
+        await track.applyConstraints({
+
+          advanced: [
+
+            {
+              zoom: desiredZoom
+            }
+
+          ]
+
+        });
+
+      }
 
     }
 
+  }
+
+  catch (error) {
+
+    console.log(
+      "GeoChemAR: Zoom konnte nicht gesetzt werden:",
+      error
+    );
+
+  }
 
 
-    function keepVisible() {
+  cameraOptimized = true;
 
-      const video = getVideo();
-
-      if (!video) {
-        return;
-      }
-
-
-      video.style.setProperty(
-        "z-index",
-        "0",
-        "important"
-      );
-
-      video.style.setProperty(
-        "visibility",
-        "visible",
-        "important"
-      );
-
-      video.style.setProperty(
-        "opacity",
-        "1",
-        "important"
-      );
-
-
-      const canvas =
-        document.querySelector(
-          "canvas.a-canvas"
-        );
-
-
-      if (canvas) {
-
-        canvas.style.setProperty(
-          "z-index",
-          "1",
-          "important"
-        );
-
-        canvas.style.setProperty(
-          "background",
-          "transparent",
-          "important"
-        );
-
-      }
-
-    }
+}
 
 
 
-    async function readCameraInfo() {
+/*
+  ----------------------------------------------------
+  Diagnose
+  ----------------------------------------------------
+*/
 
-      const video = getVideo();
+function updateStatus() {
 
-
-      if (!video) {
-
-        status.textContent =
-          "Videoelement noch nicht vorhanden …";
-
-        return;
-      }
+  const video = getARVideo();
 
 
-      let text =
+  let text =
 
-        "Fenster "
-        +
-        window.innerWidth
-        +
-        "×"
-        +
-        window.innerHeight;
+    isMobileDevice()
+
+    ? "Mobil"
+
+    : "Computer";
 
 
-      text +=
+  text +=
 
-        " | Video "
-        +
-        video.videoWidth
-        +
-        "×"
-        +
-        video.videoHeight;
-
-
-      text +=
-
-        " | ready="
-        +
-        video.readyState;
+    " | Fenster "
+    +
+    window.innerWidth
+    +
+    "×"
+    +
+    window.innerHeight;
 
 
+  if (!video) {
 
-      const stream =
-        video.srcObject;
+    text +=
+      " | Kamera wird initialisiert …";
 
+    status.textContent =
+      text;
 
-      if (!stream) {
+    return;
 
-        text +=
-          " | Kein Stream";
-
-        status.textContent =
-          text;
-
-        return;
-      }
+  }
 
 
-      const tracks =
-        stream.getVideoTracks();
+  text +=
+
+    " | Video "
+    +
+    video.videoWidth
+    +
+    "×"
+    +
+    video.videoHeight;
 
 
-      if (tracks.length === 0) {
+  const stream =
+    video.srcObject;
 
-        text +=
-          " | Kein Video-Track";
 
-        status.textContent =
-          text;
+  if (
+    stream
+    &&
+    stream.getVideoTracks
+  ) {
 
-        return;
-      }
+    const tracks =
+      stream.getVideoTracks();
 
+
+    if (tracks.length) {
 
       const track =
         tracks[0];
 
 
-      /*
-        Kameraname
-      */
-
-      if (track.label) {
-
-        text +=
-          " | "
-          +
-          track.label;
-
-      }
-
-
-      /*
-        Tatsächliche Einstellungen
-      */
-
       if (track.getSettings) {
 
-        const s =
+        const settings =
           track.getSettings();
 
 
-        if (s.width && s.height) {
+        if (
+          settings.width
+          &&
+          settings.height
+        ) {
 
           text +=
 
             " | Stream "
             +
-            s.width
+            settings.width
             +
             "×"
             +
-            s.height;
+            settings.height;
 
         }
 
 
-        if (s.frameRate) {
+        if (settings.frameRate) {
 
           text +=
 
             " @ "
             +
-            Math.round(s.frameRate)
+            Math.round(
+              settings.frameRate
+            )
             +
             "fps";
 
         }
 
 
-        if (s.facingMode) {
+        if (settings.facingMode) {
 
           text +=
 
             " | "
             +
-            s.facingMode;
+            settings.facingMode;
 
         }
 
 
-        if (s.zoom !== undefined) {
+        if (
+          settings.zoom !== undefined
+        ) {
 
           text +=
 
-            " | Zoom="
+            " | Zoom "
             +
-            s.zoom;
-
-        }
-
-
-        if (s.deviceId) {
-
-          text +=
-
-            " | ID="
-            +
-            s.deviceId.substring(0, 8)
-            +
-            "…";
+            settings.zoom;
 
         }
 
       }
 
 
+      if (track.label) {
 
-      /*
-        Fähigkeiten der Kamera
-      */
+        text +=
 
-      if (track.getCapabilities) {
-
-        const c =
-          track.getCapabilities();
-
-
-        if (
-          c.width &&
-          c.width.min !== undefined
-        ) {
-
-          text +=
-
-            " | Breite "
-            +
-            c.width.min
-            +
-            "–"
-            +
-            c.width.max;
-
-        }
-
-
-        if (
-          c.height &&
-          c.height.min !== undefined
-        ) {
-
-          text +=
-
-            " | Höhe "
-            +
-            c.height.min
-            +
-            "–"
-            +
-            c.height.max;
-
-        }
-
-
-        if (
-          c.zoom &&
-          c.zoom.min !== undefined
-        ) {
-
-          text +=
-
-            " | Zoombereich "
-            +
-            c.zoom.min
-            +
-            "–"
-            +
-            c.zoom.max;
-
-        }
+          " | "
+          +
+          track.label;
 
       }
-
-
-      status.textContent =
-        text;
 
     }
 
+  }
 
 
-    setInterval(
+  status.textContent =
+    text;
 
-      function () {
+}
 
-        keepVisible();
-        readCameraInfo();
 
-      },
 
-      500
+/*
+  ----------------------------------------------------
+  Regelmäßige Initialisierung
 
-    );
+  AR.js erzeugt das Video erst etwas
+  nach dem Laden der Seite.
+  ----------------------------------------------------
+*/
 
-  </script>
+setInterval(
+
+  function () {
+
+    keepVideoVisible();
+
+    optimizeMobileCamera();
+
+    updateStatus();
+
+  },
+
+  500
+
+);
+
+</script>
 
 
 </body>
