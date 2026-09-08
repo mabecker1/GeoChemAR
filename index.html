@@ -190,19 +190,14 @@ AFRAME.registerComponent("methane-model", {
 
 
     /*
-      Das Loch wird minimal größer als der Stab.
-
-      Dadurch vermeiden wir, dass Kugel und Stab
-      exakt dieselben Pixel/Tiefenwerte beanspruchen.
+      Loch jetzt etwas größer.
     */
 
-    const holeRadius = 0.046;
+    const holeRadius = 0.055;
 
 
     /*
-      Der Stab reicht ein kleines Stück IN das Loch.
-
-      Dieser Teil ist von außen nicht sichtbar.
+      Der Stab reicht ein kleines Stück in das Loch.
     */
 
     const bondInsertion = 0.035;
@@ -293,12 +288,6 @@ AFRAME.registerComponent("methane-model", {
 
     /* ==================================================
        Kugel mit echten Löchern erzeugen
-
-       Wir erzeugen eine normale Kugel als Dreiecksnetz.
-
-       Anschließend entfernen wir jedes Dreieck,
-       dessen Mittelpunkt innerhalb einer der
-       gewünschten kreisförmigen Öffnungen liegt.
        ================================================== */
 
     function createSphereWithHoles(
@@ -326,11 +315,6 @@ AFRAME.registerComponent("methane-model", {
 
         );
 
-
-      /*
-        Index entfernen, damit jedes Dreieck seine
-        eigenen drei Vertices besitzt.
-      */
 
       const nonIndexed =
         sourceGeometry.toNonIndexed();
@@ -361,17 +345,6 @@ AFRAME.registerComponent("methane-model", {
         new THREE.Vector3();
 
 
-      const centerDirection =
-        new THREE.Vector3();
-
-
-      /*
-        Ein Punkt auf der Kugel liegt innerhalb
-        einer kreisförmigen Öffnung, wenn sein
-        senkrechter Abstand zur Lochachse kleiner
-        als openingRadius ist UND er auf der
-        entsprechenden Seite der Kugel liegt.
-      */
 
       function isInsideHole(point) {
 
@@ -385,21 +358,11 @@ AFRAME.registerComponent("methane-model", {
             holeDirections[i];
 
 
-          /*
-            Projektion des Punktes auf die
-            Achse des Loches.
-          */
-
           const axialDistance =
             point.dot(
               direction
             );
 
-
-          /*
-            Nur die Kugelseite betrachten,
-            auf der das Loch liegen soll.
-          */
 
           if (
             axialDistance <= 0
@@ -409,10 +372,6 @@ AFRAME.registerComponent("methane-model", {
 
           }
 
-
-          /*
-            Abstand von der Lochachse.
-          */
 
           const radialVector =
             point
@@ -450,10 +409,6 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-      /*
-        Dreiecke einzeln untersuchen.
-      */
-
       for (
         let i = 0;
         i < sourcePosition.count;
@@ -478,10 +433,6 @@ AFRAME.registerComponent("methane-model", {
         );
 
 
-        /*
-          Mittelpunkt des Dreiecks.
-        */
-
         center
           .copy(a)
           .add(b)
@@ -490,11 +441,6 @@ AFRAME.registerComponent("methane-model", {
             1 / 3
           );
 
-
-        /*
-          Wenn der Mittelpunkt im Loch liegt,
-          wird dieses Dreieck NICHT übernommen.
-        */
 
         if (
           isInsideHole(
@@ -564,8 +510,6 @@ AFRAME.registerComponent("methane-model", {
 
     /* ==================================================
        Kohlenstoff
-
-       Vier Löcher – eines für jede C-H-Bindung.
        ================================================== */
 
     const carbonGeometry =
@@ -602,14 +546,6 @@ AFRAME.registerComponent("methane-model", {
 
     /* ==================================================
        Wasserstoff
-
-       Jeder Wasserstoff bekommt genau ein Loch.
-
-       Die lokale Lochrichtung zeigt zunächst
-       in Richtung -Y.
-
-       Anschließend drehen wir die gesamte Kugel so,
-       dass das Loch zum Kohlenstoff zeigt.
        ================================================== */
 
     const hydrogenHoleDirection =
@@ -679,15 +615,6 @@ AFRAME.registerComponent("methane-model", {
       );
 
 
-      /*
-        Die lokale +Y-Achse wird auf die
-        Bindungsrichtung gedreht.
-
-        Da das H-Loch lokal in -Y liegt,
-        zeigt es danach automatisch zurück
-        zum Kohlenstoff.
-      */
-
       hydrogen.quaternion.setFromUnitVectors(
 
         yAxis,
@@ -705,11 +632,6 @@ AFRAME.registerComponent("methane-model", {
 
       /* ----------------------------------------------
          Bindungsstab
-
-         Er beginnt etwas INNERHALB der C-Kugel
-         und endet etwas INNERHALB der H-Kugel.
-         Die sichtbare Kugeloberfläche wurde dort
-         entfernt.
          ---------------------------------------------- */
 
       const startDistance =
