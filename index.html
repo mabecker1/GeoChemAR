@@ -16,10 +16,8 @@
 
   <title>GeoChemAR – Methan</title>
 
-  <!-- Lokale Bibliotheken -->
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
-
 
   <style>
 
@@ -47,7 +45,6 @@
 
     #sceneHost {
       position: fixed;
-
       inset: 0;
 
       width: 100%;
@@ -71,12 +68,11 @@
 
 
     /* =========================================
-       Startbildschirm
+       Startbildschirm Smartphone
        ========================================= */
 
     #startScreen {
       position: fixed;
-
       inset: 0;
 
       z-index: 2147483647;
@@ -118,8 +114,6 @@
 
 
     #startTitle {
-      display: block;
-
       margin-bottom: 12px;
 
       font-size: 23px;
@@ -191,7 +185,6 @@
 </head>
 
 
-
 <body>
 
 
@@ -228,7 +221,6 @@
   </div>
 
 
-
 <script>
 
 
@@ -257,6 +249,8 @@ const startButton =
 let arStarted = false;
 
 let cameraOptimized = false;
+
+let methaneCreated = false;
 
 
 
@@ -290,7 +284,7 @@ function isMobileDevice() {
 
 
 /* ==================================================
-   Querformat erkennen
+   Querformat
    ================================================== */
 
 function isLandscape() {
@@ -374,6 +368,444 @@ function updateStartScreen() {
 
 
 /* ==================================================
+   Bindung zwischen zwei Punkten erzeugen
+   ================================================== */
+
+function createBond(
+  start,
+  end,
+  radius,
+  material
+) {
+
+  const direction =
+    new THREE.Vector3()
+      .subVectors(end, start);
+
+
+  const length =
+    direction.length();
+
+
+  const midpoint =
+    new THREE.Vector3()
+      .addVectors(start, end)
+      .multiplyScalar(0.5);
+
+
+  const geometry =
+    new THREE.CylinderGeometry(
+      radius,
+      radius,
+      length,
+      24
+    );
+
+
+  const bond =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+
+  bond.position.copy(
+    midpoint
+  );
+
+
+  /*
+    CylinderGeometry zeigt standardmäßig
+    entlang der lokalen Y-Achse.
+
+    Diese Y-Achse wird exakt in Richtung
+    der Bindung gedreht.
+  */
+
+  const yAxis =
+    new THREE.Vector3(
+      0,
+      1,
+      0
+    );
+
+
+  const normalizedDirection =
+    direction.clone().normalize();
+
+
+  bond.quaternion.setFromUnitVectors(
+    yAxis,
+    normalizedDirection
+  );
+
+
+  return bond;
+
+}
+
+
+
+/* ==================================================
+   Methan direkt mit THREE.js erzeugen
+   ================================================== */
+
+function createMethaneModel() {
+
+  if (methaneCreated) {
+    return;
+  }
+
+
+  const marker =
+    document.getElementById(
+      "hiroMarker"
+    );
+
+
+  /*
+    Der Marker muss von A-Frame bereits
+    vollständig initialisiert worden sein.
+  */
+
+  if (
+    !marker
+    ||
+    !marker.object3D
+  ) {
+
+    return;
+
+  }
+
+
+  methaneCreated = true;
+
+
+  console.log(
+    "GeoChemAR: Methan wird erzeugt."
+  );
+
+
+
+  /* ==================================================
+     Gesamtgruppe
+     ================================================== */
+
+  const molecule =
+    new THREE.Group();
+
+
+  /*
+    Molekülzentrum über den Marker setzen.
+  */
+
+  molecule.position.set(
+    0,
+    0.65,
+    0
+  );
+
+
+
+  /* ==================================================
+     Materialien
+     ================================================== */
+
+  const carbonMaterial =
+    new THREE.MeshStandardMaterial({
+
+      color: 0x222222,
+
+      roughness: 0.4,
+
+      metalness: 0
+
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshStandardMaterial({
+
+      color: 0xffffff,
+
+      roughness: 0.3,
+
+      metalness: 0
+
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshStandardMaterial({
+
+      color: 0xbdbdbd,
+
+      roughness: 0.45,
+
+      metalness: 0
+
+    });
+
+
+
+  /* ==================================================
+     Größen
+     ================================================== */
+
+  const carbonRadius =
+    0.16;
+
+
+  const hydrogenRadius =
+    0.105;
+
+
+  const bondRadius =
+    0.035;
+
+
+  const carbonHydrogenDistance =
+    0.48;
+
+
+
+  /* ==================================================
+     Kohlenstoff
+     ================================================== */
+
+  const carbon =
+    new THREE.Mesh(
+
+      new THREE.SphereGeometry(
+        carbonRadius,
+        32,
+        24
+      ),
+
+      carbonMaterial
+
+    );
+
+
+  carbon.position.set(
+    0,
+    0,
+    0
+  );
+
+
+  molecule.add(
+    carbon
+  );
+
+
+
+  /* ==================================================
+     Tetraeder
+
+     Vier normierte Raumrichtungen:
+
+      (+1,+1,+1)
+      (+1,-1,-1)
+      (-1,+1,-1)
+      (-1,-1,+1)
+
+     Skalarprodukt je zweier verschiedener
+     Vektoren:
+
+     -1/3
+
+     also:
+
+     arccos(-1/3)
+     = 109,47°
+     ================================================== */
+
+  const directions = [
+
+    new THREE.Vector3(
+      1,
+      1,
+      1
+    ),
+
+    new THREE.Vector3(
+      1,
+      -1,
+      -1
+    ),
+
+    new THREE.Vector3(
+      -1,
+      1,
+      -1
+    ),
+
+    new THREE.Vector3(
+      -1,
+      -1,
+      1
+    )
+
+  ];
+
+
+
+  directions.forEach(
+
+    function (direction) {
+
+
+      direction.normalize();
+
+
+      /* ------------------------------------------
+         Position des Wasserstoffatoms
+         ------------------------------------------ */
+
+      const hydrogenPosition =
+        direction
+          .clone()
+          .multiplyScalar(
+            carbonHydrogenDistance
+          );
+
+
+      const hydrogen =
+        new THREE.Mesh(
+
+          new THREE.SphereGeometry(
+            hydrogenRadius,
+            28,
+            20
+          ),
+
+          hydrogenMaterial
+
+        );
+
+
+      hydrogen.position.copy(
+        hydrogenPosition
+      );
+
+
+      molecule.add(
+        hydrogen
+      );
+
+
+
+      /* ------------------------------------------
+         Sichtbare Bindung
+
+         Sie beginnt etwas innerhalb des
+         C-Atoms und endet etwas innerhalb
+         des H-Atoms.
+         ------------------------------------------ */
+
+      const bondStart =
+        direction
+          .clone()
+          .multiplyScalar(
+            carbonRadius * 0.7
+          );
+
+
+      const bondEnd =
+        direction
+          .clone()
+          .multiplyScalar(
+
+            carbonHydrogenDistance
+            -
+            hydrogenRadius * 0.7
+
+          );
+
+
+      const bond =
+        createBond(
+
+          bondStart,
+
+          bondEnd,
+
+          bondRadius,
+
+          bondMaterial
+
+        );
+
+
+      molecule.add(
+        bond
+      );
+
+    }
+
+  );
+
+
+
+  /* ==================================================
+     Molekül an Hiro-Marker hängen
+     ================================================== */
+
+  marker.object3D.add(
+    molecule
+  );
+
+
+
+  /* ==================================================
+     Blauer Kontrollwürfel
+
+     Absichtlich etwas rechts neben dem Methan.
+
+     Wenn dieser sichtbar ist, wissen wir sicher,
+     dass der Marker und unsere Three.js-Gruppe
+     korrekt funktionieren.
+     ================================================== */
+
+  const testCube =
+    new THREE.Mesh(
+
+      new THREE.BoxGeometry(
+        0.15,
+        0.15,
+        0.15
+      ),
+
+      new THREE.MeshBasicMaterial({
+        color: 0x2563eb
+      })
+
+    );
+
+
+  testCube.position.set(
+    0.55,
+    0.15,
+    0
+  );
+
+
+  marker.object3D.add(
+    testCube
+  );
+
+
+  console.log(
+    "GeoChemAR: Methan und Kontrollwürfel erzeugt."
+  );
+
+}
+
+
+
+/* ==================================================
    AR-Szene erzeugen
    ================================================== */
 
@@ -388,42 +820,21 @@ function createARScene() {
 
 
   /*
-    ==================================================
-    METHAN
+    Die Szene selbst halten wir jetzt bewusst
+    wieder extrem einfach.
 
-    Tetraeder-Richtungen:
+    Der Marker bekommt zunächst KEIN Molekül
+    als HTML-Inhalt.
 
-     ( 1,  1,  1)
-     ( 1, -1, -1)
-     (-1,  1, -1)
-     (-1, -1,  1)
-
-    Normierung mit 1/sqrt(3).
-
-    Abstand C-H hier:
-    0,48 AR-Einheiten.
-
-    Daraus ergibt sich pro Koordinate:
-
-    0,48 / sqrt(3)
-    ≈ 0,2771
-
-    Die vier H-Positionen relativ zum C sind daher:
-
-     (+0.2771, +0.2771, +0.2771)
-     (+0.2771, -0.2771, -0.2771)
-     (-0.2771, +0.2771, -0.2771)
-     (-0.2771, -0.2771, +0.2771)
-
-    Winkel H-C-H:
-    109,47°
-    ==================================================
+    Das Methan wird anschließend direkt an
+    marker.object3D angehängt.
   */
-
 
   sceneHost.innerHTML = `
 
     <a-scene
+
+      id="arScene"
 
       embedded
 
@@ -447,19 +858,20 @@ function createARScene() {
     >
 
 
-      <!-- ===========================================
-           Beleuchtung
-           =========================================== -->
+      <!-- Umgebungslicht -->
 
       <a-entity
 
         light="
           type: ambient;
-          intensity: 1.1;
+          intensity: 1.2;
         "
 
       ></a-entity>
 
+
+
+      <!-- Richtungslicht -->
 
       <a-entity
 
@@ -474,227 +886,27 @@ function createARScene() {
 
 
 
-      <!-- ===========================================
-           Hiro-Marker
-           =========================================== -->
+      <!-- Hiro-Marker -->
 
       <a-marker
+
+        id="hiroMarker"
 
         preset="hiro"
 
         smooth="true"
+
         smoothCount="3"
+
         smoothTolerance="0.01"
+
         smoothThreshold="2"
 
-      >
+      ></a-marker>
 
 
-        <!-- =========================================
-             Gesamtes Methanmolekül
 
-             Mittelpunkt des Moleküls liegt
-             0,65 Einheiten über dem Marker.
-             ========================================= -->
-
-        <a-entity position="0 0.65 0">
-
-
-          <!-- ===============================
-               Kohlenstoff
-               =============================== -->
-
-          <a-sphere
-
-            position="0 0 0"
-
-            radius="0.16"
-
-            material="
-              color: #303030;
-              roughness: 0.45;
-              metalness: 0;
-            "
-
-          ></a-sphere>
-
-
-
-          <!-- ===============================
-               Wasserstoff 1
-               =============================== -->
-
-          <a-sphere
-
-            position="0.2771 0.2771 0.2771"
-
-            radius="0.105"
-
-            material="
-              color: #ffffff;
-              roughness: 0.35;
-            "
-
-          ></a-sphere>
-
-
-
-          <!-- ===============================
-               Wasserstoff 2
-               =============================== -->
-
-          <a-sphere
-
-            position="0.2771 -0.2771 -0.2771"
-
-            radius="0.105"
-
-            material="
-              color: #ffffff;
-              roughness: 0.35;
-            "
-
-          ></a-sphere>
-
-
-
-          <!-- ===============================
-               Wasserstoff 3
-               =============================== -->
-
-          <a-sphere
-
-            position="-0.2771 0.2771 -0.2771"
-
-            radius="0.105"
-
-            material="
-              color: #ffffff;
-              roughness: 0.35;
-            "
-
-          ></a-sphere>
-
-
-
-          <!-- ===============================
-               Wasserstoff 4
-               =============================== -->
-
-          <a-sphere
-
-            position="-0.2771 -0.2771 0.2771"
-
-            radius="0.105"
-
-            material="
-              color: #ffffff;
-              roughness: 0.35;
-            "
-
-          ></a-sphere>
-
-
-
-          <!-- ===============================
-               C-H-Bindung 1
-               =============================== -->
-
-          <a-cylinder
-
-            position="0.1386 0.1386 0.1386"
-
-            radius="0.035"
-
-            height="0.48"
-
-            material="
-              color: #b8b8b8;
-              roughness: 0.5;
-            "
-
-            rotation="54.7356 45 0"
-
-          ></a-cylinder>
-
-
-
-          <!-- ===============================
-               C-H-Bindung 2
-               =============================== -->
-
-          <a-cylinder
-
-            position="0.1386 -0.1386 -0.1386"
-
-            radius="0.035"
-
-            height="0.48"
-
-            material="
-              color: #b8b8b8;
-              roughness: 0.5;
-            "
-
-            rotation="125.2644 -45 0"
-
-          ></a-cylinder>
-
-
-
-          <!-- ===============================
-               C-H-Bindung 3
-               =============================== -->
-
-          <a-cylinder
-
-            position="-0.1386 0.1386 -0.1386"
-
-            radius="0.035"
-
-            height="0.48"
-
-            material="
-              color: #b8b8b8;
-              roughness: 0.5;
-            "
-
-            rotation="54.7356 -45 0"
-
-          ></a-cylinder>
-
-
-
-          <!-- ===============================
-               C-H-Bindung 4
-               =============================== -->
-
-          <a-cylinder
-
-            position="-0.1386 -0.1386 0.1386"
-
-            radius="0.035"
-
-            height="0.48"
-
-            material="
-              color: #b8b8b8;
-              roughness: 0.5;
-            "
-
-            rotation="125.2644 45 0"
-
-          ></a-cylinder>
-
-
-        </a-entity>
-
-
-      </a-marker>
-
-
-
-      <!-- AR-Kamera -->
+      <!-- Kamera -->
 
       <a-entity camera></a-entity>
 
@@ -708,12 +920,52 @@ function createARScene() {
     "visible"
   );
 
+
+  /*
+    Wichtig:
+
+    Wir warten jetzt ausdrücklich darauf,
+    dass A-Frame seine Szene initialisiert hat.
+  */
+
+  const scene =
+    document.getElementById(
+      "arScene"
+    );
+
+
+  if (scene.hasLoaded) {
+
+    createMethaneModel();
+
+  }
+
+  else {
+
+    scene.addEventListener(
+
+      "loaded",
+
+      function () {
+
+        createMethaneModel();
+
+      },
+
+      {
+        once: true
+      }
+
+    );
+
+  }
+
 }
 
 
 
 /* ==================================================
-   Smartphone-AR starten
+   Smartphone starten
    ================================================== */
 
 async function startMobileAR() {
@@ -727,9 +979,10 @@ async function startMobileAR() {
   }
 
 
-  /*
-    Vollbild
-  */
+
+  /* ----------------------------------------------
+     Vollbild
+     ---------------------------------------------- */
 
   try {
 
@@ -764,9 +1017,9 @@ async function startMobileAR() {
 
 
 
-  /*
-    Querformat sperren
-  */
+  /* ----------------------------------------------
+     Querformat sperren
+     ---------------------------------------------- */
 
   try {
 
@@ -796,8 +1049,8 @@ async function startMobileAR() {
 
 
   /*
-    Erst nach endgültigem Bildschirmzustand
-    AR.js initialisieren.
+    Erst nach abgeschlossenem Wechsel in
+    Vollbild / Querformat starten.
   */
 
   setTimeout(
@@ -817,7 +1070,7 @@ async function startMobileAR() {
 
 
 /* ==================================================
-   AR.js-Video finden
+   AR-Video finden
    ================================================== */
 
 function getARVideo() {
@@ -941,7 +1194,7 @@ async function optimizeMobileCamera() {
 
 
   /*
-    Am Computer nichts verändern.
+    Computer-Webcam nicht verändern.
   */
 
   if (!isMobileDevice()) {
@@ -986,9 +1239,9 @@ async function optimizeMobileCamera() {
 
 
 
-  /*
-    Kameraauflösung
-  */
+  /* ----------------------------------------------
+     Kameraauflösung
+     ---------------------------------------------- */
 
   try {
 
@@ -1026,9 +1279,9 @@ async function optimizeMobileCamera() {
 
 
 
-  /*
-    Zoom möglichst 1×
-  */
+  /* ----------------------------------------------
+     Zoom 1×
+     ---------------------------------------------- */
 
   try {
 
@@ -1098,7 +1351,7 @@ async function optimizeMobileCamera() {
 
 
 /* ==================================================
-   Diagnose
+   Status
    ================================================== */
 
 function updateStatus() {
@@ -1146,7 +1399,6 @@ function updateStatus() {
     text +=
       " | Kamera wird initialisiert …";
 
-
     status.textContent =
       text;
 
@@ -1164,6 +1416,21 @@ function updateStatus() {
     "×"
     +
     video.videoHeight;
+
+
+  if (methaneCreated) {
+
+    text +=
+      " | CH₄ erzeugt";
+
+  }
+
+  else {
+
+    text +=
+      " | CH₄ wartet";
+
+  }
 
 
   const stream =
@@ -1251,17 +1518,6 @@ function updateStatus() {
 
       }
 
-
-      if (track.label) {
-
-        text +=
-
-          " | "
-          +
-          track.label;
-
-      }
-
     }
 
   }
@@ -1280,11 +1536,6 @@ function updateStatus() {
 
 function orientationChanged() {
 
-  /*
-    AR noch nicht gestartet:
-    Startbildschirm aktualisieren.
-  */
-
   if (!arStarted) {
 
     setTimeout(
@@ -1297,19 +1548,10 @@ function orientationChanged() {
   }
 
 
-  /*
-    Computer ignorieren.
-  */
-
   if (!isMobileDevice()) {
     return;
   }
 
-
-  /*
-    Smartphone während AR ins Hochformat:
-    Sitzung vollständig zurücksetzen.
-  */
 
   if (!isLandscape()) {
 
@@ -1327,8 +1569,11 @@ function orientationChanged() {
         .getTracks()
         .forEach(
 
-          track =>
-            track.stop()
+          function (track) {
+
+            track.stop();
+
+          }
 
         );
 
@@ -1356,6 +1601,7 @@ startButton.addEventListener(
 );
 
 
+
 window.addEventListener(
 
   "orientationchange",
@@ -1370,6 +1616,7 @@ window.addEventListener(
   }
 
 );
+
 
 
 window.addEventListener(
@@ -1412,7 +1659,7 @@ else {
 
 
 /* ==================================================
-   Laufende Pflege
+   Laufender Betrieb
    ================================================== */
 
 setInterval(
