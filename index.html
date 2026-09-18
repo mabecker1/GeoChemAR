@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Robuste Würfelkalibrierung</title>
+  <title>GeoChemAR – Phase 4d-4</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -72,6 +72,11 @@
       pointer-events: none !important;
     }
 
+
+    /* ======================================================
+       STARTBILDSCHIRM
+       ====================================================== */
+
     #startScreen {
       position: fixed;
       inset: 0;
@@ -98,6 +103,7 @@
     #rotateIcon {
       margin-bottom: 20px;
       font-size: 64px;
+      line-height: 1;
     }
 
     #startTitle {
@@ -110,6 +116,7 @@
       margin-bottom: 22px;
       font-size: 15px;
       line-height: 1.45;
+      opacity: 0.9;
     }
 
     #startButton {
@@ -127,89 +134,30 @@
 
 
     /* ======================================================
-       KALIBRIERUNG
+       DIAGNOSEANZEIGE
        ====================================================== */
 
-    #calibrationPanel {
+    #diagnostic {
       position: fixed;
       top: 10px;
       left: 10px;
       z-index: 1000;
 
-      box-sizing: border-box;
+      padding: 8px 11px;
 
-      width: 370px;
-      max-width: calc(100vw - 20px);
-      max-height: calc(100vh - 20px);
+      border-radius: 8px;
 
-      overflow-y: auto;
-
-      padding: 12px 14px;
-
-      border-radius: 10px;
-
-      background: rgba(0, 0, 0, 0.76);
+      background: rgba(0, 0, 0, 0.68);
       color: white;
 
       font-size: 13px;
       line-height: 1.35;
 
-      pointer-events: auto;
+      pointer-events: none;
     }
 
-    #calibrationTitle {
-      margin-bottom: 7px;
-      font-size: 17px;
+    #activeMarker {
       font-weight: bold;
-    }
-
-    #instruction {
-      margin-bottom: 7px;
-    }
-
-    #visibleMarkers {
-      margin-bottom: 7px;
-      font-family: monospace;
-    }
-
-    #progress {
-      margin-bottom: 7px;
-      font-weight: bold;
-    }
-
-    #quality {
-      margin-bottom: 7px;
-      font-family: monospace;
-    }
-
-    #calibrationButton {
-      display: none;
-
-      margin-top: 7px;
-      margin-bottom: 7px;
-
-      padding: 8px 12px;
-
-      border: 0;
-      border-radius: 7px;
-
-      background: white;
-      color: #111;
-
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    #results {
-      margin-top: 10px;
-      padding-top: 8px;
-
-      border-top: 1px solid rgba(255,255,255,0.3);
-
-      white-space: pre-wrap;
-
-      font-family: monospace;
-      font-size: 11px;
     }
 
   </style>
@@ -220,6 +168,17 @@
 
 
 <div id="sceneHost"></div>
+
+
+<div id="diagnostic">
+
+  Phase 4d-4<br>
+
+  <span id="activeMarker">
+    Marker: –
+  </span>
+
+</div>
 
 
 <div id="startScreen">
@@ -247,45 +206,293 @@
 </div>
 
 
-<div id="calibrationPanel">
-
-  <div id="calibrationTitle">
-    GeoChemAR – Würfelkalibrierung
-  </div>
-
-  <div id="instruction">
-    AR wird vorbereitet …
-  </div>
-
-  <div id="visibleMarkers">
-    Sichtbar: –
-  </div>
-
-  <div id="progress">
-    –
-  </div>
-
-  <div id="quality"></div>
-
-  <button id="calibrationButton">
-    Messung starten
-  </button>
-
-  <div id="results"></div>
-
-</div>
-
-
 
 <script>
 
 
 /* ==========================================================
-   ROBUSTE MEHRWINKEL-KALIBRIERUNG
+   METHAN
    ========================================================== */
 
-AFRAME.registerComponent("cube-calibration", {
+AFRAME.registerComponent("methane-model", {
 
+  init: function () {
+
+    const THREE =
+      AFRAME.THREE;
+
+
+    const group =
+      new THREE.Group();
+
+
+    const carbonRadius =
+      0.22;
+
+    const hydrogenRadius =
+      0.14;
+
+    const hydrogenDistance =
+      0.72;
+
+    const bondRadius =
+      0.040;
+
+
+    const carbonMaterial =
+      new THREE.MeshStandardMaterial({
+
+        color: 0x202020,
+        roughness: 0.55,
+        metalness: 0
+
+      });
+
+
+    const hydrogenMaterial =
+      new THREE.MeshStandardMaterial({
+
+        color: 0xffffff,
+        roughness: 0.45,
+        metalness: 0
+
+      });
+
+
+    const bondMaterial =
+      new THREE.MeshStandardMaterial({
+
+        color: 0xb8bec7,
+        roughness: 0.50,
+        metalness: 0
+
+      });
+
+
+
+    const carbonGeometry =
+      new THREE.SphereGeometry(
+
+        carbonRadius,
+        48,
+        32
+
+      );
+
+
+    const carbon =
+      new THREE.Mesh(
+
+        carbonGeometry,
+        carbonMaterial
+
+      );
+
+
+    group.add(
+      carbon
+    );
+
+
+
+    const hydrogenGeometry =
+      new THREE.SphereGeometry(
+
+        hydrogenRadius,
+        40,
+        28
+
+      );
+
+
+    const directions = [
+
+      new THREE.Vector3(1, 1, 1),
+
+      new THREE.Vector3(1, -1, -1),
+
+      new THREE.Vector3(-1, 1, -1),
+
+      new THREE.Vector3(-1, -1, 1)
+
+    ];
+
+
+    directions.forEach(
+
+      direction =>
+        direction.normalize()
+
+    );
+
+
+    const yAxis =
+      new THREE.Vector3(
+        0,
+        1,
+        0
+      );
+
+
+    directions.forEach(
+      function (direction) {
+
+
+        const hydrogen =
+          new THREE.Mesh(
+
+            hydrogenGeometry,
+            hydrogenMaterial
+
+          );
+
+
+        hydrogen.position.copy(
+
+          direction
+            .clone()
+            .multiplyScalar(
+              hydrogenDistance
+            )
+
+        );
+
+
+        group.add(
+          hydrogen
+        );
+
+
+
+        const startDistance =
+          carbonRadius;
+
+
+        const endDistance =
+          hydrogenDistance
+          -
+          hydrogenRadius;
+
+
+        const startPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              startDistance
+            );
+
+
+        const endPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              endDistance
+            );
+
+
+        const bondVector =
+
+          endPoint
+            .clone()
+            .sub(
+              startPoint
+            );
+
+
+        const bondLength =
+          bondVector.length();
+
+
+        const bondGeometry =
+          new THREE.CylinderGeometry(
+
+            bondRadius,
+            bondRadius,
+            bondLength,
+            32,
+            1,
+            false
+
+          );
+
+
+        const bond =
+          new THREE.Mesh(
+
+            bondGeometry,
+            bondMaterial
+
+          );
+
+
+        bond.position.copy(
+
+          startPoint
+            .clone()
+            .add(
+              endPoint
+            )
+            .multiplyScalar(
+              0.5
+            )
+
+        );
+
+
+        bond.quaternion.setFromUnitVectors(
+
+          yAxis,
+          direction
+
+        );
+
+
+        group.add(
+          bond
+        );
+
+      }
+    );
+
+
+    this.el.setObject3D(
+
+      "methaneMesh",
+      group
+
+    );
+
+  },
+
+
+  remove: function () {
+
+    this.el.removeObject3D(
+      "methaneMesh"
+    );
+
+  }
+
+});
+
+
+
+/* ==========================================================
+   EINZELMARKER-WÜRFELPOSE
+
+   WICHTIG:
+
+   - keine Mehrmarkerfusion
+   - keine Eigenrotation
+   - keine zusätzliche Glättung
+   - ein Marker bestimmt die gesamte Pose
+
+   So testen wir ausschließlich die Geometrie.
+   ========================================================== */
+
+AFRAME.registerComponent("single-marker-cube", {
 
   init: function () {
 
@@ -298,112 +505,305 @@ AFRAME.registerComponent("cube-calibration", {
 
 
     this.visible = [
+
       false,
       false,
       false,
       false,
       false,
       false
-    ];
-
-
-    /*
-     * Verbindungsgraph des Würfels.
-     */
-
-    this.pairs = [
-
-      [1, 0],
-      [1, 2],
-      [1, 4],
-      [2, 3],
-      [1, 5]
 
     ];
 
 
     /*
-     * Fünf unterschiedliche Würfelstellungen
-     * pro Seitenpaar.
+     * Tatsächliche Geometrie:
+     *
+     * Würfelkante       = 45 mm
+     * Markerbreite      = 40 mm
+     *
+     * Abstand Markerzentrum -> Würfelzentrum:
+     *
+     * 22.5 / 40 = 0.5625
      */
 
-    this.measurementsPerPair =
-      5;
+    const h =
+      0.5625;
+
+
+    const SQRT_HALF =
+      Math.SQRT1_2;
+
+
+
+    /* ======================================================
+       MARKERTRANSFORMATIONEN
+
+       Das gemeinsame Würfelkoordinatensystem wird so
+       definiert, dass Marker 1 die Referenzseite ist.
+
+       position:
+       Position des Markerzentrums im Würfelsystem.
+
+       quaternion:
+       Orientierung des Markerkoordinatensystems relativ
+       zum gemeinsamen Würfelsystem.
+       ====================================================== */
+
+    this.faces = [
+
+
+      /* --------------------------------------------------
+         MARKER 0
+
+         Gute Kalibrierung:
+         ungefähr -90° um X.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            0,
+            0,
+            -h
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+
+            -SQRT_HALF,
+            0,
+            0,
+            SQRT_HALF
+
+          )
+      },
+
+
+
+      /* --------------------------------------------------
+         MARKER 1
+
+         Referenzmarker.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            0,
+            h,
+            0
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+            0,
+            0,
+            0,
+            1
+          )
+      },
+
+
+
+      /* --------------------------------------------------
+         MARKER 2
+
+         Die Kalibrierung ergab praktisch exakt eine
+         180°-Rotation um die Diagonale X/Y.
+
+         Dadurch zeigt seine Flächennormale nach +X.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            h,
+            0,
+            0
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+
+            SQRT_HALF,
+            SQRT_HALF,
+            0,
+            0
+
+          )
+      },
+
+
+
+      /* --------------------------------------------------
+         MARKER 3
+
+         Gegenüberliegende Seite von Marker 1.
+
+         Die direkte 2->3-Kalibrierung war stark instabil.
+         Deshalb verwenden wir hier die exakte
+         Würfelgeometrie.
+
+         180° um Z:
+         lokale +Y-Normale -> -Y.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            0,
+            -h,
+            0
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+            0,
+            0,
+            1,
+            0
+          )
+      },
+
+
+
+      /* --------------------------------------------------
+         MARKER 4
+
+         Gegenüber von Marker 2.
+
+         Die Mehrwinkelmessung war stark instabil.
+         Die frühere Messung lag aber ungefähr bei
+         +90° um Z.
+
+         lokale +Y-Normale -> -X.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            -h,
+            0,
+            0
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+
+            0,
+            0,
+            SQRT_HALF,
+            SQRT_HALF
+
+          )
+      },
+
+
+
+      /* --------------------------------------------------
+         MARKER 5
+
+         Gute Kalibrierung:
+         ungefähr +90° um X.
+
+         lokale +Y-Normale -> +Z.
+         -------------------------------------------------- */
+
+      {
+        position:
+          new THREE.Vector3(
+            0,
+            0,
+            h
+          ),
+
+        quaternion:
+          new THREE.Quaternion(
+
+            SQRT_HALF,
+            0,
+            0,
+            SQRT_HALF
+
+          )
+      }
+
+    ];
+
 
 
     /*
-     * Jede Einzelmessung mittelt 30 Frames.
+     * Aus Position + Rotation jeweils die Transformation
+     * Würfel -> Marker erzeugen.
      */
 
-    this.framesPerMeasurement =
-      30;
-
-
-    this.currentPair =
-      0;
-
-
-    this.currentMeasurement =
-      0;
-
-
-    this.collecting =
-      false;
-
-
-    this.frameSamples =
+    this.faceMatrices =
       [];
+
+
+    const unitScale =
+      new THREE.Vector3(
+        1,
+        1,
+        1
+      );
+
+
+    for (
+      let i = 0;
+      i < 6;
+      i++
+    ) {
+
+      this.faceMatrices[i] =
+
+        new THREE.Matrix4()
+          .compose(
+
+            this.faces[i].position,
+
+            this.faces[i].quaternion,
+
+            unitScale
+
+          );
+
+    }
+
 
 
     /*
-     * pairMeasurements[pairIndex]
-     * enthält später die fünf gemittelten
-     * Einzelmessungen.
+     * Arbeitsobjekte.
      */
 
-    this.pairMeasurements =
-      this.pairs.map(
-        () => []
-      );
+    this.inverseFaceMatrix =
+      new THREE.Matrix4();
 
 
-    this.finalResults =
-      [];
+    this.cubeWorldMatrix =
+      new THREE.Matrix4();
 
 
-    this.instruction =
+    this.tempPosition =
+      new THREE.Vector3();
+
+
+    this.tempQuaternion =
+      new THREE.Quaternion();
+
+
+    this.tempScale =
+      new THREE.Vector3();
+
+
+    this.activeMarker =
+      -1;
+
+
+    this.activeMarkerDisplay =
       document.getElementById(
-        "instruction"
-      );
-
-
-    this.visibleMarkers =
-      document.getElementById(
-        "visibleMarkers"
-      );
-
-
-    this.progress =
-      document.getElementById(
-        "progress"
-      );
-
-
-    this.quality =
-      document.getElementById(
-        "quality"
-      );
-
-
-    this.button =
-      document.getElementById(
-        "calibrationButton"
-      );
-
-
-    this.results =
-      document.getElementById(
-        "results"
+        "activeMarker"
       );
 
 
@@ -458,1427 +858,206 @@ AFRAME.registerComponent("cube-calibration", {
     }
 
 
+    this.el.object3D.visible =
+      false;
+
+  },
+
+
+
+  /* ======================================================
+     BESTEN EINZELNEN MARKER AUSWÄHLEN
+
+     Noch KEINE Fusion.
+
+     Falls der bisherige Marker noch sichtbar ist,
+     behalten wir ihn.
+
+     Dadurch wird nicht bei jedem Frame zwischen zwei
+     gleichzeitig sichtbaren Seiten hin- und hergeschaltet.
+     ====================================================== */
+
+  chooseMarker: function () {
+
+    if (
+      this.activeMarker >= 0
+      &&
+      this.visible[
+        this.activeMarker
+      ]
+    ) {
+
+      return this.activeMarker;
+
+    }
+
 
     /*
-     * Messknopf
+     * Für den Test einfache feste Priorität.
      */
 
-    this.button.addEventListener(
+    const priority = [
 
-      "click",
+      1,
+      0,
+      2,
+      4,
+      5,
+      3
 
-      () => {
+    ];
 
-        this.startMeasurement();
+
+    for (
+      const markerIndex of priority
+    ) {
+
+      if (
+        this.visible[
+          markerIndex
+        ]
+      ) {
+
+        return markerIndex;
 
       }
 
-    );
+    }
 
 
-    this.updateUI();
+    return -1;
 
   },
 
 
 
   /* ======================================================
-     MESSUNG STARTEN
+     WÜRFELPOSE AUS EINEM MARKER
      ====================================================== */
 
-  startMeasurement: function () {
+  updateCubeFromMarker: function (
+    markerIndex
+  ) {
 
-    if (
-      this.collecting
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      this.currentPair >=
-      this.pairs.length
-    ) {
-
-      return;
-
-    }
-
-
-    const pair =
-      this.pairs[
-        this.currentPair
+    const marker =
+      this.markers[
+        markerIndex
       ];
 
 
-    if (
-      !this.visible[pair[0]]
-      ||
-      !this.visible[pair[1]]
-    ) {
-
-      return;
-
-    }
-
-
-    this.frameSamples =
-      [];
-
-
-    this.collecting =
-      true;
-
-
-    this.button.style.display =
-      "none";
-
-
-    this.quality.textContent =
-      "";
-
-
-    this.instruction.textContent =
-      "Würfel jetzt ruhig halten …";
-
-  },
-
-
-
-  /* ======================================================
-     RELATIVE MATRIX
-
-     M_rel = inverse(M_A) × M_B
-
-     Damit erhalten wir Marker B im
-     Koordinatensystem von Marker A.
-     ====================================================== */
-
-  getRelativeMatrix: function (
-    a,
-    b
-  ) {
-
-    const THREE =
-      AFRAME.THREE;
-
-
-    const markerA =
-      this.markers[a];
-
-
-    const markerB =
-      this.markers[b];
-
-
-    markerA.object3D.updateMatrixWorld(
+    marker.object3D.updateMatrixWorld(
       true
     );
 
 
-    markerB.object3D.updateMatrixWorld(
-      true
-    );
+    /*
+     * Markerpose in der Welt:
+     *
+     * W_marker
+     *
+     * Bekannte Transformation:
+     *
+     * T_cube_marker
+     *
+     * Gesucht:
+     *
+     * W_cube
+     *
+     * Da:
+     *
+     * W_marker =
+     * W_cube × T_cube_marker
+     *
+     * folgt:
+     *
+     * W_cube =
+     * W_marker × inverse(T_cube_marker)
+     */
+
+    this.inverseFaceMatrix
+      .copy(
+        this.faceMatrices[
+          markerIndex
+        ]
+      )
+      .invert();
 
 
-    const inverseA =
-      new THREE.Matrix4()
-        .copy(
-          markerA.object3D.matrixWorld
-        )
-        .invert();
-
-
-    return new THREE.Matrix4()
+    this.cubeWorldMatrix
       .multiplyMatrices(
 
-        inverseA,
+        marker.object3D.matrixWorld,
 
-        markerB.object3D.matrixWorld
+        this.inverseFaceMatrix
 
       );
 
-  },
 
+    this.cubeWorldMatrix.decompose(
 
+      this.tempPosition,
 
-  /* ======================================================
-     MATRIX ZERLEGEN
-     ====================================================== */
+      this.tempQuaternion,
 
-  decomposeMatrix: function (
-    matrix
-  ) {
-
-    const THREE =
-      AFRAME.THREE;
-
-
-    const position =
-      new THREE.Vector3();
-
-
-    const quaternion =
-      new THREE.Quaternion();
-
-
-    const scale =
-      new THREE.Vector3();
-
-
-    matrix.decompose(
-
-      position,
-      quaternion,
-      scale
+      this.tempScale
 
     );
 
 
-    quaternion.normalize();
-
-
-    return {
-
-      position:
-        position,
-
-      quaternion:
-        quaternion
-
-    };
-
-  },
-
-
-
-  /* ======================================================
-     QUATERNION-WINKELABSTAND IN GRAD
-     ====================================================== */
-
-  quaternionAngle: function (
-    q1,
-    q2
-  ) {
-
-    let dot =
-      Math.abs(
-        q1.dot(q2)
-      );
-
-
-    dot =
-      Math.min(
-        1,
-        Math.max(
-          -1,
-          dot
-        )
-      );
-
-
-    return (
-
-      2
-      *
-      Math.acos(dot)
-      *
-      180
-      /
-      Math.PI
-
-    );
-
-  },
-
-
-
-  /* ======================================================
-     QUATERNIONEN MITTELN
-     ====================================================== */
-
-  averageQuaternions: function (
-    quaternions
-  ) {
-
-    const THREE =
-      AFRAME.THREE;
-
-
-    if (
-      quaternions.length === 1
-    ) {
-
-      return quaternions[0].clone();
-
-    }
-
-
     /*
-     * Erst alle Quaternionen auf dieselbe
-     * Hemisphäre bringen.
-     */
-
-    const reference =
-      quaternions[0];
-
-
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    let w = 0;
-
-
-    for (
-      const original of quaternions
-    ) {
-
-      const q =
-        original.clone();
-
-
-      if (
-        reference.dot(q) < 0
-      ) {
-
-        q.set(
-          -q.x,
-          -q.y,
-          -q.z,
-          -q.w
-        );
-
-      }
-
-
-      x += q.x;
-      y += q.y;
-      z += q.z;
-      w += q.w;
-
-    }
-
-
-    return new THREE.Quaternion(
-
-      x,
-      y,
-      z,
-      w
-
-    ).normalize();
-
-  },
-
-
-
-  /* ======================================================
-     MITTELWERT EINER FRAME-SERIE
-     ====================================================== */
-
-  averageFrameSamples: function (
-    samples
-  ) {
-
-    const THREE =
-      AFRAME.THREE;
-
-
-    const positions =
-      [];
-
-
-    const quaternions =
-      [];
-
-
-    for (
-      const matrix of samples
-    ) {
-
-      const pose =
-        this.decomposeMatrix(
-          matrix
-        );
-
-
-      positions.push(
-        pose.position
-      );
-
-
-      quaternions.push(
-        pose.quaternion
-      );
-
-    }
-
-
-    const avgPosition =
-      new THREE.Vector3();
-
-
-    for (
-      const p of positions
-    ) {
-
-      avgPosition.add(
-        p
-      );
-
-    }
-
-
-    avgPosition.multiplyScalar(
-
-      1 /
-      positions.length
-
-    );
-
-
-    const avgQuaternion =
-      this.averageQuaternions(
-        quaternions
-      );
-
-
-    /*
-     * Streuung innerhalb dieser 30 Frames.
-     */
-
-    let positionVariance =
-      0;
-
-
-    let rotationVariance =
-      0;
-
-
-    for (
-      let i = 0;
-      i < positions.length;
-      i++
-    ) {
-
-      positionVariance +=
-
-        positions[i]
-          .distanceToSquared(
-            avgPosition
-          );
-
-
-      const angle =
-
-        this.quaternionAngle(
-
-          quaternions[i],
-
-          avgQuaternion
-
-        );
-
-
-      rotationVariance +=
-
-        angle
-        *
-        angle;
-
-    }
-
-
-    const positionStd =
-
-      Math.sqrt(
-
-        positionVariance
-        /
-        positions.length
-
-      );
-
-
-    const rotationStd =
-
-      Math.sqrt(
-
-        rotationVariance
-        /
-        positions.length
-
-      );
-
-
-    return {
-
-      position:
-        avgPosition,
-
-      quaternion:
-        avgQuaternion,
-
-      positionStd:
-        positionStd,
-
-      rotationStd:
-        rotationStd
-
-    };
-
-  },
-
-
-
-  /* ======================================================
-     MEDIAN
-     ====================================================== */
-
-  median: function (
-    values
-  ) {
-
-    const sorted =
-      [...values]
-        .sort(
-          (a, b) => a - b
-        );
-
-
-    const middle =
-      Math.floor(
-        sorted.length / 2
-      );
-
-
-    if (
-      sorted.length % 2 === 0
-    ) {
-
-      return (
-
-        sorted[middle - 1]
-        +
-        sorted[middle]
-
-      ) / 2;
-
-    }
-
-
-    return sorted[middle];
-
-  },
-
-
-
-  /* ======================================================
-     ROBUSTES ERGEBNIS AUS DEN FÜNF BLICKWINKELN
-     ====================================================== */
-
-  calculateRobustResult: function (
-    measurements
-  ) {
-
-    const THREE =
-      AFRAME.THREE;
-
-
-    /*
-     * Zunächst Medianposition bestimmen.
-     */
-
-    const medianPosition =
-      new THREE.Vector3(
-
-        this.median(
-          measurements.map(
-            m => m.position.x
-          )
-        ),
-
-        this.median(
-          measurements.map(
-            m => m.position.y
-          )
-        ),
-
-        this.median(
-          measurements.map(
-            m => m.position.z
-          )
-        )
-
-      );
-
-
-    /*
-     * Vorläufige mittlere Rotation.
-     */
-
-    const initialQuaternion =
-
-      this.averageQuaternions(
-
-        measurements.map(
-          m => m.quaternion
-        )
-
-      );
-
-
-
-    /*
-     * Für jede der fünf Messungen bestimmen wir
-     * den Positions- und Rotationsabstand.
-     */
-
-    const scored =
-      measurements.map(
-
-        (measurement, index) => {
-
-          return {
-
-            index: index,
-
-            measurement:
-              measurement,
-
-            positionError:
-
-              measurement.position
-                .distanceTo(
-                  medianPosition
-                ),
-
-            rotationError:
-
-              this.quaternionAngle(
-
-                measurement.quaternion,
-
-                initialQuaternion
-
-              )
-
-          };
-
-        }
-
-      );
-
-
-
-    /*
-     * Robuste Schwellen über den Median der Fehler.
-     */
-
-    const medianPositionError =
-      this.median(
-        scored.map(
-          s => s.positionError
-        )
-      );
-
-
-    const medianRotationError =
-      this.median(
-        scored.map(
-          s => s.rotationError
-        )
-      );
-
-
-    /*
-     * Mindestens kleine Toleranzen zulassen.
+     * Würfelroot direkt setzen.
      *
-     * Gleichzeitig darf ein stark abweichender
-     * Blickwinkel verworfen werden.
+     * Keine zusätzliche Glättung.
      */
 
-    const positionThreshold =
-      Math.max(
-
-        0.08,
-
-        medianPositionError
-        *
-        2.5
-
-      );
-
-
-    const rotationThreshold =
-      Math.max(
-
-        5,
-
-        medianRotationError
-        *
-        2.5
-
-      );
-
-
-    let accepted =
-      scored.filter(
-
-        s =>
-
-          s.positionError
-            <= positionThreshold
-
-          &&
-
-          s.rotationError
-            <= rotationThreshold
-
-      );
-
-
-
-    /*
-     * Falls durch extrem unruhige Daten weniger als
-     * drei übrig bleiben, verwenden wir die drei
-     * insgesamt ähnlichsten Messungen.
-     */
-
-    if (
-      accepted.length < 3
-    ) {
-
-      const ranked =
-        [...scored]
-          .sort(
-
-            (a, b) => {
-
-              const scoreA =
-
-                a.positionError
-                /
-                Math.max(
-                  positionThreshold,
-                  0.001
-                )
-
-                +
-
-                a.rotationError
-                /
-                Math.max(
-                  rotationThreshold,
-                  0.001
-                );
-
-
-              const scoreB =
-
-                b.positionError
-                /
-                Math.max(
-                  positionThreshold,
-                  0.001
-                )
-
-                +
-
-                b.rotationError
-                /
-                Math.max(
-                  rotationThreshold,
-                  0.001
-                );
-
-
-              return scoreA - scoreB;
-
-            }
-
-          );
-
-
-      accepted =
-        ranked.slice(
-          0,
-          Math.min(
-            3,
-            ranked.length
-          )
-        );
-
-    }
-
-
-
-    const acceptedMeasurements =
-
-      accepted.map(
-        s => s.measurement
-      );
-
-
-
-    /*
-     * Endposition
-     */
-
-    const finalPosition =
-      new THREE.Vector3();
-
-
-    for (
-      const m of acceptedMeasurements
-    ) {
-
-      finalPosition.add(
-        m.position
-      );
-
-    }
-
-
-    finalPosition.multiplyScalar(
-
-      1 /
-      acceptedMeasurements.length
-
+    this.el.object3D.position.copy(
+      this.tempPosition
     );
 
 
-
-    /*
-     * Endrotation
-     */
-
-    const finalQuaternion =
-
-      this.averageQuaternions(
-
-        acceptedMeasurements.map(
-          m => m.quaternion
-        )
-
-      );
-
-
-
-    /*
-     * Streuung der Blickwinkel um das Endergebnis.
-     */
-
-    let positionVariance =
-      0;
-
-
-    let rotationVariance =
-      0;
-
-
-    for (
-      const m of acceptedMeasurements
-    ) {
-
-      const pError =
-
-        m.position.distanceTo(
-          finalPosition
-        );
-
-
-      positionVariance +=
-
-        pError
-        *
-        pError;
-
-
-      const rError =
-
-        this.quaternionAngle(
-
-          m.quaternion,
-
-          finalQuaternion
-
-        );
-
-
-      rotationVariance +=
-
-        rError
-        *
-        rError;
-
-    }
-
-
-    const positionStd =
-
-      Math.sqrt(
-
-        positionVariance
-        /
-        acceptedMeasurements.length
-
-      );
-
-
-    const rotationStd =
-
-      Math.sqrt(
-
-        rotationVariance
-        /
-        acceptedMeasurements.length
-
-      );
-
-
-    return {
-
-      position:
-        finalPosition,
-
-      quaternion:
-        finalQuaternion,
-
-      positionStd:
-        positionStd,
-
-      rotationStd:
-        rotationStd,
-
-      accepted:
-        acceptedMeasurements.length,
-
-      total:
-        measurements.length
-
-    };
-
-  },
-
-
-
-  /* ======================================================
-     QUALITÄTSTEXT
-     ====================================================== */
-
-  qualityText: function (
-    result
-  ) {
-
-    let label;
-
-
-    if (
-      result.positionStd < 0.08
-      &&
-      result.rotationStd < 4
-    ) {
-
-      label =
-        "gut";
-
-    }
-
-    else if (
-      result.positionStd < 0.18
-      &&
-      result.rotationStd < 10
-    ) {
-
-      label =
-        "mittel";
-
-    }
-
-    else {
-
-      label =
-        "stark schwankend";
-
-    }
-
-
-    return (
-
-      label
-      +
-      " | Positionsstreuung "
-      +
-      result.positionStd.toFixed(3)
-      +
-      " | Rotationsstreuung "
-      +
-      result.rotationStd.toFixed(1)
-      +
-      "°"
-
+    this.el.object3D.quaternion.copy(
+      this.tempQuaternion
     );
 
-  },
 
-
-
-  /* ======================================================
-     UI
-     ====================================================== */
-
-  updateUI: function () {
-
-    const visibleIDs =
-      [];
-
-
-    for (
-      let i = 0;
-      i < 6;
-      i++
-    ) {
-
-      if (
-        this.visible[i]
-      ) {
-
-        visibleIDs.push(
-          i
-        );
-
-      }
-
-    }
-
-
-    this.visibleMarkers.textContent =
-
-      "Sichtbar: "
-      +
-      (
-        visibleIDs.length
-          ?
-          visibleIDs.join(", ")
-          :
-          "–"
-      );
-
-
-    if (
-      this.currentPair >=
-      this.pairs.length
-    ) {
-
-      this.progress.textContent =
-        "Kalibrierung abgeschlossen";
-
-
-      this.button.style.display =
-        "none";
-
-
-      return;
-
-    }
-
-
-    const pair =
-      this.pairs[
-        this.currentPair
-      ];
-
-
-    this.progress.textContent =
-
-      "Paar "
-      +
-      (this.currentPair + 1)
-      +
-      " / "
-      +
-      this.pairs.length
-      +
-      "   |   Blickwinkel "
-      +
-      (this.currentMeasurement + 1)
-      +
-      " / "
-      +
-      this.measurementsPerPair;
-
-
-    if (
-      this.collecting
-    ) {
-
-      return;
-
-    }
-
-
-    const bothVisible =
-
-      this.visible[pair[0]]
-      &&
-      this.visible[pair[1]];
-
-
-    if (
-      bothVisible
-    ) {
-
-      this.button.style.display =
-        "block";
-
-
-      this.button.textContent =
-
-        "Messung "
-        +
-        (this.currentMeasurement + 1)
-        +
-        " starten";
-
-    }
-
-    else {
-
-      this.button.style.display =
-        "none";
-
-    }
-
-  },
-
-
-
-  /* ======================================================
-     NÄCHSTE ANWEISUNG
-     ====================================================== */
-
-  showInstruction: function () {
-
-    if (
-      this.currentPair >=
-      this.pairs.length
-    ) {
-
-      this.instruction.textContent =
-
-        "Fertig. Bitte die Endergebnisse unten an ChatGPT schicken.";
-
-
-      return;
-
-    }
-
-
-    const pair =
-      this.pairs[
-        this.currentPair
-      ];
-
-
-    if (
-      this.currentMeasurement === 0
-    ) {
-
-      this.instruction.textContent =
-
-        "Marker "
-        +
-        pair[0]
-        +
-        " und "
-        +
-        pair[1]
-        +
-        " gleichzeitig zeigen. Für jede Messung den Blickwinkel etwas verändern.";
-
-    }
-
-    else {
-
-      this.instruction.textContent =
-
-        "Jetzt den Würfel etwas anders zur Kamera halten. Beide Marker "
-        +
-        pair[0]
-        +
-        " und "
-        +
-        pair[1]
-        +
-        " müssen gut sichtbar sein.";
-
-    }
-
-  },
-
-
-
-  /* ======================================================
-     PAAR ABSCHLIESSEN
-     ====================================================== */
-
-  finishPair: function () {
-
-    const pair =
-      this.pairs[
-        this.currentPair
-      ];
-
-
-    const measurements =
-      this.pairMeasurements[
-        this.currentPair
-      ];
-
-
-    const robust =
-      this.calculateRobustResult(
-        measurements
-      );
-
-
-    this.finalResults.push({
-
-      a:
-        pair[0],
-
-      b:
-        pair[1],
-
-      position:
-        robust.position.clone(),
-
-      quaternion:
-        robust.quaternion.clone(),
-
-      positionStd:
-        robust.positionStd,
-
-      rotationStd:
-        robust.rotationStd,
-
-      accepted:
-        robust.accepted,
-
-      total:
-        robust.total
-
-    });
-
-
-
-    this.quality.textContent =
-
-      "Letztes Paar: "
-      +
-      this.qualityText(
-        robust
-      );
-
-
-    this.currentPair++;
-
-
-    this.currentMeasurement =
-      0;
-
-
-    if (
-      this.currentPair >=
-      this.pairs.length
-    ) {
-
-      this.showFinalResults();
-
-      return;
-
-    }
-
-
-    this.showInstruction();
-
-  },
-
-
-
-  /* ======================================================
-     ENDERGEBNIS
-     ====================================================== */
-
-  showFinalResults: function () {
-
-    let text =
-
-      "=== ENDERGEBNIS ===\n";
-
-
-    for (
-      const r of this.finalResults
-    ) {
-
-      text +=
-
-        "\n"
-        +
-        r.a
-        +
-        " -> "
-        +
-        r.b
-        +
-        "\n";
-
-
-      text +=
-
-        "P: "
-        +
-        r.position.x.toFixed(4)
-        +
-        ", "
-        +
-        r.position.y.toFixed(4)
-        +
-        ", "
-        +
-        r.position.z.toFixed(4)
-        +
-        "\n";
-
-
-      text +=
-
-        "Q: "
-        +
-        r.quaternion.x.toFixed(5)
-        +
-        ", "
-        +
-        r.quaternion.y.toFixed(5)
-        +
-        ", "
-        +
-        r.quaternion.z.toFixed(5)
-        +
-        ", "
-        +
-        r.quaternion.w.toFixed(5)
-        +
-        "\n";
-
-
-      text +=
-
-        "Streuung Position: "
-        +
-        r.positionStd.toFixed(4)
-        +
-        "\n";
-
-
-      text +=
-
-        "Streuung Rotation: "
-        +
-        r.rotationStd.toFixed(2)
-        +
-        "°\n";
-
-
-      text +=
-
-        "Verwendet: "
-        +
-        r.accepted
-        +
-        " / "
-        +
-        r.total
-        +
-        "\n";
-
-    }
-
-
-    this.results.textContent =
-      text;
-
-
-    this.instruction.textContent =
-
-      "Kalibrierung abgeschlossen. Bitte diese Endergebnisse an ChatGPT schicken.";
-
-
-    this.progress.textContent =
-      "5 / 5 Seitenpaare abgeschlossen";
-
-
-    this.button.style.display =
-      "none";
-
-
-    console.log(
-      text
+    this.el.object3D.scale.set(
+      1,
+      1,
+      1
     );
 
+
+    this.el.object3D.visible =
+      true;
+
   },
 
 
 
   /* ======================================================
-     TICK
+     FRAME
      ====================================================== */
 
   tick: function () {
 
-    this.updateUI();
+    const chosen =
+      this.chooseMarker();
 
 
     if (
-      !this.collecting
+      chosen < 0
     ) {
 
-      return;
-
-    }
-
-
-    const pair =
-      this.pairs[
-        this.currentPair
-      ];
+      this.activeMarker =
+        -1;
 
 
-    /*
-     * Geht ein Marker während der Aufnahme verloren,
-     * wird diese Einzelmessung verworfen.
-     */
-
-    if (
-      !this.visible[pair[0]]
-      ||
-      !this.visible[pair[1]]
-    ) {
-
-      this.collecting =
+      this.el.object3D.visible =
         false;
 
 
-      this.frameSamples =
-        [];
-
-
-      this.instruction.textContent =
-
-        "Messung abgebrochen. Beide Marker müssen während der gesamten Messung sichtbar bleiben.";
+      this.activeMarkerDisplay.textContent =
+        "Marker: –";
 
 
       return;
@@ -1887,104 +1066,46 @@ AFRAME.registerComponent("cube-calibration", {
 
 
 
-    const relativeMatrix =
-      this.getRelativeMatrix(
+    /*
+     * Markerwechsel anzeigen.
+     */
 
-        pair[0],
+    if (
+      chosen !==
+      this.activeMarker
+    ) {
 
-        pair[1]
+      console.log(
+
+        "GeoChemAR: aktiver Marker",
+
+        this.activeMarker,
+
+        "->",
+
+        chosen
 
       );
 
 
-    this.frameSamples.push(
-      relativeMatrix
+      this.activeMarker =
+        chosen;
+
+    }
+
+
+
+    this.activeMarkerDisplay.textContent =
+
+      "Marker: "
+      +
+      this.activeMarker;
+
+
+
+    this.updateCubeFromMarker(
+      this.activeMarker
     );
-
-
-    this.instruction.textContent =
-
-      "Würfel ruhig halten – "
-      +
-      this.frameSamples.length
-      +
-      " / "
-      +
-      this.framesPerMeasurement;
-
-
-    if (
-      this.frameSamples.length <
-      this.framesPerMeasurement
-    ) {
-
-      return;
-
-    }
-
-
-
-    /*
-     * Einzelmessung fertig.
-     */
-
-    const measurement =
-
-      this.averageFrameSamples(
-        this.frameSamples
-      );
-
-
-    this.pairMeasurements[
-      this.currentPair
-    ].push(
-      measurement
-    );
-
-
-    this.collecting =
-      false;
-
-
-    this.frameSamples =
-      [];
-
-
-    this.quality.textContent =
-
-      "Einzelmessung: σ Position "
-      +
-      measurement.positionStd.toFixed(3)
-      +
-      " | σ Rotation "
-      +
-      measurement.rotationStd.toFixed(1)
-      +
-      "°";
-
-
-    this.currentMeasurement++;
-
-
-
-    /*
-     * Fünf Blickwinkel vollständig?
-     */
-
-    if (
-      this.currentMeasurement >=
-      this.measurementsPerPair
-    ) {
-
-      this.finishPair();
-
-    }
-
-    else {
-
-      this.showInstruction();
-
-    }
 
   }
 
@@ -2069,9 +1190,11 @@ function isMobileDevice() {
 function isLandscape() {
 
   return (
+
     window.innerWidth
     >
     window.innerHeight
+
   );
 
 }
@@ -2203,6 +1326,10 @@ function createARScene() {
     >
 
 
+      <!-- ============================================
+           MARKER 0–5
+           ============================================ -->
+
       <a-marker
         id="marker0"
         type="barcode"
@@ -2269,9 +1396,68 @@ function createARScene() {
       </a-marker>
 
 
+
+      <!-- ============================================
+           GEMEINSAMES WÜRFELKOORDINATENSYSTEM
+           ============================================ -->
+
       <a-entity
-        cube-calibration>
+        id="cubeRoot"
+        single-marker-cube
+      >
+
+
+        <!--
+          Methan liegt EXAKT im Würfelzentrum.
+
+          Keine Animation.
+          Keine Eigenrotation.
+
+          Jede Rotation kommt ausschließlich
+          aus der erkannten Würfelpose.
+        -->
+
+        <a-entity
+          id="methane"
+          position="0 0 0"
+          rotation="0 0 0"
+          methane-model>
+        </a-entity>
+
+
       </a-entity>
+
+
+
+      <!-- ============================================
+           LICHT
+           ============================================ -->
+
+      <a-entity
+
+        light="
+          type: ambient;
+          intensity: 1.0;
+          color: #ffffff;
+        "
+
+      >
+      </a-entity>
+
+
+      <a-entity
+
+        light="
+          type: directional;
+          intensity: 0.8;
+          color: #ffffff;
+        "
+
+        position="1 2 1"
+
+      >
+      </a-entity>
+
 
 
       <a-entity camera></a-entity>
@@ -2284,44 +1470,6 @@ function createARScene() {
 
   startScreen.classList.remove(
     "visible"
-  );
-
-
-  /*
-   * Nach dem Erzeugen der Szene erste
-   * Kalibrierungsanweisung anzeigen.
-   */
-
-  setTimeout(
-
-    function () {
-
-      const calibrationEntity =
-        document.querySelector(
-          "[cube-calibration]"
-        );
-
-
-      if (
-        calibrationEntity
-        &&
-        calibrationEntity.components
-        &&
-        calibrationEntity.components[
-          "cube-calibration"
-        ]
-      ) {
-
-        calibrationEntity.components[
-          "cube-calibration"
-        ].showInstruction();
-
-      }
-
-    },
-
-    1000
-
   );
 
 }
@@ -2686,7 +1834,7 @@ function synchronizeVisualGeometry() {
 
 
 /* ==========================================================
-   MOBILE KAMERAOPTIMIERUNG
+   SMARTPHONE-KAMERA
    ========================================================== */
 
 async function optimizeMobileCamera() {
