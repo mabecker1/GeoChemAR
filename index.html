@@ -13,13 +13,12 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4e-1</title>
+  <title>GeoChemAR – Phase 4e-2</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
   <style>
-
     html, body {
       margin: 0;
       padding: 0;
@@ -138,7 +137,6 @@
       line-height: 1.4;
       pointer-events: none;
     }
-
   </style>
 </head>
 
@@ -148,13 +146,12 @@
 <div id="sceneHost"></div>
 
 <div id="diagnostic">
-  Phase 4e-1<br>
+  Phase 4e-2<br>
   <span id="trackingInfo">Würfel: –</span>
 </div>
 
 
 <div id="startScreen">
-
   <div id="startContent">
 
     <div id="rotateIcon">↻</div>
@@ -172,9 +169,7 @@
     </button>
 
   </div>
-
 </div>
-
 
 
 <script>
@@ -188,7 +183,6 @@ AFRAME.registerComponent("methane-model", {
   init: function () {
 
     const THREE = AFRAME.THREE;
-
     const group = new THREE.Group();
 
     const carbonRadius = 0.22;
@@ -217,7 +211,6 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
       });
 
-
     const carbon =
       new THREE.Mesh(
         new THREE.SphereGeometry(
@@ -230,7 +223,6 @@ AFRAME.registerComponent("methane-model", {
 
     group.add(carbon);
 
-
     const hydrogenGeometry =
       new THREE.SphereGeometry(
         hydrogenRadius,
@@ -238,24 +230,19 @@ AFRAME.registerComponent("methane-model", {
         28
       );
 
-
     const directions = [
-
       new THREE.Vector3(1, 1, 1),
       new THREE.Vector3(1, -1, -1),
       new THREE.Vector3(-1, 1, -1),
       new THREE.Vector3(-1, -1, 1)
-
     ];
 
     directions.forEach(
       direction => direction.normalize()
     );
 
-
     const yAxis =
       new THREE.Vector3(0, 1, 0);
-
 
     directions.forEach(function(direction) {
 
@@ -273,13 +260,11 @@ AFRAME.registerComponent("methane-model", {
 
       group.add(hydrogen);
 
-
       const startDistance =
         carbonRadius;
 
       const endDistance =
         hydrogenDistance - hydrogenRadius;
-
 
       const startPoint =
         direction.clone().multiplyScalar(
@@ -291,17 +276,14 @@ AFRAME.registerComponent("methane-model", {
           endDistance
         );
 
-
       const bondVector =
         endPoint.clone().sub(startPoint);
 
       const bondLength =
         bondVector.length();
 
-
       const bond =
         new THREE.Mesh(
-
           new THREE.CylinderGeometry(
             bondRadius,
             bondRadius,
@@ -310,32 +292,24 @@ AFRAME.registerComponent("methane-model", {
             1,
             false
           ),
-
           bondMaterial
-
         );
 
-
       bond.position.copy(
-
         startPoint
           .clone()
           .add(endPoint)
           .multiplyScalar(0.5)
-
       );
-
 
       bond.quaternion.setFromUnitVectors(
         yAxis,
         direction
       );
 
-
       group.add(bond);
 
     });
-
 
     this.el.setObject3D(
       "methaneMesh",
@@ -345,7 +319,6 @@ AFRAME.registerComponent("methane-model", {
   }
 
 });
-
 
 
 /* ==========================================================
@@ -361,14 +334,12 @@ AFRAME.registerComponent("cube-tracker", {
     const h = 0.5625;
     const s = Math.SQRT1_2;
 
-
     this.markers = [];
 
     this.visible = [
       false, false, false,
       false, false, false
     ];
-
 
     this.faces = [
 
@@ -428,7 +399,6 @@ AFRAME.registerComponent("cube-tracker", {
     const unitScale =
       new THREE.Vector3(1,1,1);
 
-
     for (let i = 0; i < 6; i++) {
 
       this.faceMatrices[i] =
@@ -445,7 +415,6 @@ AFRAME.registerComponent("cube-tracker", {
       document.querySelector(
         "[camera]"
       ).object3D;
-
 
     this.cameraPosition =
       new THREE.Vector3();
@@ -465,13 +434,11 @@ AFRAME.registerComponent("cube-tracker", {
     this.toCamera =
       new THREE.Vector3();
 
-
     this.tempMatrix =
       new THREE.Matrix4();
 
     this.inverseFace =
       new THREE.Matrix4();
-
 
     this.currentPosition =
       new THREE.Vector3();
@@ -484,7 +451,6 @@ AFRAME.registerComponent("cube-tracker", {
     this.lastSeenTime = 0;
 
     this.holdTime = 250;
-
 
     this.info =
       document.getElementById(
@@ -501,14 +467,12 @@ AFRAME.registerComponent("cube-tracker", {
 
       this.markers[i] = marker;
 
-
       marker.addEventListener(
         "markerFound",
         () => {
           this.visible[i] = true;
         }
       );
-
 
       marker.addEventListener(
         "markerLost",
@@ -519,11 +483,9 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
-
     this.el.object3D.visible = false;
 
   },
-
 
 
   getCubeCandidate: function(index) {
@@ -533,9 +495,7 @@ AFRAME.registerComponent("cube-tracker", {
     const marker =
       this.markers[index];
 
-
     marker.object3D.updateMatrixWorld(true);
-
 
     this.inverseFace
       .copy(
@@ -543,12 +503,10 @@ AFRAME.registerComponent("cube-tracker", {
       )
       .invert();
 
-
     this.tempMatrix.multiplyMatrices(
       marker.object3D.matrixWorld,
       this.inverseFace
     );
-
 
     const position =
       new THREE.Vector3();
@@ -559,20 +517,17 @@ AFRAME.registerComponent("cube-tracker", {
     const scale =
       new THREE.Vector3();
 
-
     this.tempMatrix.decompose(
       position,
       quaternion,
       scale
     );
 
-
     marker.object3D.matrixWorld.decompose(
       this.markerPosition,
       this.markerQuaternion,
       this.markerScale
     );
-
 
     this.markerNormal
       .set(0,1,0)
@@ -581,17 +536,14 @@ AFRAME.registerComponent("cube-tracker", {
       )
       .normalize();
 
-
     this.camera.getWorldPosition(
       this.cameraPosition
     );
-
 
     this.toCamera
       .copy(this.cameraPosition)
       .sub(this.markerPosition)
       .normalize();
-
 
     let frontality =
       Math.abs(
@@ -600,20 +552,17 @@ AFRAME.registerComponent("cube-tracker", {
         )
       );
 
-
     let weight =
       Math.pow(
         frontality,
         4
       );
 
-
     weight =
       Math.max(
         0.03,
         weight
       );
-
 
     return {
       index,
@@ -626,7 +575,6 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
-
   fusePositions: function(candidates) {
 
     const THREE = AFRAME.THREE;
@@ -635,7 +583,6 @@ AFRAME.registerComponent("cube-tracker", {
       new THREE.Vector3();
 
     let totalWeight = 0;
-
 
     candidates.forEach(
       candidate => {
@@ -651,7 +598,6 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
-
     if (totalWeight > 0) {
 
       result.multiplyScalar(
@@ -660,18 +606,15 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
-
     return result;
 
   },
-
 
 
   fuseQuaternions: function(candidates) {
 
     let best =
       candidates[0];
-
 
     candidates.forEach(
       candidate => {
@@ -688,14 +631,11 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
-
     const result =
       best.quaternion.clone();
 
-
     let accumulatedWeight =
       best.weight;
-
 
     const others =
       candidates
@@ -706,7 +646,6 @@ AFRAME.registerComponent("cube-tracker", {
           (a,b) =>
             b.weight - a.weight
         );
-
 
     others.forEach(
       candidate => {
@@ -724,7 +663,6 @@ AFRAME.registerComponent("cube-tracker", {
 
         }
 
-
         const t =
           candidate.weight
           /
@@ -734,12 +672,10 @@ AFRAME.registerComponent("cube-tracker", {
             candidate.weight
           );
 
-
         result.slerp(
           candidate.quaternion,
           t
         );
-
 
         accumulatedWeight +=
           candidate.weight;
@@ -747,14 +683,11 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
-
     result.normalize();
-
 
     return result;
 
   },
-
 
 
   tick: function() {
@@ -762,9 +695,7 @@ AFRAME.registerComponent("cube-tracker", {
     const now =
       performance.now();
 
-
     const candidates = [];
-
 
     for (
       let i = 0;
@@ -780,7 +711,6 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
-
       candidates.push(
         this.getCubeCandidate(i)
       );
@@ -794,7 +724,6 @@ AFRAME.registerComponent("cube-tracker", {
 
       const elapsed =
         now - this.lastSeenTime;
-
 
       if (
         this.hasPose &&
@@ -819,7 +748,6 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
-
       return;
 
     }
@@ -827,16 +755,13 @@ AFRAME.registerComponent("cube-tracker", {
 
     this.lastSeenTime = now;
 
-
     candidates.sort(
       (a,b) =>
         b.weight - a.weight
     );
 
-
     const bestWeight =
       candidates[0].weight;
-
 
     let useful =
       candidates.filter(
@@ -848,7 +773,6 @@ AFRAME.registerComponent("cube-tracker", {
             bestWeight * 0.20
           )
       );
-
 
     if (
       useful.length === 0
@@ -866,7 +790,6 @@ AFRAME.registerComponent("cube-tracker", {
         useful
       );
 
-
     const fusedQuaternion =
       this.fuseQuaternions(
         useful
@@ -881,17 +804,19 @@ AFRAME.registerComponent("cube-tracker", {
         fusedPosition
       );
 
-
       this.currentQuaternion.copy(
         fusedQuaternion
       );
-
 
       this.hasPose = true;
 
     }
 
     else {
+
+      /*
+       * Unsere Würfelglättung bleibt unverändert.
+       */
 
       this.currentPosition.lerp(
         fusedPosition,
@@ -925,16 +850,13 @@ AFRAME.registerComponent("cube-tracker", {
       this.currentPosition
     );
 
-
     this.el.object3D.quaternion.copy(
       this.currentQuaternion
     );
 
-
     this.el.object3D.scale.set(
       1,1,1
     );
-
 
     this.el.object3D.visible =
       true;
@@ -961,7 +883,6 @@ AFRAME.registerComponent("cube-tracker", {
   }
 
 });
-
 
 
 /* ==========================================================
@@ -1003,7 +924,6 @@ let arStarted = false;
 let cameraOptimized = false;
 
 
-
 function isMobileDevice() {
 
   return (
@@ -1028,7 +948,6 @@ function isMobileDevice() {
 }
 
 
-
 function isLandscape() {
 
   return (
@@ -1037,7 +956,6 @@ function isLandscape() {
   );
 
 }
-
 
 
 function updateStartScreen() {
@@ -1052,7 +970,6 @@ function updateStartScreen() {
 
   }
 
-
   if (arStarted) {
 
     startScreen.classList.remove(
@@ -1063,11 +980,9 @@ function updateStartScreen() {
 
   }
 
-
   startScreen.classList.add(
     "visible"
   );
-
 
   if (!isLandscape()) {
 
@@ -1104,7 +1019,6 @@ function updateStartScreen() {
 }
 
 
-
 /* ==========================================================
    AR-SZENE
    ========================================================== */
@@ -1113,9 +1027,7 @@ function createARScene() {
 
   if (arStarted) return;
 
-
   arStarted = true;
-
 
   sceneHost.innerHTML = `
 
@@ -1146,69 +1058,55 @@ function createARScene() {
     >
 
 
+      <!--
+        PHASE 4e-2:
+
+        EINZIGE ÄNDERUNG:
+        AR.js-interne Markerglättung AUS.
+
+        Unsere gemeinsame Würfelglättung bleibt aktiv.
+      -->
+
       <a-marker
         id="marker0"
         type="barcode"
         value="0"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
-
 
       <a-marker
         id="marker1"
         type="barcode"
         value="1"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
-
 
       <a-marker
         id="marker2"
         type="barcode"
         value="2"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
-
 
       <a-marker
         id="marker3"
         type="barcode"
         value="3"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
-
 
       <a-marker
         id="marker4"
         type="barcode"
         value="4"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
-
 
       <a-marker
         id="marker5"
         type="barcode"
         value="5"
-        smooth="true"
-        smoothCount="3"
-        smoothTolerance="0.01"
-        smoothThreshold="2">
+        smooth="false">
       </a-marker>
 
 
@@ -1253,13 +1151,11 @@ function createARScene() {
 
   `;
 
-
   startScreen.classList.remove(
     "visible"
   );
 
 }
-
 
 
 /* ==========================================================
@@ -1281,7 +1177,6 @@ async function startMobileAR() {
 
     const element =
       document.documentElement;
-
 
     if (element.requestFullscreen) {
 
@@ -1342,7 +1237,6 @@ async function startMobileAR() {
 }
 
 
-
 /* ==========================================================
    VIDEO
    ========================================================== */
@@ -1364,7 +1258,6 @@ function getARVideo() {
   );
 
 }
-
 
 
 /* ==========================================================
@@ -1522,7 +1415,6 @@ function enforceLayers() {
 }
 
 
-
 /* ==========================================================
    VIDEO / CANVAS SYNCHRONISIEREN
    ========================================================== */
@@ -1537,13 +1429,10 @@ function synchronizeVisualGeometry() {
       "canvas.a-canvas"
     );
 
-
   if (!video || !canvas) return;
-
 
   const rect =
     video.getBoundingClientRect();
-
 
   if (
     rect.width <= 0 ||
@@ -1590,22 +1479,10 @@ function synchronizeVisualGeometry() {
 }
 
 
-
 /* ==========================================================
    SMARTPHONE-KAMERA
 
-   PHASE 4e-1:
-   EINZIGE ÄNDERUNG GEGENÜBER 4e
-
-   Vorher:
-   1280 x 720
-   16:9
-
-   Jetzt:
-   640 x 480
-   4:3
-
-   Damit stimmen Kamera und AR.js überein.
+   640 × 480 / 4:3 bleibt aus Phase 4e-1 erhalten.
    ========================================================== */
 
 async function optimizeMobileCamera() {
@@ -1628,7 +1505,6 @@ async function optimizeMobileCamera() {
   const video =
     getARVideo();
 
-
   if (
     !video ||
     !video.srcObject
@@ -1637,7 +1513,6 @@ async function optimizeMobileCamera() {
 
   const tracks =
     video.srcObject.getVideoTracks();
-
 
   if (!tracks.length) return;
 
@@ -1680,10 +1555,6 @@ async function optimizeMobileCamera() {
 
   }
 
-
-  /*
-     Zoom-Verhalten bleibt exakt wie vorher.
-  */
 
   try {
 
@@ -1737,7 +1608,6 @@ async function optimizeMobileCamera() {
 }
 
 
-
 /* ==========================================================
    ORIENTIERUNGSWECHSEL
    ========================================================== */
@@ -1764,7 +1634,6 @@ function orientationChanged() {
     const video =
       getARVideo();
 
-
     if (
       video &&
       video.srcObject
@@ -1778,13 +1647,11 @@ function orientationChanged() {
 
     }
 
-
     location.reload();
 
   }
 
 }
-
 
 
 /* ==========================================================
@@ -1798,9 +1665,7 @@ startButton.addEventListener(
 
 
 window.addEventListener(
-
   "orientationchange",
-
   function() {
 
     setTimeout(
@@ -1809,14 +1674,11 @@ window.addEventListener(
     );
 
   }
-
 );
 
 
 window.addEventListener(
-
   "resize",
-
   function() {
 
     if (!arStarted) {
@@ -1829,9 +1691,7 @@ window.addEventListener(
     }
 
   }
-
 );
-
 
 
 /* ==========================================================
@@ -1851,27 +1711,21 @@ else {
 }
 
 
-
 /* ==========================================================
    LAUFENDE PFLEGE
    ========================================================== */
 
 setInterval(
-
   function() {
 
     if (!arStarted) return;
 
     enforceLayers();
-
     optimizeMobileCamera();
-
     synchronizeVisualGeometry();
 
   },
-
   250
-
 );
 
 </script>
