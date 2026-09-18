@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4c – Markerwürfel</title>
+  <title>GeoChemAR – Phase 4d-1 – gemeinsamer Würfel</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -133,38 +133,38 @@
 
 <body>
 
-  <div id="sceneHost"></div>
+<div id="sceneHost"></div>
 
-  <div id="startScreen">
+<div id="startScreen">
 
-    <div id="startContent">
+  <div id="startContent">
 
-      <div id="rotateIcon">
-        ↻
-      </div>
-
-      <div id="startTitle">
-        Bitte Smartphone drehen
-      </div>
-
-      <div id="startText">
-        GeoChemAR wird im Querformat verwendet.
-      </div>
-
-      <button id="startButton">
-        AR starten
-      </button>
-
+    <div id="rotateIcon">
+      ↻
     </div>
 
+    <div id="startTitle">
+      Bitte Smartphone drehen
+    </div>
+
+    <div id="startText">
+      GeoChemAR wird im Querformat verwendet.
+    </div>
+
+    <button id="startButton">
+      AR starten
+    </button>
+
   </div>
+
+</div>
 
 
 <script>
 
 
 /* ==========================================================
-   Methan CH4
+   METHAN
    ========================================================== */
 
 AFRAME.registerComponent("methane-model", {
@@ -176,10 +176,6 @@ AFRAME.registerComponent("methane-model", {
     const group =
       new THREE.Group();
 
-
-    /* ==================================================
-       Größen
-       ================================================== */
 
     const carbonRadius =
       0.22;
@@ -194,18 +190,11 @@ AFRAME.registerComponent("methane-model", {
       0.040;
 
 
-
-    /* ==================================================
-       Materialien
-       ================================================== */
-
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
 
         color: 0x202020,
-
         roughness: 0.55,
-
         metalness: 0
 
       });
@@ -215,9 +204,7 @@ AFRAME.registerComponent("methane-model", {
       new THREE.MeshStandardMaterial({
 
         color: 0xffffff,
-
         roughness: 0.45,
-
         metalness: 0
 
       });
@@ -227,26 +214,18 @@ AFRAME.registerComponent("methane-model", {
       new THREE.MeshStandardMaterial({
 
         color: 0xb8bec7,
-
         roughness: 0.50,
-
         metalness: 0
 
       });
 
 
 
-    /* ==================================================
-       Kohlenstoff
-       ================================================== */
-
     const carbonGeometry =
       new THREE.SphereGeometry(
 
         carbonRadius,
-
         48,
-
         32
 
       );
@@ -256,7 +235,6 @@ AFRAME.registerComponent("methane-model", {
       new THREE.Mesh(
 
         carbonGeometry,
-
         carbonMaterial
 
       );
@@ -268,26 +246,15 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-    /* ==================================================
-       Wasserstoff
-       ================================================== */
-
     const hydrogenGeometry =
       new THREE.SphereGeometry(
 
         hydrogenRadius,
-
         40,
-
         28
 
       );
 
-
-
-    /* ==================================================
-       Tetraederrichtungen
-       ================================================== */
 
     const directions = [
 
@@ -319,18 +286,12 @@ AFRAME.registerComponent("methane-model", {
 
 
     directions.forEach(
-      function (direction) {
 
-        direction.normalize();
+      direction =>
+        direction.normalize()
 
-      }
     );
 
-
-
-    /* ==================================================
-       Bindungen
-       ================================================== */
 
     const yAxis =
       new THREE.Vector3(
@@ -344,15 +305,10 @@ AFRAME.registerComponent("methane-model", {
       function (direction) {
 
 
-        /* --------------------------------------------
-           Wasserstoff
-           -------------------------------------------- */
-
         const hydrogen =
           new THREE.Mesh(
 
             hydrogenGeometry,
-
             hydrogenMaterial
 
           );
@@ -375,12 +331,10 @@ AFRAME.registerComponent("methane-model", {
 
 
 
-        /* --------------------------------------------
-           Bindungsstab
-
-           Exakt von Kugeloberfläche
-           zu Kugeloberfläche.
-           -------------------------------------------- */
+        /*
+         * Stab exakt zwischen den beiden
+         * Kugeloberflächen.
+         */
 
         const startDistance =
           carbonRadius;
@@ -427,15 +381,10 @@ AFRAME.registerComponent("methane-model", {
           new THREE.CylinderGeometry(
 
             bondRadius,
-
             bondRadius,
-
             bondLength,
-
             32,
-
             1,
-
             false
 
           );
@@ -445,7 +394,6 @@ AFRAME.registerComponent("methane-model", {
           new THREE.Mesh(
 
             bondGeometry,
-
             bondMaterial
 
           );
@@ -468,7 +416,6 @@ AFRAME.registerComponent("methane-model", {
         bond.quaternion.setFromUnitVectors(
 
           yAxis,
-
           direction
 
         );
@@ -482,11 +429,9 @@ AFRAME.registerComponent("methane-model", {
     );
 
 
-
     this.el.setObject3D(
 
       "methaneMesh",
-
       group
 
     );
@@ -507,121 +452,449 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   Tracking-Aussetzer kurz überbrücken
-
-   Bleibt unverändert bei 250 ms.
+   GEMEINSAME WÜRFELPOSE
    ========================================================== */
 
-AFRAME.registerComponent("marker-hold", {
-
-  schema: {
-
-    holdTime: {
-
-      type: "number",
-
-      default: 250
-
-    }
-
-  },
-
+AFRAME.registerComponent("cube-tracker", {
 
   init: function () {
 
-    this.markerDetected =
+    const THREE =
+      AFRAME.THREE;
+
+
+    this.markers = [];
+
+    this.detected = [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ];
+
+
+    this.activeMarker =
+      -1;
+
+
+    this.cubeMatrix =
+      new THREE.Matrix4();
+
+
+    this.tempMatrix =
+      new THREE.Matrix4();
+
+
+    this.inverseFaceMatrix =
+      new THREE.Matrix4();
+
+
+    /*
+     * Abstand Markerfläche -> Würfelzentrum.
+     *
+     * AR.js verwendet die Markerbreite als Einheit.
+     * Bei einem Würfel, dessen Seitenbreite der
+     * Markerbreite entspricht, liegt das Zentrum
+     * 0.5 Einheiten hinter der Markerfläche.
+     */
+
+    const h =
+      0.5;
+
+
+
+    /* ======================================================
+       MARKER -> WÜRFEL
+
+       Tatsächlicher gebauter Würfel:
+
+                    0
+                    |
+              4 — 1 — 2 — 3
+                    |
+                    5
+
+       Die Matrizen beschreiben die Pose jeder Markerfläche
+       relativ zum gemeinsamen Würfelzentrum.
+       ====================================================== */
+
+    this.faceMatrices = [];
+
+
+    function makeFaceMatrix(
+      px,
+      py,
+      pz,
+      rx,
+      ry,
+      rz
+    ) {
+
+      const position =
+        new THREE.Vector3(
+          px,
+          py,
+          pz
+        );
+
+
+      const euler =
+        new THREE.Euler(
+
+          THREE.MathUtils.degToRad(rx),
+
+          THREE.MathUtils.degToRad(ry),
+
+          THREE.MathUtils.degToRad(rz),
+
+          "XYZ"
+
+        );
+
+
+      const quaternion =
+        new THREE.Quaternion()
+          .setFromEuler(
+            euler
+          );
+
+
+      const scale =
+        new THREE.Vector3(
+          1,
+          1,
+          1
+        );
+
+
+      return new THREE.Matrix4()
+        .compose(
+          position,
+          quaternion,
+          scale
+        );
+
+    }
+
+
+
+    /*
+     * Marker 1 = Vorderseite
+     *
+     * Dies ist unser Referenzmarker.
+     */
+
+    this.faceMatrices[1] =
+      makeFaceMatrix(
+        0,
+        0,
+        h,
+        0,
+        0,
+        0
+      );
+
+
+    /*
+     * Marker 2 = rechte Seite
+     */
+
+    this.faceMatrices[2] =
+      makeFaceMatrix(
+        h,
+        0,
+        0,
+        0,
+        90,
+        0
+      );
+
+
+    /*
+     * Marker 3 = Rückseite
+     */
+
+    this.faceMatrices[3] =
+      makeFaceMatrix(
+        0,
+        0,
+        -h,
+        0,
+        180,
+        0
+      );
+
+
+    /*
+     * Marker 4 = linke Seite
+     */
+
+    this.faceMatrices[4] =
+      makeFaceMatrix(
+        -h,
+        0,
+        0,
+        0,
+        -90,
+        0
+      );
+
+
+    /*
+     * Marker 0 = Oberseite
+     */
+
+    this.faceMatrices[0] =
+      makeFaceMatrix(
+        0,
+        h,
+        0,
+        -90,
+        0,
+        0
+      );
+
+
+    /*
+     * Marker 5 = Unterseite
+     */
+
+    this.faceMatrices[5] =
+      makeFaceMatrix(
+        0,
+        -h,
+        0,
+        90,
+        0,
+        0
+      );
+
+
+
+    /*
+     * Marker suchen und echte Found/Lost-Ereignisse
+     * speichern.
+     */
+
+    for (
+      let i = 0;
+      i < 6;
+      i++
+    ) {
+
+      const marker =
+        document.getElementById(
+          "marker" + i
+        );
+
+
+      this.markers[i] =
+        marker;
+
+
+      marker.addEventListener(
+
+        "markerFound",
+
+        () => {
+
+          this.detected[i] =
+            true;
+
+
+          /*
+           * Wenn bisher kein Marker aktiv war,
+           * nehmen wir diesen.
+           */
+
+          if (
+            this.activeMarker === -1
+          ) {
+
+            this.activeMarker =
+              i;
+
+          }
+
+        }
+
+      );
+
+
+      marker.addEventListener(
+
+        "markerLost",
+
+        () => {
+
+          this.detected[i] =
+            false;
+
+
+          /*
+           * War dies unser aktiver Marker,
+           * suchen wir einen anderen tatsächlich
+           * sichtbaren Marker.
+           */
+
+          if (
+            this.activeMarker === i
+          ) {
+
+            this.activeMarker =
+              -1;
+
+
+            for (
+              let j = 0;
+              j < 6;
+              j++
+            ) {
+
+              if (
+                this.detected[j]
+              ) {
+
+                this.activeMarker =
+                  j;
+
+                break;
+
+              }
+
+            }
+
+          }
+
+        }
+
+      );
+
+    }
+
+
+
+    this.el.object3D.visible =
       false;
 
-
-    this.lostAt =
-      0;
-
-
-    this.el.addEventListener(
-
-      "markerFound",
-
-      () => {
-
-        this.markerDetected =
-          true;
-
-        this.lostAt =
-          0;
-
-        this.el.object3D.visible =
-          true;
-
-      }
-
-    );
-
-
-    this.el.addEventListener(
-
-      "markerLost",
-
-      () => {
-
-        this.markerDetected =
-          false;
-
-        this.lostAt =
-          performance.now();
-
-        this.el.object3D.visible =
-          true;
-
-      }
-
-    );
-
   },
+
 
 
   tick: function () {
 
-    if (
-      this.markerDetected
-    ) {
-
-      return;
-
-    }
+    const THREE =
+      AFRAME.THREE;
 
 
     if (
-      this.lostAt === 0
+      this.activeMarker < 0
     ) {
-
-      return;
-
-    }
-
-
-    const elapsed =
-
-      performance.now()
-      -
-      this.lostAt;
-
-
-    if (
-      elapsed <
-      this.data.holdTime
-    ) {
-
-      this.el.object3D.visible =
-        true;
-
-    }
-
-    else {
 
       this.el.object3D.visible =
         false;
 
+      return;
+
     }
+
+
+    const marker =
+      this.markers[
+        this.activeMarker
+      ];
+
+
+    if (
+      !marker
+      ||
+      !this.detected[
+        this.activeMarker
+      ]
+    ) {
+
+      this.el.object3D.visible =
+        false;
+
+      return;
+
+    }
+
+
+
+    /*
+     * Marker-Weltmatrix aktualisieren.
+     */
+
+    marker.object3D
+      .updateMatrixWorld(
+        true
+      );
+
+
+    /*
+     * faceMatrix:
+     *
+     * Würfelzentrum -> Markerfläche
+     *
+     * Gesucht:
+     *
+     * Markerfläche -> Würfelzentrum
+     *
+     * Deshalb inverse Matrix.
+     */
+
+    this.inverseFaceMatrix
+      .copy(
+
+        this.faceMatrices[
+          this.activeMarker
+        ]
+
+      )
+      .invert();
+
+
+
+    /*
+     * Welt -> Marker
+     * kombiniert mit
+     * Marker -> Würfelzentrum
+     *
+     * ergibt die Pose des Würfelzentrums.
+     */
+
+    this.cubeMatrix
+      .multiplyMatrices(
+
+        marker.object3D.matrixWorld,
+
+        this.inverseFaceMatrix
+
+      );
+
+
+
+    /*
+     * Da das gemeinsame Molekül direkt in der Szene
+     * liegt, können wir die Matrix zerlegen.
+     */
+
+    this.cubeMatrix.decompose(
+
+      this.el.object3D.position,
+
+      this.el.object3D.quaternion,
+
+      this.el.object3D.scale
+
+    );
+
+
+    this.el.object3D.visible =
+      true;
 
   }
 
@@ -630,7 +903,7 @@ AFRAME.registerComponent("marker-hold", {
 
 
 /* ==========================================================
-   Hauptprogramm
+   HAUPTPROGRAMM
    ========================================================== */
 
 const sceneHost =
@@ -678,10 +951,6 @@ let cameraOptimized =
 
 
 
-/* ==================================================
-   Gerät erkennen
-   ================================================== */
-
 function isMobileDevice() {
 
   return (
@@ -707,10 +976,6 @@ function isMobileDevice() {
 
 
 
-/* ==================================================
-   Orientierung
-   ================================================== */
-
 function isLandscape() {
 
   return (
@@ -724,10 +989,6 @@ function isLandscape() {
 }
 
 
-
-/* ==================================================
-   Startbildschirm
-   ================================================== */
 
 function updateStartScreen() {
 
@@ -807,23 +1068,7 @@ function updateStartScreen() {
 
 
 /* ==========================================================
-   AR-Szene – Phase 4c
-
-   Alle sechs Barcode-Marker 0 bis 5 werden gleichzeitig
-   erkannt.
-
-   WICHTIG:
-   Jeder Marker erhält momentan NOCH sein eigenes
-   Methanmolekül.
-
-   Das ist Absicht.
-
-   Dadurch testen wir zunächst nur:
-   - Erkennung aller sechs Würfelseiten
-   - Erkennung über Würfelkanten hinweg
-   - gleichzeitige Erkennung zweier Seiten
-
-   Noch KEINE gemeinsame Würfelpose.
+   AR-SZENE
    ========================================================== */
 
 function createARScene() {
@@ -870,243 +1115,111 @@ function createARScene() {
     >
 
 
-      <!-- ==========================================
-           MARKER 0
-           ========================================== -->
+      <!-- ============================================
+           Die sechs Marker enthalten jetzt KEINE
+           Moleküle mehr.
+           ============================================ -->
 
       <a-marker
-
         id="marker0"
-
         type="barcode"
-
         value="0"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
-        smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
-      >
-
-        <a-entity
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
+        smoothThreshold="2">
       </a-marker>
 
 
-
-      <!-- ==========================================
-           MARKER 1
-           ========================================== -->
-
       <a-marker
-
         id="marker1"
-
         type="barcode"
-
         value="1"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
-        smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
-      >
-
-        <a-entity
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
+        smoothThreshold="2">
       </a-marker>
 
 
-
-      <!-- ==========================================
-           MARKER 2
-           ========================================== -->
-
       <a-marker
-
         id="marker2"
-
         type="barcode"
-
         value="2"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
-        smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
-      >
-
-        <a-entity
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
+        smoothThreshold="2">
       </a-marker>
 
 
-
-      <!-- ==========================================
-           MARKER 3
-           ========================================== -->
-
       <a-marker
-
         id="marker3"
-
         type="barcode"
-
         value="3"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
-        smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
-      >
-
-        <a-entity
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
+        smoothThreshold="2">
       </a-marker>
 
 
-
-      <!-- ==========================================
-           MARKER 4
-           ========================================== -->
-
       <a-marker
-
         id="marker4"
-
         type="barcode"
-
         value="4"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
-
-        smoothThreshold="2"
-
-        marker-hold="
-          holdTime: 250;
-        "
-
-      >
-
-        <a-entity
-
-          position="0 0.55 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
+        smoothThreshold="2">
       </a-marker>
 
-
-
-      <!-- ==========================================
-           MARKER 5
-           ========================================== -->
 
       <a-marker
-
         id="marker5"
-
         type="barcode"
-
         value="5"
-
         smooth="true"
-
         smoothCount="3"
-
         smoothTolerance="0.01"
+        smoothThreshold="2">
+      </a-marker>
 
-        smoothThreshold="2"
 
-        marker-hold="
-          holdTime: 250;
-        "
 
+      <!-- ============================================
+           EIN gemeinsames Würfelobjekt
+           ============================================ -->
+
+      <a-entity
+        id="cubeRoot"
+        cube-tracker
       >
+
+        <!--
+          Molekül oberhalb des Würfels.
+
+          Das Würfelzentrum ist der Ursprung.
+          Die Oberseite liegt bei y = 0.5.
+
+          0.55 zusätzliche Einheiten ergeben ungefähr
+          denselben Abstand zur Oberfläche wie bisher.
+        -->
 
         <a-entity
 
-          position="0 0.55 0"
+          id="methane"
+
+          position="0 1.05 0"
 
           methane-model
 
         >
         </a-entity>
 
-      </a-marker>
+      </a-entity>
 
 
-
-      <!-- ==========================================
-           Beleuchtung
-           ========================================== -->
 
       <a-entity
 
@@ -1134,11 +1247,6 @@ function createARScene() {
       </a-entity>
 
 
-
-      <!-- ==========================================
-           Kamera
-           ========================================== -->
-
       <a-entity camera></a-entity>
 
 
@@ -1155,9 +1263,9 @@ function createARScene() {
 
 
 
-/* ==================================================
-   Mobiler Start
-   ================================================== */
+/* ==========================================================
+   MOBILER START
+   ========================================================== */
 
 async function startMobileAR() {
 
@@ -1246,9 +1354,9 @@ async function startMobileAR() {
 
 
 
-/* ==================================================
-   AR-Video
-   ================================================== */
+/* ==========================================================
+   AR-VIDEO
+   ========================================================== */
 
 function getARVideo() {
 
@@ -1270,9 +1378,9 @@ function getARVideo() {
 
 
 
-/* ==================================================
-   Ebenen
-   ================================================== */
+/* ==========================================================
+   EBENEN
+   ========================================================== */
 
 function enforceLayers() {
 
@@ -1453,9 +1561,9 @@ function enforceLayers() {
 
 
 
-/* ==================================================
-   Video und Canvas synchronisieren
-   ================================================== */
+/* ==========================================================
+   VIDEO / CANVAS SYNCHRONISIEREN
+   ========================================================== */
 
 function synchronizeVisualGeometry() {
 
@@ -1540,9 +1648,9 @@ function synchronizeVisualGeometry() {
 
 
 
-/* ==================================================
-   Smartphone-Kamera
-   ================================================== */
+/* ==========================================================
+   MOBILE KAMERAOPTIMIERUNG
+   ========================================================== */
 
 async function optimizeMobileCamera() {
 
@@ -1725,9 +1833,9 @@ async function optimizeMobileCamera() {
 
 
 
-/* ==================================================
-   Orientierungswechsel
-   ================================================== */
+/* ==========================================================
+   ORIENTIERUNGSWECHSEL
+   ========================================================== */
 
 function orientationChanged() {
 
@@ -1790,9 +1898,9 @@ function orientationChanged() {
 
 
 
-/* ==================================================
-   Events
-   ================================================== */
+/* ==========================================================
+   EVENTS
+   ========================================================== */
 
 startButton.addEventListener(
 
@@ -1848,9 +1956,9 @@ window.addEventListener(
 
 
 
-/* ==================================================
-   Start
-   ================================================== */
+/* ==========================================================
+   START
+   ========================================================== */
 
 if (
   isMobileDevice()
@@ -1868,9 +1976,9 @@ else {
 
 
 
-/* ==================================================
-   Laufende Pflege
-   ================================================== */
+/* ==========================================================
+   LAUFENDE PFLEGE
+   ========================================================== */
 
 setInterval(
 
