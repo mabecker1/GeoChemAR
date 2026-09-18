@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4e-5</title>
+  <title>GeoChemAR – Phase 4e-6</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -148,7 +148,7 @@
 <div id="sceneHost"></div>
 
 <div id="diagnostic">
-  Phase 4e-5<br>
+  Phase 4e-6<br>
   <span id="trackingInfo">Würfel: –</span>
 </div>
 
@@ -176,6 +176,7 @@
 </div>
 
 
+
 <script>
 
 /* ==========================================================
@@ -187,6 +188,7 @@ AFRAME.registerComponent("methane-model", {
   init: function () {
 
     const THREE = AFRAME.THREE;
+
     const group = new THREE.Group();
 
     const carbonRadius = 0.22;
@@ -215,6 +217,7 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
       });
 
+
     const carbon =
       new THREE.Mesh(
         new THREE.SphereGeometry(
@@ -227,6 +230,7 @@ AFRAME.registerComponent("methane-model", {
 
     group.add(carbon);
 
+
     const hydrogenGeometry =
       new THREE.SphereGeometry(
         hydrogenRadius,
@@ -234,19 +238,25 @@ AFRAME.registerComponent("methane-model", {
         28
       );
 
+
     const directions = [
+
       new THREE.Vector3(1, 1, 1),
       new THREE.Vector3(1, -1, -1),
       new THREE.Vector3(-1, 1, -1),
       new THREE.Vector3(-1, -1, 1)
+
     ];
+
 
     directions.forEach(
       direction => direction.normalize()
     );
 
+
     const yAxis =
       new THREE.Vector3(0, 1, 0);
+
 
     directions.forEach(function(direction) {
 
@@ -264,11 +274,13 @@ AFRAME.registerComponent("methane-model", {
 
       group.add(hydrogen);
 
+
       const startDistance =
         carbonRadius;
 
       const endDistance =
         hydrogenDistance - hydrogenRadius;
+
 
       const startPoint =
         direction.clone().multiplyScalar(
@@ -280,14 +292,17 @@ AFRAME.registerComponent("methane-model", {
           endDistance
         );
 
+
       const bondVector =
         endPoint.clone().sub(startPoint);
 
       const bondLength =
         bondVector.length();
 
+
       const bond =
         new THREE.Mesh(
+
           new THREE.CylinderGeometry(
             bondRadius,
             bondRadius,
@@ -296,24 +311,32 @@ AFRAME.registerComponent("methane-model", {
             1,
             false
           ),
+
           bondMaterial
+
         );
 
+
       bond.position.copy(
+
         startPoint
           .clone()
           .add(endPoint)
           .multiplyScalar(0.5)
+
       );
+
 
       bond.quaternion.setFromUnitVectors(
         yAxis,
         direction
       );
 
+
       group.add(bond);
 
     });
+
 
     this.el.setObject3D(
       "methaneMesh",
@@ -325,8 +348,16 @@ AFRAME.registerComponent("methane-model", {
 });
 
 
+
 /* ==========================================================
-   WÜRFELTRACKER – PHASE 4e-5
+   WÜRFELTRACKER – PHASE 4e-6
+
+   Grundlage: 4e-3.
+
+   Wichtig:
+   KEINE lernenden Marker-Korrekturen mehr.
+   Die Würfelmitte wird ausschließlich aus der festen
+   Würfelgeometrie berechnet.
    ========================================================== */
 
 AFRAME.registerComponent("cube-tracker", {
@@ -335,8 +366,19 @@ AFRAME.registerComponent("cube-tracker", {
 
     const THREE = AFRAME.THREE;
 
+    /*
+       Würfel:
+       45 mm Seitenlänge
+       40 mm Markerbreite
+
+       Abstand Markerebene -> Würfelzentrum:
+
+       22.5 / 40 = 0.5625
+    */
+
     const h = 0.5625;
     const s = Math.SQRT1_2;
+
 
     this.markers = [];
 
@@ -345,11 +387,13 @@ AFRAME.registerComponent("cube-tracker", {
       false, false, false
     ];
 
-    this.wasVisible = [
-      false, false, false,
-      false, false, false
-    ];
 
+    /*
+       FESTE Geometrie der sechs Würfelflächen.
+
+       Diese Werte werden während des Betriebs
+       NICHT verändert.
+    */
 
     this.faces = [
 
@@ -409,6 +453,7 @@ AFRAME.registerComponent("cube-tracker", {
     const unitScale =
       new THREE.Vector3(1,1,1);
 
+
     for (let i = 0; i < 6; i++) {
 
       this.faceMatrices[i] =
@@ -422,7 +467,10 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     this.camera =
-      document.querySelector("[camera]").object3D;
+      document.querySelector(
+        "[camera]"
+      ).object3D;
+
 
     this.cameraPosition =
       new THREE.Vector3();
@@ -442,6 +490,7 @@ AFRAME.registerComponent("cube-tracker", {
     this.toCamera =
       new THREE.Vector3();
 
+
     this.tempMatrix =
       new THREE.Matrix4();
 
@@ -455,78 +504,31 @@ AFRAME.registerComponent("cube-tracker", {
     this.currentQuaternion =
       new THREE.Quaternion();
 
+
     this.hasPose = false;
 
     this.lastSeenTime = 0;
+
     this.holdTime = 250;
 
 
     /*
-       ======================================================
-       MARKERSPEZIFISCHE ÜBERGABEKORREKTUR
-
-       Für jeden Marker speichern wir einen kleinen
-       Positions- und Rotationsoffset.
-
-       identity bedeutet:
-       keine Korrektur.
-       ======================================================
-    */
-
-    this.markerCorrections = [];
-
-    for (let i = 0; i < 6; i++) {
-
-      this.markerCorrections.push({
-
-        position:
-          new THREE.Vector3(0,0,0),
-
-        quaternion:
-          new THREE.Quaternion(0,0,0,1),
-
-        valid: false,
-
-        confidence: 0
-
-      });
-
-    }
-
-
-    /*
-       Ein neu auftauchender Marker wird während einiger
-       Frames gegenüber der bereits stabilen Würfelpose
-       kalibriert.
-    */
-
-    this.transitionFrames = [
-      0,0,0,0,0,0
-    ];
-
-    this.transitionCalibrationFrames = 6;
-
-
-    /*
-       ======================================================
-       AUSREISSERFILTER AUS 4e-3
-
-       bewusst wieder strenger als 4e-4
-       ======================================================
+       Ausreißerfilter aus dem stabileren 4e-3.
     */
 
     this.multiPositionTolerance = 0.35;
+
     this.multiRotationToleranceDeg = 28;
 
 
     /*
-       ======================================================
-       SPRUNGSCHUTZ AUS 4e-3
-       ======================================================
+       Fingerschutz / Sprungschutz aus 4e-3.
     */
 
     this.jumpPositionThreshold = 0.48;
+
     this.jumpRotationThresholdDeg = 38;
+
 
     this.pendingJumpPosition =
       new THREE.Vector3();
@@ -572,7 +574,6 @@ AFRAME.registerComponent("cube-tracker", {
         () => {
 
           this.visible[i] = false;
-          this.transitionFrames[i] = 0;
 
         }
       );
@@ -585,12 +586,14 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   quaternionAngleDeg: function(a, b) {
 
     let dot =
       Math.abs(
         a.dot(b)
       );
+
 
     dot =
       Math.min(
@@ -600,6 +603,7 @@ AFRAME.registerComponent("cube-tracker", {
           dot
         )
       );
+
 
     return (
       2 *
@@ -611,16 +615,22 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   /* ========================================================
-     ROHE WÜRFELPOSE EINES MARKERS
+     WÜRFELPOSE AUS EINEM MARKER
+
+     W_cube = W_marker * inverse(T_cube_marker)
+
+     Es gibt hier KEINE dynamischen Offsets.
      ======================================================== */
 
-  getRawCubeCandidate: function(index) {
+  getCubeCandidate: function(index) {
 
     const THREE = AFRAME.THREE;
 
     const marker =
       this.markers[index];
+
 
     marker.object3D.updateMatrixWorld(true);
 
@@ -704,201 +714,30 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     return {
+
       index,
       position,
       quaternion,
       weight,
       frontality
-    };
-
-  },
-
-
-  /* ========================================================
-     KORREKTUR EINES MARKERS ANWENDEN
-     ======================================================== */
-
-  applyMarkerCorrection: function(candidate) {
-
-    const correction =
-      this.markerCorrections[
-        candidate.index
-      ];
-
-
-    if (!correction.valid) {
-
-      return candidate;
-
-    }
-
-
-    const correctedPosition =
-      candidate.position
-        .clone()
-        .add(
-          correction.position
-        );
-
-
-    const correctedQuaternion =
-      correction.quaternion
-        .clone()
-        .multiply(
-          candidate.quaternion
-        )
-        .normalize();
-
-
-    return {
-
-      index:
-        candidate.index,
-
-      position:
-        correctedPosition,
-
-      quaternion:
-        correctedQuaternion,
-
-      weight:
-        candidate.weight,
-
-      frontality:
-        candidate.frontality
 
     };
 
   },
 
 
-  /* ========================================================
-     NEUEN MARKER GEGENÜBER DER ETABLIERTEN POSE KALIBRIEREN
-     ======================================================== */
-
-  calibrateTransitionMarker: function(
-    candidate
-  ) {
-
-    if (!this.hasPose) return;
-
-
-    const index =
-      candidate.index;
-
-
-    /*
-       Positionsfehler:
-       stabile Pose minus rohe Markerpose
-    */
-
-    const desiredPositionCorrection =
-      this.currentPosition
-        .clone()
-        .sub(
-          candidate.position
-        );
-
-
-    /*
-       Rotationsfehler:
-
-       qCorrection * qMarker = qCurrent
-
-       also:
-
-       qCorrection =
-       qCurrent * inverse(qMarker)
-    */
-
-    const desiredQuaternionCorrection =
-      this.currentQuaternion
-        .clone()
-        .multiply(
-          candidate.quaternion
-            .clone()
-            .invert()
-        )
-        .normalize();
-
-
-    const correction =
-      this.markerCorrections[index];
-
-
-    if (!correction.valid) {
-
-      correction.position.copy(
-        desiredPositionCorrection
-      );
-
-      correction.quaternion.copy(
-        desiredQuaternionCorrection
-      );
-
-      correction.valid = true;
-      correction.confidence = 1;
-
-    }
-
-    else {
-
-      /*
-         Nicht abrupt überschreiben.
-
-         Die Korrektur lernt langsam weiter.
-      */
-
-      correction.position.lerp(
-        desiredPositionCorrection,
-        0.22
-      );
-
-
-      let targetQ =
-        desiredQuaternionCorrection.clone();
-
-
-      if (
-        correction.quaternion.dot(
-          targetQ
-        ) < 0
-      ) {
-
-        targetQ.x *= -1;
-        targetQ.y *= -1;
-        targetQ.z *= -1;
-        targetQ.w *= -1;
-
-      }
-
-
-      correction.quaternion.slerp(
-        targetQ,
-        0.22
-      );
-
-
-      correction.confidence =
-        Math.min(
-          20,
-          correction.confidence + 1
-        );
-
-    }
-
-  },
-
 
   /* ========================================================
-     MULTI-MARKER-AUSREISSERFILTER AUS 4e-3
+     MULTI-MARKER-AUSREISSERFILTER
      ======================================================== */
 
   rejectMultiMarkerOutliers: function(
     candidates
   ) {
 
-    if (candidates.length <= 2) {
+    if (
+      candidates.length <= 2
+    ) {
 
       return candidates;
 
@@ -906,7 +745,9 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     const scores =
-      candidates.map(() => 0);
+      candidates.map(
+        () => 0
+      );
 
 
     for (
@@ -958,7 +799,9 @@ AFRAME.registerComponent("cube-tracker", {
       Math.max(...scores);
 
 
-    if (bestScore === 0) {
+    if (
+      bestScore === 0
+    ) {
 
       return candidates;
 
@@ -968,9 +811,13 @@ AFRAME.registerComponent("cube-tracker", {
     const filtered =
       candidates.filter(
         (candidate, index) =>
+
           scores[index] === bestScore
+
           ||
-          scores[index] >= bestScore - 1
+
+          scores[index] >=
+            bestScore - 1
       );
 
 
@@ -983,7 +830,14 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
-  fusePositions: function(candidates) {
+
+  /* ========================================================
+     POSITIONEN FUSIONIEREN
+     ======================================================== */
+
+  fusePositions: function(
+    candidates
+  ) {
 
     const THREE = AFRAME.THREE;
 
@@ -1008,7 +862,9 @@ AFRAME.registerComponent("cube-tracker", {
     );
 
 
-    if (totalWeight > 0) {
+    if (
+      totalWeight > 0
+    ) {
 
       result.multiplyScalar(
         1 / totalWeight
@@ -1022,7 +878,14 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
-  fuseQuaternions: function(candidates) {
+
+  /* ========================================================
+     ROTATIONEN FUSIONIEREN
+     ======================================================== */
+
+  fuseQuaternions: function(
+    candidates
+  ) {
 
     let best =
       candidates[0];
@@ -1055,7 +918,8 @@ AFRAME.registerComponent("cube-tracker", {
     const others =
       candidates
         .filter(
-          c => c !== best
+          candidate =>
+            candidate !== best
         )
         .sort(
           (a,b) =>
@@ -1113,8 +977,9 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   /* ========================================================
-     SPRUNGSCHUTZ AUS 4e-3
+     SPRUNGSCHUTZ
      ======================================================== */
 
   acceptPose: function(
@@ -1122,7 +987,9 @@ AFRAME.registerComponent("cube-tracker", {
     quaternion
   ) {
 
-    if (!this.hasPose) {
+    if (
+      !this.hasPose
+    ) {
 
       this.hasPendingJump = false;
       this.pendingJumpFrames = 0;
@@ -1146,14 +1013,23 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     const isLargeJump =
+
       positionJump >
         this.jumpPositionThreshold
+
       ||
+
       rotationJump >
         this.jumpRotationThresholdDeg;
 
 
-    if (!isLargeJump) {
+    /*
+       Normale Bewegung wird sofort akzeptiert.
+    */
+
+    if (
+      !isLargeJump
+    ) {
 
       this.hasPendingJump = false;
       this.pendingJumpFrames = 0;
@@ -1163,7 +1039,14 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
-    if (!this.hasPendingJump) {
+    /*
+       Erster großer Sprung:
+       noch nicht übernehmen.
+    */
+
+    if (
+      !this.hasPendingJump
+    ) {
 
       this.pendingJumpPosition.copy(
         position
@@ -1182,6 +1065,10 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
+    /*
+       Prüfen, ob die neue Pose bestätigt wird.
+    */
+
     const confirmationPositionDifference =
       this.pendingJumpPosition.distanceTo(
         position
@@ -1196,14 +1083,49 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     const confirmsJump =
-      confirmationPositionDifference < 0.30
+
+      confirmationPositionDifference <
+        0.30
+
       &&
-      confirmationRotationDifference < 25;
+
+      confirmationRotationDifference <
+        25;
 
 
-    if (confirmsJump) {
+    if (
+      confirmsJump
+    ) {
 
       this.pendingJumpFrames++;
+
+
+      this.pendingJumpPosition.lerp(
+        position,
+        0.5
+      );
+
+
+      const q =
+        quaternion.clone();
+
+
+      if (
+        this.pendingJumpQuaternion.dot(q) < 0
+      ) {
+
+        q.x *= -1;
+        q.y *= -1;
+        q.z *= -1;
+        q.w *= -1;
+
+      }
+
+
+      this.pendingJumpQuaternion.slerp(
+        q,
+        0.5
+      );
 
 
       if (
@@ -1224,6 +1146,11 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
+    /*
+       Der Sprung wurde nicht bestätigt.
+       Neue Messung wird neuer Prüfwert.
+    */
+
     this.pendingJumpPosition.copy(
       position
     );
@@ -1239,13 +1166,18 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
+  /* ========================================================
+     HAUPTSCHLEIFE
+     ======================================================== */
+
   tick: function() {
 
     const now =
       performance.now();
 
 
-    const rawCandidates = [];
+    let candidates = [];
 
 
     for (
@@ -1254,94 +1186,28 @@ AFRAME.registerComponent("cube-tracker", {
       i++
     ) {
 
-      if (!this.visible[i]) {
+      if (
+        !this.visible[i]
+      ) {
 
-        this.wasVisible[i] = false;
         continue;
 
       }
 
 
-      const candidate =
-        this.getRawCubeCandidate(i);
-
-
-      /*
-         ====================================================
-         MARKER IST NEU AUFGETAUCHT
-         ====================================================
-      */
-
-      if (!this.wasVisible[i]) {
-
-        this.transitionFrames[i] = 1;
-
-        /*
-           Nur dann automatisch kalibrieren,
-           wenn bereits eine stabile Würfelpose existiert.
-
-           Der neu auftauchende Marker wird also an die
-           bestehende Pose angeschlossen.
-        */
-
-        if (this.hasPose) {
-
-          this.calibrateTransitionMarker(
-            candidate
-          );
-
-        }
-
-      }
-
-      else if (
-        this.transitionFrames[i] > 0
-        &&
-        this.transitionFrames[i] <
-          this.transitionCalibrationFrames
-      ) {
-
-        this.transitionFrames[i]++;
-
-
-        /*
-           Während der kurzen Überlappungsphase darf
-           die Übergabekorrektur noch etwas nachlernen.
-        */
-
-        if (this.hasPose) {
-
-          this.calibrateTransitionMarker(
-            candidate
-          );
-
-        }
-
-      }
-
-
-      this.wasVisible[i] = true;
-
-
-      /*
-         Jetzt erst die gelernte Korrektur anwenden.
-      */
-
-      rawCandidates.push(
-        this.applyMarkerCorrection(
-          candidate
-        )
+      candidates.push(
+        this.getCubeCandidate(i)
       );
 
     }
 
 
     /* ======================================================
-       KEIN MARKER
+       KEIN MARKER SICHTBAR
        ====================================================== */
 
     if (
-      rawCandidates.length === 0
+      candidates.length === 0
     ) {
 
       const elapsed =
@@ -1377,32 +1243,34 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
-    this.lastSeenTime = now;
+    this.lastSeenTime =
+      now;
 
 
-    rawCandidates.sort(
+    candidates.sort(
       (a,b) =>
         b.weight - a.weight
     );
 
 
     const originalCandidateCount =
-      rawCandidates.length;
+      candidates.length;
 
 
     /* ======================================================
-       FRONTality-FILTER AUS 4e-3
+       SCHRÄGE MARKER ABWERTEN
        ====================================================== */
 
     const bestWeight =
-      rawCandidates[0].weight;
+      candidates[0].weight;
 
 
     let useful =
-      rawCandidates.filter(
+      candidates.filter(
         candidate =>
-          candidate.weight
-          >=
+
+          candidate.weight >=
+
           Math.max(
             0.08,
             bestWeight * 0.20
@@ -1415,14 +1283,14 @@ AFRAME.registerComponent("cube-tracker", {
     ) {
 
       useful = [
-        rawCandidates[0]
+        candidates[0]
       ];
 
     }
 
 
     /* ======================================================
-       AUSREISSERFILTER
+       AUSREISSER ENTFERNEN
        ====================================================== */
 
     useful =
@@ -1432,7 +1300,7 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     /* ======================================================
-       FUSION
+       GEMEINSAME WÜRFELPOSE
        ====================================================== */
 
     const fusedPosition =
@@ -1458,18 +1326,27 @@ AFRAME.registerComponent("cube-tracker", {
       );
 
 
-    if (!poseAccepted) {
+    if (
+      !poseAccepted
+    ) {
 
       this.el.object3D.visible =
         this.hasPose;
 
 
+      const markerText =
+        useful
+          .map(
+            candidate =>
+              candidate.index
+          )
+          .join(",");
+
+
       this.info.textContent =
         "Würfel: "
         +
-        useful
-          .map(c => c.index)
-          .join(",")
+        markerText
         +
         " | Sprung abgefangen";
 
@@ -1482,18 +1359,24 @@ AFRAME.registerComponent("cube-tracker", {
     /* ======================================================
        POSE ÜBERNEHMEN
 
-       Bewährte Werte aus 4e-3.
+       Werte aus 4e-3:
+       Position 0.55
+       Rotation 0.78
        ====================================================== */
 
-    if (!this.hasPose) {
+    if (
+      !this.hasPose
+    ) {
 
       this.currentPosition.copy(
         fusedPosition
       );
 
+
       this.currentQuaternion.copy(
         fusedQuaternion
       );
+
 
       this.hasPose = true;
 
@@ -1531,6 +1414,13 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
+    /*
+       Das Molekül sitzt IMMER im Ursprung
+       des cubeRoot.
+
+       Nur cubeRoot wird bewegt.
+    */
+
     this.el.object3D.position.copy(
       this.currentPosition
     );
@@ -1559,22 +1449,6 @@ AFRAME.registerComponent("cube-tracker", {
         .join(",");
 
 
-    const transitionText =
-      useful.some(
-        candidate =>
-          this.transitionFrames[
-            candidate.index
-          ] > 0
-          &&
-          this.transitionFrames[
-            candidate.index
-          ] <
-          this.transitionCalibrationFrames
-      )
-        ? " | Übergabe"
-        : "";
-
-
     this.info.textContent =
       "Würfel: "
       +
@@ -1582,13 +1456,12 @@ AFRAME.registerComponent("cube-tracker", {
       +
       " | sichtbar: "
       +
-      originalCandidateCount
-      +
-      transitionText;
+      originalCandidateCount;
 
   }
 
 });
+
 
 
 /* ==========================================================
@@ -1630,6 +1503,7 @@ let arStarted = false;
 let cameraOptimized = false;
 
 
+
 function isMobileDevice() {
 
   return (
@@ -1654,6 +1528,7 @@ function isMobileDevice() {
 }
 
 
+
 function isLandscape() {
 
   return (
@@ -1664,9 +1539,12 @@ function isLandscape() {
 }
 
 
+
 function updateStartScreen() {
 
-  if (!isMobileDevice()) {
+  if (
+    !isMobileDevice()
+  ) {
 
     startScreen.classList.remove(
       "visible"
@@ -1677,7 +1555,9 @@ function updateStartScreen() {
   }
 
 
-  if (arStarted) {
+  if (
+    arStarted
+  ) {
 
     startScreen.classList.remove(
       "visible"
@@ -1693,7 +1573,9 @@ function updateStartScreen() {
   );
 
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     rotateIcon.style.display =
       "block";
@@ -1728,13 +1610,16 @@ function updateStartScreen() {
 }
 
 
+
 /* ==========================================================
    AR-SZENE
    ========================================================== */
 
 function createARScene() {
 
-  if (arStarted) return;
+  if (
+    arStarted
+  ) return;
 
 
   arStarted = true;
@@ -1866,13 +1751,16 @@ function createARScene() {
 }
 
 
+
 /* ==========================================================
    MOBILER START
    ========================================================== */
 
 async function startMobileAR() {
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     updateStartScreen();
 
@@ -1887,7 +1775,9 @@ async function startMobileAR() {
       document.documentElement;
 
 
-    if (element.requestFullscreen) {
+    if (
+      element.requestFullscreen
+    ) {
 
       await element.requestFullscreen();
 
@@ -1946,6 +1836,7 @@ async function startMobileAR() {
 }
 
 
+
 /* ==========================================================
    VIDEO
    ========================================================== */
@@ -1967,6 +1858,7 @@ function getARVideo() {
   );
 
 }
+
 
 
 /* ==========================================================
@@ -1994,7 +1886,9 @@ function enforceLayers() {
     );
 
 
-  if (host) {
+  if (
+    host
+  ) {
 
     host.style.setProperty(
       "position",
@@ -2011,7 +1905,9 @@ function enforceLayers() {
   }
 
 
-  if (scene) {
+  if (
+    scene
+  ) {
 
     scene.style.setProperty(
       "position",
@@ -2040,7 +1936,9 @@ function enforceLayers() {
   }
 
 
-  if (video) {
+  if (
+    video
+  ) {
 
     video.style.setProperty(
       "position",
@@ -2081,7 +1979,9 @@ function enforceLayers() {
   }
 
 
-  if (canvas) {
+  if (
+    canvas
+  ) {
 
     canvas.style.setProperty(
       "position",
@@ -2124,6 +2024,7 @@ function enforceLayers() {
 }
 
 
+
 /* ==========================================================
    VIDEO / CANVAS SYNCHRONISIEREN
    ========================================================== */
@@ -2139,7 +2040,10 @@ function synchronizeVisualGeometry() {
     );
 
 
-  if (!video || !canvas) return;
+  if (
+    !video ||
+    !canvas
+  ) return;
 
 
   const rect =
@@ -2191,9 +2095,9 @@ function synchronizeVisualGeometry() {
 }
 
 
+
 /* ==========================================================
    SMARTPHONE-KAMERA
-   640 × 480 / 4:3 bleibt erhalten.
    ========================================================== */
 
 async function optimizeMobileCamera() {
@@ -2204,7 +2108,9 @@ async function optimizeMobileCamera() {
   ) return;
 
 
-  if (!isMobileDevice()) {
+  if (
+    !isMobileDevice()
+  ) {
 
     cameraOptimized = true;
 
@@ -2227,7 +2133,9 @@ async function optimizeMobileCamera() {
     video.srcObject.getVideoTracks();
 
 
-  if (!tracks.length) return;
+  if (
+    !tracks.length
+  ) return;
 
 
   const track =
@@ -2321,13 +2229,16 @@ async function optimizeMobileCamera() {
 }
 
 
+
 /* ==========================================================
    ORIENTIERUNGSWECHSEL
    ========================================================== */
 
 function orientationChanged() {
 
-  if (!arStarted) {
+  if (
+    !arStarted
+  ) {
 
     setTimeout(
       updateStartScreen,
@@ -2339,10 +2250,14 @@ function orientationChanged() {
   }
 
 
-  if (!isMobileDevice()) return;
+  if (
+    !isMobileDevice()
+  ) return;
 
 
-  if (!isLandscape()) {
+  if (
+    !isLandscape()
+  ) {
 
     const video =
       getARVideo();
@@ -2356,7 +2271,8 @@ function orientationChanged() {
       video.srcObject
         .getTracks()
         .forEach(
-          track => track.stop()
+          track =>
+            track.stop()
         );
 
     }
@@ -2367,6 +2283,7 @@ function orientationChanged() {
   }
 
 }
+
 
 
 /* ==========================================================
@@ -2401,7 +2318,9 @@ window.addEventListener(
 
   function() {
 
-    if (!arStarted) {
+    if (
+      !arStarted
+    ) {
 
       setTimeout(
         updateStartScreen,
@@ -2415,11 +2334,14 @@ window.addEventListener(
 );
 
 
+
 /* ==========================================================
    START
    ========================================================== */
 
-if (isMobileDevice()) {
+if (
+  isMobileDevice()
+) {
 
   updateStartScreen();
 
@@ -2432,6 +2354,7 @@ else {
 }
 
 
+
 /* ==========================================================
    LAUFENDE PFLEGE
    ========================================================== */
@@ -2440,10 +2363,14 @@ setInterval(
 
   function() {
 
-    if (!arStarted) return;
+    if (
+      !arStarted
+    ) return;
 
     enforceLayers();
+
     optimizeMobileCamera();
+
     synchronizeVisualGeometry();
 
   },
