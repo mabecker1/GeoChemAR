@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4d-1 – gemeinsamer Würfel</title>
+  <title>GeoChemAR – Würfelkalibrierung</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -102,7 +102,6 @@
     }
 
     #startTitle {
-      display: block;
       margin-bottom: 12px;
       font-size: 23px;
       font-weight: bold;
@@ -128,334 +127,145 @@
       color: #111;
     }
 
+
+    /* ======================================================
+       Kalibrierungsanzeige
+       ====================================================== */
+
+    #calibrationPanel {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 1000;
+
+      box-sizing: border-box;
+      width: 310px;
+      max-width: calc(100vw - 24px);
+
+      padding: 12px 14px;
+
+      border-radius: 10px;
+
+      background: rgba(0, 0, 0, 0.72);
+      color: white;
+
+      font-size: 13px;
+      line-height: 1.35;
+
+      pointer-events: auto;
+    }
+
+    #calibrationTitle {
+      margin-bottom: 7px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    #instruction {
+      margin-bottom: 8px;
+    }
+
+    #visibleMarkers {
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+
+    #progress {
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    #measurement {
+      margin-top: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+
+    #calibrationButton {
+      display: none;
+
+      margin-top: 8px;
+      padding: 8px 12px;
+
+      border: 0;
+      border-radius: 7px;
+
+      background: white;
+      color: #111;
+
+      font-weight: bold;
+      cursor: pointer;
+    }
+
   </style>
 </head>
 
 <body>
 
-<div id="sceneHost"></div>
+  <div id="sceneHost"></div>
 
-<div id="startScreen">
 
-  <div id="startContent">
+  <div id="startScreen">
 
-    <div id="rotateIcon">
-      ↻
+    <div id="startContent">
+
+      <div id="rotateIcon">
+        ↻
+      </div>
+
+      <div id="startTitle">
+        Bitte Smartphone drehen
+      </div>
+
+      <div id="startText">
+        GeoChemAR wird im Querformat verwendet.
+      </div>
+
+      <button id="startButton">
+        AR starten
+      </button>
+
     </div>
-
-    <div id="startTitle">
-      Bitte Smartphone drehen
-    </div>
-
-    <div id="startText">
-      GeoChemAR wird im Querformat verwendet.
-    </div>
-
-    <button id="startButton">
-      AR starten
-    </button>
 
   </div>
 
-</div>
+
+  <div id="calibrationPanel">
+
+    <div id="calibrationTitle">
+      Würfelkalibrierung
+    </div>
+
+    <div id="instruction">
+      AR wird vorbereitet …
+    </div>
+
+    <div id="visibleMarkers">
+      Sichtbar: –
+    </div>
+
+    <div id="progress">
+      Messung: 0 / 5
+    </div>
+
+    <button id="calibrationButton">
+      Dieses Seitenpaar messen
+    </button>
+
+    <div id="measurement"></div>
+
+  </div>
 
 
 <script>
 
 
 /* ==========================================================
-   METHAN
+   KALIBRIERUNG
    ========================================================== */
 
-AFRAME.registerComponent("methane-model", {
-
-  init: function () {
-
-    const THREE = AFRAME.THREE;
-
-    const group =
-      new THREE.Group();
-
-
-    const carbonRadius =
-      0.22;
-
-    const hydrogenRadius =
-      0.14;
-
-    const hydrogenDistance =
-      0.72;
-
-    const bondRadius =
-      0.040;
-
-
-    const carbonMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0x202020,
-        roughness: 0.55,
-        metalness: 0
-
-      });
-
-
-    const hydrogenMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0xffffff,
-        roughness: 0.45,
-        metalness: 0
-
-      });
-
-
-    const bondMaterial =
-      new THREE.MeshStandardMaterial({
-
-        color: 0xb8bec7,
-        roughness: 0.50,
-        metalness: 0
-
-      });
-
-
-
-    const carbonGeometry =
-      new THREE.SphereGeometry(
-
-        carbonRadius,
-        48,
-        32
-
-      );
-
-
-    const carbon =
-      new THREE.Mesh(
-
-        carbonGeometry,
-        carbonMaterial
-
-      );
-
-
-    group.add(
-      carbon
-    );
-
-
-
-    const hydrogenGeometry =
-      new THREE.SphereGeometry(
-
-        hydrogenRadius,
-        40,
-        28
-
-      );
-
-
-    const directions = [
-
-      new THREE.Vector3(
-        1,
-        1,
-        1
-      ),
-
-      new THREE.Vector3(
-        1,
-        -1,
-        -1
-      ),
-
-      new THREE.Vector3(
-        -1,
-        1,
-        -1
-      ),
-
-      new THREE.Vector3(
-        -1,
-        -1,
-        1
-      )
-
-    ];
-
-
-    directions.forEach(
-
-      direction =>
-        direction.normalize()
-
-    );
-
-
-    const yAxis =
-      new THREE.Vector3(
-        0,
-        1,
-        0
-      );
-
-
-    directions.forEach(
-      function (direction) {
-
-
-        const hydrogen =
-          new THREE.Mesh(
-
-            hydrogenGeometry,
-            hydrogenMaterial
-
-          );
-
-
-        hydrogen.position.copy(
-
-          direction
-            .clone()
-            .multiplyScalar(
-              hydrogenDistance
-            )
-
-        );
-
-
-        group.add(
-          hydrogen
-        );
-
-
-
-        /*
-         * Stab exakt zwischen den beiden
-         * Kugeloberflächen.
-         */
-
-        const startDistance =
-          carbonRadius;
-
-
-        const endDistance =
-          hydrogenDistance
-          -
-          hydrogenRadius;
-
-
-        const startPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              startDistance
-            );
-
-
-        const endPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              endDistance
-            );
-
-
-        const bondVector =
-
-          endPoint
-            .clone()
-            .sub(
-              startPoint
-            );
-
-
-        const bondLength =
-          bondVector.length();
-
-
-        const bondGeometry =
-          new THREE.CylinderGeometry(
-
-            bondRadius,
-            bondRadius,
-            bondLength,
-            32,
-            1,
-            false
-
-          );
-
-
-        const bond =
-          new THREE.Mesh(
-
-            bondGeometry,
-            bondMaterial
-
-          );
-
-
-        bond.position.copy(
-
-          startPoint
-            .clone()
-            .add(
-              endPoint
-            )
-            .multiplyScalar(
-              0.5
-            )
-
-        );
-
-
-        bond.quaternion.setFromUnitVectors(
-
-          yAxis,
-          direction
-
-        );
-
-
-        group.add(
-          bond
-        );
-
-      }
-    );
-
-
-    this.el.setObject3D(
-
-      "methaneMesh",
-      group
-
-    );
-
-  },
-
-
-  remove: function () {
-
-    this.el.removeObject3D(
-      "methaneMesh"
-    );
-
-  }
-
-});
-
-
-
-/* ==========================================================
-   GEMEINSAME WÜRFELPOSE
-   ========================================================== */
-
-AFRAME.registerComponent("cube-tracker", {
+AFRAME.registerComponent("cube-calibration", {
 
   init: function () {
 
@@ -465,7 +275,7 @@ AFRAME.registerComponent("cube-tracker", {
 
     this.markers = [];
 
-    this.detected = [
+    this.visible = [
       false,
       false,
       false,
@@ -475,208 +285,72 @@ AFRAME.registerComponent("cube-tracker", {
     ];
 
 
-    this.activeMarker =
-      -1;
-
-
-    this.cubeMatrix =
-      new THREE.Matrix4();
-
-
-    this.tempMatrix =
-      new THREE.Matrix4();
-
-
-    this.inverseFaceMatrix =
-      new THREE.Matrix4();
-
-
     /*
-     * Abstand Markerfläche -> Würfelzentrum.
-     *
-     * AR.js verwendet die Markerbreite als Einheit.
-     * Bei einem Würfel, dessen Seitenbreite der
-     * Markerbreite entspricht, liegt das Zentrum
-     * 0.5 Einheiten hinter der Markerfläche.
+     * Diese fünf Verbindungen reichen aus,
+     * um alle sechs Würfelseiten miteinander
+     * zu verbinden.
      */
 
-    const h =
-      0.5;
+    this.pairs = [
+
+      [1, 0],
+      [1, 2],
+      [1, 4],
+      [2, 3],
+      [1, 5]
+
+    ];
 
 
-
-    /* ======================================================
-       MARKER -> WÜRFEL
-
-       Tatsächlicher gebauter Würfel:
-
-                    0
-                    |
-              4 — 1 — 2 — 3
-                    |
-                    5
-
-       Die Matrizen beschreiben die Pose jeder Markerfläche
-       relativ zum gemeinsamen Würfelzentrum.
-       ====================================================== */
-
-    this.faceMatrices = [];
+    this.currentPair =
+      0;
 
 
-    function makeFaceMatrix(
-      px,
-      py,
-      pz,
-      rx,
-      ry,
-      rz
-    ) {
-
-      const position =
-        new THREE.Vector3(
-          px,
-          py,
-          pz
-        );
+    this.samples =
+      [];
 
 
-      const euler =
-        new THREE.Euler(
-
-          THREE.MathUtils.degToRad(rx),
-
-          THREE.MathUtils.degToRad(ry),
-
-          THREE.MathUtils.degToRad(rz),
-
-          "XYZ"
-
-        );
+    this.results =
+      [];
 
 
-      const quaternion =
-        new THREE.Quaternion()
-          .setFromEuler(
-            euler
-          );
+    this.sampleCount =
+      40;
 
 
-      const scale =
-        new THREE.Vector3(
-          1,
-          1,
-          1
-        );
+    this.collecting =
+      false;
 
 
-      return new THREE.Matrix4()
-        .compose(
-          position,
-          quaternion,
-          scale
-        );
-
-    }
-
-
-
-    /*
-     * Marker 1 = Vorderseite
-     *
-     * Dies ist unser Referenzmarker.
-     */
-
-    this.faceMatrices[1] =
-      makeFaceMatrix(
-        0,
-        0,
-        h,
-        0,
-        0,
-        0
+    this.instruction =
+      document.getElementById(
+        "instruction"
       );
 
 
-    /*
-     * Marker 2 = rechte Seite
-     */
-
-    this.faceMatrices[2] =
-      makeFaceMatrix(
-        h,
-        0,
-        0,
-        0,
-        90,
-        0
+    this.visibleMarkers =
+      document.getElementById(
+        "visibleMarkers"
       );
 
 
-    /*
-     * Marker 3 = Rückseite
-     */
-
-    this.faceMatrices[3] =
-      makeFaceMatrix(
-        0,
-        0,
-        -h,
-        0,
-        180,
-        0
+    this.progress =
+      document.getElementById(
+        "progress"
       );
 
 
-    /*
-     * Marker 4 = linke Seite
-     */
-
-    this.faceMatrices[4] =
-      makeFaceMatrix(
-        -h,
-        0,
-        0,
-        0,
-        -90,
-        0
+    this.button =
+      document.getElementById(
+        "calibrationButton"
       );
 
 
-    /*
-     * Marker 0 = Oberseite
-     */
-
-    this.faceMatrices[0] =
-      makeFaceMatrix(
-        0,
-        h,
-        0,
-        -90,
-        0,
-        0
+    this.measurement =
+      document.getElementById(
+        "measurement"
       );
 
-
-    /*
-     * Marker 5 = Unterseite
-     */
-
-    this.faceMatrices[5] =
-      makeFaceMatrix(
-        0,
-        -h,
-        0,
-        90,
-        0,
-        0
-      );
-
-
-
-    /*
-     * Marker suchen und echte Found/Lost-Ereignisse
-     * speichern.
-     */
 
     for (
       let i = 0;
@@ -700,23 +374,8 @@ AFRAME.registerComponent("cube-tracker", {
 
         () => {
 
-          this.detected[i] =
+          this.visible[i] =
             true;
-
-
-          /*
-           * Wenn bisher kein Marker aktiv war,
-           * nehmen wir diesen.
-           */
-
-          if (
-            this.activeMarker === -1
-          ) {
-
-            this.activeMarker =
-              i;
-
-          }
 
         }
 
@@ -729,44 +388,8 @@ AFRAME.registerComponent("cube-tracker", {
 
         () => {
 
-          this.detected[i] =
+          this.visible[i] =
             false;
-
-
-          /*
-           * War dies unser aktiver Marker,
-           * suchen wir einen anderen tatsächlich
-           * sichtbaren Marker.
-           */
-
-          if (
-            this.activeMarker === i
-          ) {
-
-            this.activeMarker =
-              -1;
-
-
-            for (
-              let j = 0;
-              j < 6;
-              j++
-            ) {
-
-              if (
-                this.detected[j]
-              ) {
-
-                this.activeMarker =
-                  j;
-
-                break;
-
-              }
-
-            }
-
-          }
 
         }
 
@@ -775,126 +398,732 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
+    this.button.addEventListener(
 
-    this.el.object3D.visible =
-      false;
+      "click",
+
+      () => {
+
+        if (
+          this.collecting
+        ) {
+
+          return;
+
+        }
+
+
+        const pair =
+          this.pairs[
+            this.currentPair
+          ];
+
+
+        if (
+          !pair
+        ) {
+
+          return;
+
+        }
+
+
+        if (
+          !this.visible[pair[0]]
+          ||
+          !this.visible[pair[1]]
+        ) {
+
+          return;
+
+        }
+
+
+        this.samples =
+          [];
+
+
+        this.collecting =
+          true;
+
+
+        this.button.style.display =
+          "none";
+
+
+        this.instruction.textContent =
+          "Würfel ruhig halten – Messung läuft …";
+
+      }
+
+    );
+
+
+    this.updateUI();
 
   },
 
 
 
-  tick: function () {
+  /* ======================================================
+     Relative Pose A -> B messen
+     ====================================================== */
+
+  getRelativeMatrix: function (
+    a,
+    b
+  ) {
 
     const THREE =
       AFRAME.THREE;
 
 
-    if (
-      this.activeMarker < 0
-    ) {
-
-      this.el.object3D.visible =
-        false;
-
-      return;
-
-    }
+    const markerA =
+      this.markers[a];
 
 
-    const marker =
-      this.markers[
-        this.activeMarker
-      ];
+    const markerB =
+      this.markers[b];
 
 
-    if (
-      !marker
-      ||
-      !this.detected[
-        this.activeMarker
-      ]
-    ) {
-
-      this.el.object3D.visible =
-        false;
-
-      return;
-
-    }
+    markerA.object3D.updateMatrixWorld(
+      true
+    );
 
 
-
-    /*
-     * Marker-Weltmatrix aktualisieren.
-     */
-
-    marker.object3D
-      .updateMatrixWorld(
-        true
-      );
+    markerB.object3D.updateMatrixWorld(
+      true
+    );
 
 
-    /*
-     * faceMatrix:
-     *
-     * Würfelzentrum -> Markerfläche
-     *
-     * Gesucht:
-     *
-     * Markerfläche -> Würfelzentrum
-     *
-     * Deshalb inverse Matrix.
-     */
-
-    this.inverseFaceMatrix
-      .copy(
-
-        this.faceMatrices[
-          this.activeMarker
-        ]
-
-      )
-      .invert();
+    const inverseA =
+      new THREE.Matrix4()
+        .copy(
+          markerA.object3D.matrixWorld
+        )
+        .invert();
 
 
-
-    /*
-     * Welt -> Marker
-     * kombiniert mit
-     * Marker -> Würfelzentrum
-     *
-     * ergibt die Pose des Würfelzentrums.
-     */
-
-    this.cubeMatrix
+    return new THREE.Matrix4()
       .multiplyMatrices(
 
-        marker.object3D.matrixWorld,
+        inverseA,
 
-        this.inverseFaceMatrix
+        markerB.object3D.matrixWorld
 
       );
 
+  },
 
 
-    /*
-     * Da das gemeinsame Molekül direkt in der Szene
-     * liegt, können wir die Matrix zerlegen.
-     */
 
-    this.cubeMatrix.decompose(
+  /* ======================================================
+     Messwerte mitteln
+     ====================================================== */
 
-      this.el.object3D.position,
+  averageSamples: function () {
 
-      this.el.object3D.quaternion,
+    const THREE =
+      AFRAME.THREE;
 
-      this.el.object3D.scale
+
+    const avgPosition =
+      new THREE.Vector3();
+
+
+    const quaternions =
+      [];
+
+
+    for (
+      const matrix of this.samples
+    ) {
+
+      const p =
+        new THREE.Vector3();
+
+
+      const q =
+        new THREE.Quaternion();
+
+
+      const s =
+        new THREE.Vector3();
+
+
+      matrix.decompose(
+        p,
+        q,
+        s
+      );
+
+
+      avgPosition.add(
+        p
+      );
+
+
+      quaternions.push(
+        q
+      );
+
+    }
+
+
+    avgPosition.multiplyScalar(
+
+      1 /
+      this.samples.length
 
     );
 
 
-    this.el.object3D.visible =
-      true;
+
+    /*
+     * Quaternion-Mittelung:
+     * schrittweises Slerp.
+     */
+
+    const avgQuaternion =
+      quaternions[0].clone();
+
+
+    for (
+      let i = 1;
+      i < quaternions.length;
+      i++
+    ) {
+
+      let q =
+        quaternions[i].clone();
+
+
+      /*
+       * q und -q beschreiben dieselbe Rotation.
+       * Vor dem Mitteln gleiche Hemisphäre wählen.
+       */
+
+      if (
+        avgQuaternion.dot(q) < 0
+      ) {
+
+        q.set(
+          -q.x,
+          -q.y,
+          -q.z,
+          -q.w
+        );
+
+      }
+
+
+      avgQuaternion.slerp(
+
+        q,
+
+        1 / (i + 1)
+
+      );
+
+    }
+
+
+    avgQuaternion.normalize();
+
+
+    const scale =
+      new THREE.Vector3(
+        1,
+        1,
+        1
+      );
+
+
+    const result =
+      new THREE.Matrix4()
+        .compose(
+
+          avgPosition,
+          avgQuaternion,
+          scale
+
+        );
+
+
+    return {
+
+      matrix: result,
+
+      position: avgPosition,
+
+      quaternion: avgQuaternion
+
+    };
+
+  },
+
+
+
+  /* ======================================================
+     UI
+     ====================================================== */
+
+  updateUI: function () {
+
+    const visibleIDs =
+      [];
+
+
+    for (
+      let i = 0;
+      i < 6;
+      i++
+    ) {
+
+      if (
+        this.visible[i]
+      ) {
+
+        visibleIDs.push(
+          i
+        );
+
+      }
+
+    }
+
+
+    this.visibleMarkers.textContent =
+
+      "Sichtbar: "
+      +
+      (
+        visibleIDs.length
+        ?
+        visibleIDs.join(", ")
+        :
+        "–"
+      );
+
+
+    this.progress.textContent =
+
+      "Messung: "
+      +
+      this.currentPair
+      +
+      " / "
+      +
+      this.pairs.length;
+
+
+    if (
+      this.currentPair >=
+      this.pairs.length
+    ) {
+
+      this.instruction.textContent =
+        "Kalibrierung abgeschlossen.";
+
+
+      this.button.style.display =
+        "none";
+
+
+      return;
+
+    }
+
+
+    const pair =
+      this.pairs[
+        this.currentPair
+      ];
+
+
+    if (
+      this.collecting
+    ) {
+
+      return;
+
+    }
+
+
+    this.instruction.textContent =
+
+      "Bitte Marker "
+      +
+      pair[0]
+      +
+      " und "
+      +
+      pair[1]
+      +
+      " gleichzeitig gut sichtbar halten.";
+
+
+    if (
+      this.visible[pair[0]]
+      &&
+      this.visible[pair[1]]
+    ) {
+
+      this.button.style.display =
+        "block";
+
+
+      this.button.textContent =
+
+        "Marker "
+        +
+        pair[0]
+        +
+        " ↔ "
+        +
+        pair[1]
+        +
+        " messen";
+
+    }
+
+    else {
+
+      this.button.style.display =
+        "none";
+
+    }
+
+  },
+
+
+
+  /* ======================================================
+     Tick
+     ====================================================== */
+
+  tick: function () {
+
+    this.updateUI();
+
+
+    if (
+      !this.collecting
+    ) {
+
+      return;
+
+    }
+
+
+    const pair =
+      this.pairs[
+        this.currentPair
+      ];
+
+
+    if (
+      !pair
+    ) {
+
+      this.collecting =
+        false;
+
+      return;
+
+    }
+
+
+    /*
+     * Sobald während der Messung einer der Marker
+     * verloren geht, brechen wir die Messung ab.
+     */
+
+    if (
+      !this.visible[pair[0]]
+      ||
+      !this.visible[pair[1]]
+    ) {
+
+      this.collecting =
+        false;
+
+
+      this.samples =
+        [];
+
+
+      this.instruction.textContent =
+
+        "Messung abgebrochen – beide Marker müssen sichtbar bleiben.";
+
+
+      return;
+
+    }
+
+
+    const matrix =
+      this.getRelativeMatrix(
+
+        pair[0],
+        pair[1]
+
+      );
+
+
+    this.samples.push(
+      matrix
+    );
+
+
+    this.instruction.textContent =
+
+      "Würfel ruhig halten – "
+      +
+      this.samples.length
+      +
+      " / "
+      +
+      this.sampleCount;
+
+
+    if (
+      this.samples.length <
+      this.sampleCount
+    ) {
+
+      return;
+
+    }
+
+
+
+    /* ====================================================
+       Messung abgeschlossen
+       ==================================================== */
+
+    const result =
+      this.averageSamples();
+
+
+    this.results.push({
+
+      a: pair[0],
+
+      b: pair[1],
+
+      matrix:
+        result.matrix.clone(),
+
+      position:
+        result.position.clone(),
+
+      quaternion:
+        result.quaternion.clone()
+
+    });
+
+
+    const p =
+      result.position;
+
+
+    const q =
+      result.quaternion;
+
+
+    this.measurement.textContent +=
+
+      "\n"
+      +
+      pair[0]
+      +
+      " -> "
+      +
+      pair[1]
+      +
+      "\n"
+      +
+      "P: "
+      +
+      p.x.toFixed(4)
+      +
+      ", "
+      +
+      p.y.toFixed(4)
+      +
+      ", "
+      +
+      p.z.toFixed(4)
+      +
+      "\n"
+      +
+      "Q: "
+      +
+      q.x.toFixed(5)
+      +
+      ", "
+      +
+      q.y.toFixed(5)
+      +
+      ", "
+      +
+      q.z.toFixed(5)
+      +
+      ", "
+      +
+      q.w.toFixed(5)
+      +
+      "\n";
+
+
+    console.log(
+
+      "GeoChemAR calibration",
+
+      pair[0],
+      "->",
+      pair[1],
+
+      {
+
+        position: [
+          p.x,
+          p.y,
+          p.z
+        ],
+
+        quaternion: [
+          q.x,
+          q.y,
+          q.z,
+          q.w
+        ],
+
+        matrix:
+          result.matrix.toArray()
+
+      }
+
+    );
+
+
+    this.collecting =
+      false;
+
+
+    this.samples =
+      [];
+
+
+    this.currentPair++;
+
+
+    if (
+      this.currentPair >=
+      this.pairs.length
+    ) {
+
+      this.showFinalResult();
+
+    }
+
+  },
+
+
+
+  /* ======================================================
+     Gesamtergebnis
+     ====================================================== */
+
+  showFinalResult: function () {
+
+    let text =
+
+      "\n=== KALIBRIERUNG FERTIG ===\n";
+
+
+    for (
+      const r of this.results
+    ) {
+
+      text +=
+
+        "\n"
+        +
+        r.a
+        +
+        " -> "
+        +
+        r.b
+        +
+        "\n";
+
+
+      text +=
+
+        "P: "
+        +
+        r.position.x.toFixed(4)
+        +
+        ", "
+        +
+        r.position.y.toFixed(4)
+        +
+        ", "
+        +
+        r.position.z.toFixed(4)
+        +
+        "\n";
+
+
+      text +=
+
+        "Q: "
+        +
+        r.quaternion.x.toFixed(5)
+        +
+        ", "
+        +
+        r.quaternion.y.toFixed(5)
+        +
+        ", "
+        +
+        r.quaternion.z.toFixed(5)
+        +
+        ", "
+        +
+        r.quaternion.w.toFixed(5)
+        +
+        "\n";
+
+    }
+
+
+    this.measurement.textContent =
+      text;
+
+
+    this.instruction.textContent =
+
+      "Fertig. Bitte die unten angezeigten Messwerte an ChatGPT schicken.";
+
+
+    this.progress.textContent =
+
+      "Messung: "
+      +
+      this.pairs.length
+      +
+      " / "
+      +
+      this.pairs.length;
+
+
+    console.log(
+      text
+    );
 
   }
 
@@ -1115,11 +1344,6 @@ function createARScene() {
     >
 
 
-      <!-- ============================================
-           Die sechs Marker enthalten jetzt KEINE
-           Moleküle mehr.
-           ============================================ -->
-
       <a-marker
         id="marker0"
         type="barcode"
@@ -1187,63 +1411,10 @@ function createARScene() {
 
 
 
-      <!-- ============================================
-           EIN gemeinsames Würfelobjekt
-           ============================================ -->
+      <!-- Kalibrierung läuft auf einem unsichtbaren Entity -->
 
       <a-entity
-        id="cubeRoot"
-        cube-tracker
-      >
-
-        <!--
-          Molekül oberhalb des Würfels.
-
-          Das Würfelzentrum ist der Ursprung.
-          Die Oberseite liegt bei y = 0.5.
-
-          0.55 zusätzliche Einheiten ergeben ungefähr
-          denselben Abstand zur Oberfläche wie bisher.
-        -->
-
-        <a-entity
-
-          id="methane"
-
-          position="0 1.05 0"
-
-          methane-model
-
-        >
-        </a-entity>
-
-      </a-entity>
-
-
-
-      <a-entity
-
-        light="
-          type: ambient;
-          intensity: 1.0;
-          color: #ffffff;
-        "
-
-      >
-      </a-entity>
-
-
-      <a-entity
-
-        light="
-          type: directional;
-          intensity: 0.8;
-          color: #ffffff;
-        "
-
-        position="1 2 1"
-
-      >
+        cube-calibration>
       </a-entity>
 
 
@@ -1317,11 +1488,9 @@ async function startMobileAR() {
   try {
 
     if (
-
       screen.orientation
       &&
       screen.orientation.lock
-
     ) {
 
       await screen.orientation.lock(
@@ -1406,16 +1575,13 @@ function enforceLayers() {
     );
 
 
-  if (
-    host
-  ) {
+  if (host) {
 
     host.style.setProperty(
       "position",
       "fixed",
       "important"
     );
-
 
     host.style.setProperty(
       "z-index",
@@ -1426,9 +1592,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    scene
-  ) {
+  if (scene) {
 
     scene.style.setProperty(
       "position",
@@ -1436,20 +1600,17 @@ function enforceLayers() {
       "important"
     );
 
-
     scene.style.setProperty(
       "z-index",
       "10",
       "important"
     );
 
-
     scene.style.setProperty(
       "visibility",
       "visible",
       "important"
     );
-
 
     scene.style.setProperty(
       "opacity",
@@ -1460,9 +1621,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    video
-  ) {
+  if (video) {
 
     video.style.setProperty(
       "position",
@@ -1470,13 +1629,11 @@ function enforceLayers() {
       "important"
     );
 
-
     video.style.setProperty(
       "z-index",
       "1",
       "important"
     );
-
 
     video.style.setProperty(
       "visibility",
@@ -1484,25 +1641,21 @@ function enforceLayers() {
       "important"
     );
 
-
     video.style.setProperty(
       "opacity",
       "1",
       "important"
     );
-
 
     video.setAttribute(
       "playsinline",
       ""
     );
 
-
     video.setAttribute(
       "webkit-playsinline",
       ""
     );
-
 
     video.muted =
       true;
@@ -1510,9 +1663,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    canvas
-  ) {
+  if (canvas) {
 
     canvas.style.setProperty(
       "position",
@@ -1520,13 +1671,11 @@ function enforceLayers() {
       "important"
     );
 
-
     canvas.style.setProperty(
       "z-index",
       "11",
       "important"
     );
-
 
     canvas.style.setProperty(
       "visibility",
@@ -1534,20 +1683,17 @@ function enforceLayers() {
       "important"
     );
 
-
     canvas.style.setProperty(
       "opacity",
       "1",
       "important"
     );
 
-
     canvas.style.setProperty(
       "display",
       "block",
       "important"
     );
-
 
     canvas.style.setProperty(
       "background",
@@ -1562,7 +1708,7 @@ function enforceLayers() {
 
 
 /* ==========================================================
-   VIDEO / CANVAS SYNCHRONISIEREN
+   VIDEO UND CANVAS SYNCHRONISIEREN
    ========================================================== */
 
 function synchronizeVisualGeometry() {
@@ -1649,21 +1795,14 @@ function synchronizeVisualGeometry() {
 
 
 /* ==========================================================
-   MOBILE KAMERAOPTIMIERUNG
+   SMARTPHONE-KAMERA
    ========================================================== */
 
 async function optimizeMobileCamera() {
 
   if (
     cameraOptimized
-  ) {
-
-    return;
-
-  }
-
-
-  if (
+    ||
     !arStarted
   ) {
 
@@ -1690,19 +1829,8 @@ async function optimizeMobileCamera() {
 
   if (
     !video
-  ) {
-
-    return;
-
-  }
-
-
-  const stream =
-    video.srcObject;
-
-
-  if (
-    !stream
+    ||
+    !video.srcObject
   ) {
 
     return;
@@ -1711,7 +1839,7 @@ async function optimizeMobileCamera() {
 
 
   const tracks =
-    stream.getVideoTracks();
+    video.srcObject.getVideoTracks();
 
 
   if (
@@ -1765,11 +1893,9 @@ async function optimizeMobileCamera() {
   try {
 
     if (
-
       track.getCapabilities
       &&
       track.applyConstraints
-
     ) {
 
       const capabilities =
@@ -1777,11 +1903,9 @@ async function optimizeMobileCamera() {
 
 
       if (
-
         capabilities.zoom
         &&
         capabilities.zoom.min !== undefined
-
       ) {
 
         const desiredZoom =
@@ -1871,20 +1995,16 @@ function orientationChanged() {
 
 
     if (
-
       video
       &&
       video.srcObject
-
     ) {
 
       video.srcObject
         .getTracks()
         .forEach(
-
           track =>
             track.stop()
-
         );
 
     }
@@ -1903,11 +2023,8 @@ function orientationChanged() {
    ========================================================== */
 
 startButton.addEventListener(
-
   "click",
-
   startMobileAR
-
 );
 
 
@@ -1918,11 +2035,8 @@ window.addEventListener(
   function () {
 
     setTimeout(
-
       orientationChanged,
-
       250
-
     );
 
   }
@@ -1941,11 +2055,8 @@ window.addEventListener(
     ) {
 
       setTimeout(
-
         updateStartScreen,
-
         150
-
       );
 
     }
