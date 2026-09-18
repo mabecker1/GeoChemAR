@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4e</title>
+  <title>GeoChemAR – Phase 4e-1</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -148,7 +148,7 @@
 <div id="sceneHost"></div>
 
 <div id="diagnostic">
-  Phase 4e<br>
+  Phase 4e-1<br>
   <span id="trackingInfo">Würfel: –</span>
 </div>
 
@@ -349,8 +349,7 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   PHASE 4e
-   WÜRFELSPEZIFISCHE MULTI-MARKER-POSE
+   WÜRFELTRACKER
    ========================================================== */
 
 AFRAME.registerComponent("cube-tracker", {
@@ -359,105 +358,66 @@ AFRAME.registerComponent("cube-tracker", {
 
     const THREE = AFRAME.THREE;
 
-    /*
-       Würfelkante: 45 mm
-       Markerbreite: 40 mm
-
-       22.5 / 40 = 0.5625
-    */
-
     const h = 0.5625;
     const s = Math.SQRT1_2;
 
 
     this.markers = [];
+
     this.visible = [
       false, false, false,
       false, false, false
     ];
 
 
-    /*
-       Exakte starre Würfelgeometrie.
-    */
-
     this.faces = [
 
       {
         position:
-          new THREE.Vector3(
-            0, 0, -h
-          ),
+          new THREE.Vector3(0, 0, -h),
 
         quaternion:
-          new THREE.Quaternion(
-            -s, 0, 0, s
-          )
+          new THREE.Quaternion(-s, 0, 0, s)
       },
-
 
       {
         position:
-          new THREE.Vector3(
-            0, h, 0
-          ),
+          new THREE.Vector3(0, h, 0),
 
         quaternion:
-          new THREE.Quaternion(
-            0, 0, 0, 1
-          )
+          new THREE.Quaternion(0, 0, 0, 1)
       },
-
 
       {
         position:
-          new THREE.Vector3(
-            h, 0, 0
-          ),
+          new THREE.Vector3(h, 0, 0),
 
         quaternion:
-          new THREE.Quaternion(
-            s, s, 0, 0
-          )
+          new THREE.Quaternion(s, s, 0, 0)
       },
-
 
       {
         position:
-          new THREE.Vector3(
-            0, -h, 0
-          ),
+          new THREE.Vector3(0, -h, 0),
 
         quaternion:
-          new THREE.Quaternion(
-            0, 0, 1, 0
-          )
+          new THREE.Quaternion(0, 0, 1, 0)
       },
-
 
       {
         position:
-          new THREE.Vector3(
-            -h, 0, 0
-          ),
+          new THREE.Vector3(-h, 0, 0),
 
         quaternion:
-          new THREE.Quaternion(
-            0, 0, s, s
-          )
+          new THREE.Quaternion(0, 0, s, s)
       },
-
 
       {
         position:
-          new THREE.Vector3(
-            0, 0, h
-          ),
+          new THREE.Vector3(0, 0, h),
 
         quaternion:
-          new THREE.Quaternion(
-            s, 0, 0, s
-          )
+          new THREE.Quaternion(s, 0, 0, s)
       }
 
     ];
@@ -473,11 +433,9 @@ AFRAME.registerComponent("cube-tracker", {
 
       this.faceMatrices[i] =
         new THREE.Matrix4().compose(
-
           this.faces[i].position,
           this.faces[i].quaternion,
           unitScale
-
         );
 
     }
@@ -515,10 +473,6 @@ AFRAME.registerComponent("cube-tracker", {
       new THREE.Matrix4();
 
 
-    /*
-       Gefilterte endgültige Pose.
-    */
-
     this.currentPosition =
       new THREE.Vector3();
 
@@ -526,13 +480,6 @@ AFRAME.registerComponent("cube-tracker", {
       new THREE.Quaternion();
 
     this.hasPose = false;
-
-
-    /*
-       Letzte gültige Pose bleibt kurz erhalten,
-       falls beim Drehen für einige Frames kein Marker
-       erkannt wird.
-    */
 
     this.lastSeenTime = 0;
 
@@ -544,10 +491,6 @@ AFRAME.registerComponent("cube-tracker", {
         "trackingInfo"
       );
 
-
-    /*
-       Marker registrieren.
-    */
 
     for (let i = 0; i < 6; i++) {
 
@@ -583,10 +526,6 @@ AFRAME.registerComponent("cube-tracker", {
 
 
 
-  /* ======================================================
-     POSE EINES MARKERS IN EINE WÜRFELPOSE UMWANDELN
-     ====================================================== */
-
   getCubeCandidate: function(index) {
 
     const THREE = AFRAME.THREE;
@@ -606,11 +545,8 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     this.tempMatrix.multiplyMatrices(
-
       marker.object3D.matrixWorld,
-
       this.inverseFace
-
     );
 
 
@@ -631,22 +567,10 @@ AFRAME.registerComponent("cube-tracker", {
     );
 
 
-    /*
-       Qualitätsbewertung.
-
-       Je frontaler ein Marker zur Kamera steht,
-       desto stärker vertrauen wir seiner Pose.
-
-       Ein sehr schräger Marker erhält nur ein
-       kleines Gewicht.
-    */
-
     marker.object3D.matrixWorld.decompose(
-
       this.markerPosition,
       this.markerQuaternion,
       this.markerScale
-
     );
 
 
@@ -677,25 +601,12 @@ AFRAME.registerComponent("cube-tracker", {
       );
 
 
-    /*
-       Schräge Marker stark abwerten.
-
-       frontality:
-       1 = frontal
-       0 = genau von der Seite
-    */
-
     let weight =
       Math.pow(
         frontality,
         4
       );
 
-
-    /*
-       Marker niemals vollständig ignorieren,
-       solange AR.js ihn tatsächlich erkennt.
-    */
 
     weight =
       Math.max(
@@ -716,10 +627,6 @@ AFRAME.registerComponent("cube-tracker", {
 
 
 
-  /* ======================================================
-     POSITION GEWICHTET MITTELN
-     ====================================================== */
-
   fusePositions: function(candidates) {
 
     const THREE = AFRAME.THREE;
@@ -734,11 +641,8 @@ AFRAME.registerComponent("cube-tracker", {
       candidate => {
 
         result.addScaledVector(
-
           candidate.position,
-
           candidate.weight
-
         );
 
         totalWeight +=
@@ -763,19 +667,7 @@ AFRAME.registerComponent("cube-tracker", {
 
 
 
-  /* ======================================================
-     ROTATIONEN GEWICHTET ZUSAMMENFÜHREN
-     ====================================================== */
-
   fuseQuaternions: function(candidates) {
-
-    const THREE = AFRAME.THREE;
-
-
-    /*
-       Zuerst den vertrauenswürdigsten Marker suchen.
-       Er dient als Quaternion-Referenz.
-    */
 
     let best =
       candidates[0];
@@ -801,14 +693,6 @@ AFRAME.registerComponent("cube-tracker", {
       best.quaternion.clone();
 
 
-    /*
-       Von der besten Pose schrittweise zu den anderen
-       Posen interpolieren.
-
-       Sehr schräge Marker haben dabei nur geringen
-       Einfluss.
-    */
-
     let accumulatedWeight =
       best.weight;
 
@@ -826,11 +710,6 @@ AFRAME.registerComponent("cube-tracker", {
 
     others.forEach(
       candidate => {
-
-        /*
-           Quaternion-Vorzeichen angleichen.
-           q und -q beschreiben dieselbe Rotation.
-        */
 
         if (
           result.dot(
@@ -878,18 +757,13 @@ AFRAME.registerComponent("cube-tracker", {
 
 
 
-  /* ======================================================
-     FRAME
-     ====================================================== */
-
   tick: function() {
 
     const now =
       performance.now();
 
 
-    const candidates =
-      [];
+    const candidates = [];
 
 
     for (
@@ -914,11 +788,6 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
-
-    /* --------------------------------------------------
-       Kein Marker sichtbar
-       -------------------------------------------------- */
-
     if (
       candidates.length === 0
     ) {
@@ -928,18 +797,12 @@ AFRAME.registerComponent("cube-tracker", {
 
 
       if (
-        this.hasPose
-        &&
+        this.hasPose &&
         elapsed < this.holdTime
       ) {
 
-        /*
-           Letzte Würfelpose kurz halten.
-        */
-
         this.el.object3D.visible =
           true;
-
 
         this.info.textContent =
           "Würfel: kurz gehalten";
@@ -950,7 +813,6 @@ AFRAME.registerComponent("cube-tracker", {
 
         this.el.object3D.visible =
           false;
-
 
         this.info.textContent =
           "Würfel: –";
@@ -963,30 +825,14 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
+    this.lastSeenTime = now;
 
-    this.lastSeenTime =
-      now;
-
-
-
-    /* --------------------------------------------------
-       Kandidaten nach Qualität sortieren
-       -------------------------------------------------- */
 
     candidates.sort(
       (a,b) =>
         b.weight - a.weight
     );
 
-
-
-    /*
-       Sehr schlechte Kandidaten nicht gemeinsam mit
-       guten Kandidaten verrechnen.
-
-       Das ist insbesondere bei Fingerverdeckung und
-       sehr schrägen Flächen wichtig.
-    */
 
     const bestWeight =
       candidates[0].weight;
@@ -995,7 +841,6 @@ AFRAME.registerComponent("cube-tracker", {
     let useful =
       candidates.filter(
         candidate =>
-
           candidate.weight
           >=
           Math.max(
@@ -1016,11 +861,6 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
-
-    /* --------------------------------------------------
-       Gemeinsame Würfelpose
-       -------------------------------------------------- */
-
     const fusedPosition =
       this.fusePositions(
         useful
@@ -1032,14 +872,6 @@ AFRAME.registerComponent("cube-tracker", {
         useful
       );
 
-
-
-    /* --------------------------------------------------
-       Nur sehr leichte zeitliche Stabilisierung.
-
-       Rotation reagiert bewusst schneller als Position,
-       damit das Molekül synchron mit dem Würfel bleibt.
-       -------------------------------------------------- */
 
     if (
       !this.hasPose
@@ -1055,26 +887,17 @@ AFRAME.registerComponent("cube-tracker", {
       );
 
 
-      this.hasPose =
-        true;
+      this.hasPose = true;
 
     }
 
     else {
-
-      /*
-         Position etwas beruhigen.
-      */
 
       this.currentPosition.lerp(
         fusedPosition,
         0.55
       );
 
-
-      /*
-         Rotation sehr schnell folgen lassen.
-      */
 
       if (
         this.currentQuaternion.dot(
@@ -1098,7 +921,6 @@ AFRAME.registerComponent("cube-tracker", {
     }
 
 
-
     this.el.object3D.position.copy(
       this.currentPosition
     );
@@ -1118,11 +940,6 @@ AFRAME.registerComponent("cube-tracker", {
       true;
 
 
-
-    /* --------------------------------------------------
-       Diagnose
-       -------------------------------------------------- */
-
     const markerText =
       useful
         .map(
@@ -1133,7 +950,6 @@ AFRAME.registerComponent("cube-tracker", {
 
 
     this.info.textContent =
-
       "Würfel: "
       +
       markerText
@@ -1396,13 +1212,6 @@ function createARScene() {
       </a-marker>
 
 
-
-      <!--
-          EIN GEMEINSAMER WÜRFELROOT
-
-          Das Methan sitzt exakt im Zentrum.
-      -->
-
       <a-entity
         id="cubeRoot"
         cube-tracker
@@ -1416,7 +1225,6 @@ function createARScene() {
         </a-entity>
 
       </a-entity>
-
 
 
       <a-entity
@@ -1475,9 +1283,7 @@ async function startMobileAR() {
       document.documentElement;
 
 
-    if (
-      element.requestFullscreen
-    ) {
+    if (element.requestFullscreen) {
 
       await element.requestFullscreen();
 
@@ -1506,8 +1312,7 @@ async function startMobileAR() {
   try {
 
     if (
-      screen.orientation
-      &&
+      screen.orientation &&
       screen.orientation.lock
     ) {
 
@@ -1788,6 +1593,19 @@ function synchronizeVisualGeometry() {
 
 /* ==========================================================
    SMARTPHONE-KAMERA
+
+   PHASE 4e-1:
+   EINZIGE ÄNDERUNG GEGENÜBER 4e
+
+   Vorher:
+   1280 x 720
+   16:9
+
+   Jetzt:
+   640 x 480
+   4:3
+
+   Damit stimmen Kamera und AR.js überein.
    ========================================================== */
 
 async function optimizeMobileCamera() {
@@ -1833,15 +1651,15 @@ async function optimizeMobileCamera() {
     await track.applyConstraints({
 
       width: {
-        ideal: 1280
+        ideal: 640
       },
 
       height: {
-        ideal: 720
+        ideal: 480
       },
 
       aspectRatio: {
-        ideal: 16 / 9
+        ideal: 4 / 3
       },
 
       frameRate: {
@@ -1862,6 +1680,10 @@ async function optimizeMobileCamera() {
 
   }
 
+
+  /*
+     Zoom-Verhalten bleibt exakt wie vorher.
+  */
 
   try {
 
