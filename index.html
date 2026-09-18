@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4e-8</title>
+  <title>GeoChemAR – Phase 4e-9</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -148,7 +148,7 @@
 <div id="sceneHost"></div>
 
 <div id="diagnostic">
-  Phase 4e-8<br>
+  Phase 4e-9<br>
   <span id="trackingInfo">Würfel: –</span>
 </div>
 
@@ -176,6 +176,7 @@
 </div>
 
 
+
 <script>
 
 /* ==========================================================
@@ -187,6 +188,7 @@ AFRAME.registerComponent("methane-model", {
   init: function () {
 
     const THREE = AFRAME.THREE;
+
     const group = new THREE.Group();
 
     const carbonRadius = 0.22;
@@ -215,6 +217,7 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
       });
 
+
     const carbon =
       new THREE.Mesh(
         new THREE.SphereGeometry(
@@ -227,12 +230,14 @@ AFRAME.registerComponent("methane-model", {
 
     group.add(carbon);
 
+
     const hydrogenGeometry =
       new THREE.SphereGeometry(
         hydrogenRadius,
         40,
         28
       );
+
 
     const directions = [
       new THREE.Vector3(1, 1, 1),
@@ -241,12 +246,15 @@ AFRAME.registerComponent("methane-model", {
       new THREE.Vector3(-1, -1, 1)
     ];
 
+
     directions.forEach(
       direction => direction.normalize()
     );
 
+
     const yAxis =
       new THREE.Vector3(0, 1, 0);
+
 
     directions.forEach(function(direction) {
 
@@ -264,11 +272,13 @@ AFRAME.registerComponent("methane-model", {
 
       group.add(hydrogen);
 
+
       const startDistance =
         carbonRadius;
 
       const endDistance =
         hydrogenDistance - hydrogenRadius;
+
 
       const startPoint =
         direction.clone().multiplyScalar(
@@ -280,11 +290,13 @@ AFRAME.registerComponent("methane-model", {
           endDistance
         );
 
+
       const bondVector =
         endPoint.clone().sub(startPoint);
 
       const bondLength =
         bondVector.length();
+
 
       const bond =
         new THREE.Mesh(
@@ -302,6 +314,7 @@ AFRAME.registerComponent("methane-model", {
 
         );
 
+
       bond.position.copy(
 
         startPoint
@@ -311,14 +324,17 @@ AFRAME.registerComponent("methane-model", {
 
       );
 
+
       bond.quaternion.setFromUnitVectors(
         yAxis,
         direction
       );
 
+
       group.add(bond);
 
     });
+
 
     this.el.setObject3D(
       "methaneMesh",
@@ -330,9 +346,9 @@ AFRAME.registerComponent("methane-model", {
 });
 
 
+
 /* ==========================================================
-   WÜRFELTRACKER
-   UNVERÄNDERT GEGENÜBER 4e-6
+   WÜRFELTRACKER – UNVERÄNDERT AUS 4e-6
    ========================================================== */
 
 AFRAME.registerComponent("cube-tracker", {
@@ -344,12 +360,14 @@ AFRAME.registerComponent("cube-tracker", {
     const h = 0.5625;
     const s = Math.SQRT1_2;
 
+
     this.markers = [];
 
     this.visible = [
       false, false, false,
       false, false, false
     ];
+
 
     this.faces = [
 
@@ -403,10 +421,12 @@ AFRAME.registerComponent("cube-tracker", {
 
     ];
 
+
     this.faceMatrices = [];
 
     const unitScale =
       new THREE.Vector3(1,1,1);
+
 
     for (let i = 0; i < 6; i++) {
 
@@ -419,10 +439,12 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     this.camera =
       document.querySelector(
         "[camera]"
       ).object3D;
+
 
     this.cameraPosition =
       new THREE.Vector3();
@@ -442,11 +464,13 @@ AFRAME.registerComponent("cube-tracker", {
     this.toCamera =
       new THREE.Vector3();
 
+
     this.tempMatrix =
       new THREE.Matrix4();
 
     this.inverseFace =
       new THREE.Matrix4();
+
 
     this.currentPosition =
       new THREE.Vector3();
@@ -454,19 +478,23 @@ AFRAME.registerComponent("cube-tracker", {
     this.currentQuaternion =
       new THREE.Quaternion();
 
+
     this.hasPose = false;
 
     this.lastSeenTime = 0;
 
     this.holdTime = 250;
 
+
     this.multiPositionTolerance = 0.35;
 
     this.multiRotationToleranceDeg = 28;
 
+
     this.jumpPositionThreshold = 0.48;
 
     this.jumpRotationThresholdDeg = 38;
+
 
     this.pendingJumpPosition =
       new THREE.Vector3();
@@ -480,10 +508,12 @@ AFRAME.registerComponent("cube-tracker", {
 
     this.hasPendingJump = false;
 
+
     this.info =
       document.getElementById(
         "trackingInfo"
       );
+
 
     for (let i = 0; i < 6; i++) {
 
@@ -494,6 +524,7 @@ AFRAME.registerComponent("cube-tracker", {
 
       this.markers[i] = marker;
 
+
       marker.addEventListener(
         "markerFound",
         () => {
@@ -502,6 +533,7 @@ AFRAME.registerComponent("cube-tracker", {
 
         }
       );
+
 
       marker.addEventListener(
         "markerLost",
@@ -514,9 +546,11 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     this.el.object3D.visible = false;
 
   },
+
 
 
   quaternionAngleDeg: function(a, b) {
@@ -526,6 +560,7 @@ AFRAME.registerComponent("cube-tracker", {
         a.dot(b)
       );
 
+
     dot =
       Math.min(
         1,
@@ -534,6 +569,7 @@ AFRAME.registerComponent("cube-tracker", {
           dot
         )
       );
+
 
     return (
       2 *
@@ -545,6 +581,7 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   getCubeCandidate: function(index) {
 
     const THREE = AFRAME.THREE;
@@ -552,7 +589,9 @@ AFRAME.registerComponent("cube-tracker", {
     const marker =
       this.markers[index];
 
+
     marker.object3D.updateMatrixWorld(true);
+
 
     this.inverseFace
       .copy(
@@ -560,10 +599,12 @@ AFRAME.registerComponent("cube-tracker", {
       )
       .invert();
 
+
     this.tempMatrix.multiplyMatrices(
       marker.object3D.matrixWorld,
       this.inverseFace
     );
+
 
     const position =
       new THREE.Vector3();
@@ -574,17 +615,20 @@ AFRAME.registerComponent("cube-tracker", {
     const scale =
       new THREE.Vector3();
 
+
     this.tempMatrix.decompose(
       position,
       quaternion,
       scale
     );
 
+
     marker.object3D.matrixWorld.decompose(
       this.markerPosition,
       this.markerQuaternion,
       this.markerScale
     );
+
 
     this.markerNormal
       .set(0,1,0)
@@ -593,14 +637,17 @@ AFRAME.registerComponent("cube-tracker", {
       )
       .normalize();
 
+
     this.camera.getWorldPosition(
       this.cameraPosition
     );
+
 
     this.toCamera
       .copy(this.cameraPosition)
       .sub(this.markerPosition)
       .normalize();
+
 
     let frontality =
       Math.abs(
@@ -609,17 +656,20 @@ AFRAME.registerComponent("cube-tracker", {
         )
       );
 
+
     let weight =
       Math.pow(
         frontality,
         4
       );
 
+
     weight =
       Math.max(
         0.03,
         weight
       );
+
 
     return {
 
@@ -634,6 +684,7 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   rejectMultiMarkerOutliers: function(
     candidates
   ) {
@@ -646,10 +697,12 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     const scores =
       candidates.map(
         () => 0
       );
+
 
     for (
       let i = 0;
@@ -670,11 +723,13 @@ AFRAME.registerComponent("cube-tracker", {
               candidates[j].position
             );
 
+
         const rotationDifference =
           this.quaternionAngleDeg(
             candidates[i].quaternion,
             candidates[j].quaternion
           );
+
 
         if (
           positionDifference
@@ -693,8 +748,10 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     const bestScore =
       Math.max(...scores);
+
 
     if (
       bestScore === 0
@@ -703,6 +760,7 @@ AFRAME.registerComponent("cube-tracker", {
       return candidates;
 
     }
+
 
     const filtered =
       candidates.filter(
@@ -716,6 +774,7 @@ AFRAME.registerComponent("cube-tracker", {
             bestScore - 1
       );
 
+
     return (
       filtered.length > 0
         ? filtered
@@ -723,6 +782,7 @@ AFRAME.registerComponent("cube-tracker", {
     );
 
   },
+
 
 
   fusePositions: function(
@@ -735,6 +795,7 @@ AFRAME.registerComponent("cube-tracker", {
       new THREE.Vector3();
 
     let totalWeight = 0;
+
 
     candidates.forEach(
       candidate => {
@@ -750,6 +811,7 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
+
     if (
       totalWeight > 0
     ) {
@@ -760,9 +822,11 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     return result;
 
   },
+
 
 
   fuseQuaternions: function(
@@ -771,6 +835,7 @@ AFRAME.registerComponent("cube-tracker", {
 
     let best =
       candidates[0];
+
 
     candidates.forEach(
       candidate => {
@@ -787,11 +852,14 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
+
     const result =
       best.quaternion.clone();
 
+
     let accumulatedWeight =
       best.weight;
+
 
     const others =
       candidates
@@ -804,11 +872,13 @@ AFRAME.registerComponent("cube-tracker", {
             b.weight - a.weight
         );
 
+
     others.forEach(
       candidate => {
 
         const q =
           candidate.quaternion.clone();
+
 
         if (
           result.dot(q) < 0
@@ -821,6 +891,7 @@ AFRAME.registerComponent("cube-tracker", {
 
         }
 
+
         const t =
           candidate.weight
           /
@@ -830,10 +901,12 @@ AFRAME.registerComponent("cube-tracker", {
             candidate.weight
           );
 
+
         result.slerp(
           q,
           t
         );
+
 
         accumulatedWeight +=
           candidate.weight;
@@ -841,11 +914,14 @@ AFRAME.registerComponent("cube-tracker", {
       }
     );
 
+
     result.normalize();
+
 
     return result;
 
   },
+
 
 
   acceptPose: function(
@@ -864,16 +940,19 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     const positionJump =
       this.currentPosition.distanceTo(
         position
       );
+
 
     const rotationJump =
       this.quaternionAngleDeg(
         this.currentQuaternion,
         quaternion
       );
+
 
     const isLargeJump =
 
@@ -885,6 +964,7 @@ AFRAME.registerComponent("cube-tracker", {
       rotationJump >
         this.jumpRotationThresholdDeg;
 
+
     if (
       !isLargeJump
     ) {
@@ -895,6 +975,7 @@ AFRAME.registerComponent("cube-tracker", {
       return true;
 
     }
+
 
     if (
       !this.hasPendingJump
@@ -916,16 +997,19 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     const confirmationPositionDifference =
       this.pendingJumpPosition.distanceTo(
         position
       );
+
 
     const confirmationRotationDifference =
       this.quaternionAngleDeg(
         this.pendingJumpQuaternion,
         quaternion
       );
+
 
     const confirmsJump =
 
@@ -937,19 +1021,23 @@ AFRAME.registerComponent("cube-tracker", {
       confirmationRotationDifference <
         25;
 
+
     if (
       confirmsJump
     ) {
 
       this.pendingJumpFrames++;
 
+
       this.pendingJumpPosition.lerp(
         position,
         0.5
       );
 
+
       const q =
         quaternion.clone();
+
 
       if (
         this.pendingJumpQuaternion.dot(q) < 0
@@ -962,10 +1050,12 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
+
       this.pendingJumpQuaternion.slerp(
         q,
         0.5
       );
+
 
       if (
         this.pendingJumpFrames >=
@@ -979,9 +1069,11 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
+
       return false;
 
     }
+
 
     this.pendingJumpPosition.copy(
       position
@@ -998,12 +1090,15 @@ AFRAME.registerComponent("cube-tracker", {
   },
 
 
+
   tick: function() {
 
     const now =
       performance.now();
 
+
     let candidates = [];
+
 
     for (
       let i = 0;
@@ -1019,11 +1114,13 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
+
       candidates.push(
         this.getCubeCandidate(i)
       );
 
     }
+
 
     if (
       candidates.length === 0
@@ -1031,6 +1128,7 @@ AFRAME.registerComponent("cube-tracker", {
 
       const elapsed =
         now - this.lastSeenTime;
+
 
       if (
         this.hasPose &&
@@ -1055,23 +1153,29 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
+
       return;
 
     }
 
+
     this.lastSeenTime =
       now;
+
 
     candidates.sort(
       (a,b) =>
         b.weight - a.weight
     );
 
+
     const originalCandidateCount =
       candidates.length;
 
+
     const bestWeight =
       candidates[0].weight;
+
 
     let useful =
       candidates.filter(
@@ -1085,6 +1189,7 @@ AFRAME.registerComponent("cube-tracker", {
           )
       );
 
+
     if (
       useful.length === 0
     ) {
@@ -1095,20 +1200,24 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     useful =
       this.rejectMultiMarkerOutliers(
         useful
       );
+
 
     const fusedPosition =
       this.fusePositions(
         useful
       );
 
+
     const fusedQuaternion =
       this.fuseQuaternions(
         useful
       );
+
 
     const poseAccepted =
       this.acceptPose(
@@ -1116,12 +1225,14 @@ AFRAME.registerComponent("cube-tracker", {
         fusedQuaternion
       );
 
+
     if (
       !poseAccepted
     ) {
 
       this.el.object3D.visible =
         this.hasPose;
+
 
       const markerText =
         useful
@@ -1131,6 +1242,7 @@ AFRAME.registerComponent("cube-tracker", {
           )
           .join(",");
 
+
       this.info.textContent =
         "Würfel: "
         +
@@ -1138,9 +1250,11 @@ AFRAME.registerComponent("cube-tracker", {
         +
         " | Sprung abgefangen";
 
+
       return;
 
     }
+
 
     if (
       !this.hasPose
@@ -1165,8 +1279,10 @@ AFRAME.registerComponent("cube-tracker", {
         0.55
       );
 
+
       const q =
         fusedQuaternion.clone();
+
 
       if (
         this.currentQuaternion.dot(q) < 0
@@ -1179,6 +1295,7 @@ AFRAME.registerComponent("cube-tracker", {
 
       }
 
+
       this.currentQuaternion.slerp(
         q,
         0.78
@@ -1186,20 +1303,25 @@ AFRAME.registerComponent("cube-tracker", {
 
     }
 
+
     this.el.object3D.position.copy(
       this.currentPosition
     );
+
 
     this.el.object3D.quaternion.copy(
       this.currentQuaternion
     );
 
+
     this.el.object3D.scale.set(
       1,1,1
     );
 
+
     this.el.object3D.visible =
       true;
+
 
     const markerText =
       useful
@@ -1208,6 +1330,7 @@ AFRAME.registerComponent("cube-tracker", {
             candidate.index
         )
         .join(",");
+
 
     this.info.textContent =
       "Würfel: "
@@ -1221,6 +1344,7 @@ AFRAME.registerComponent("cube-tracker", {
   }
 
 });
+
 
 
 /* ==========================================================
@@ -1259,6 +1383,8 @@ const startButton =
 
 
 let arStarted = false;
+let cameraOptimized = false;
+
 
 
 function isMobileDevice() {
@@ -1285,6 +1411,7 @@ function isMobileDevice() {
 }
 
 
+
 function isLandscape() {
 
   return (
@@ -1293,6 +1420,7 @@ function isLandscape() {
   );
 
 }
+
 
 
 function updateStartScreen() {
@@ -1309,6 +1437,7 @@ function updateStartScreen() {
 
   }
 
+
   if (
     arStarted
   ) {
@@ -1321,9 +1450,11 @@ function updateStartScreen() {
 
   }
 
+
   startScreen.classList.add(
     "visible"
   );
+
 
   if (
     !isLandscape()
@@ -1362,14 +1493,9 @@ function updateStartScreen() {
 }
 
 
+
 /* ==========================================================
    AR-SZENE
-
-   AR.js selbst bekommt weiterhin 640 × 480.
-
-   EINZIGE ÄNDERUNG ZU 4e-6:
-   Der laufende Kamerastream wird anschließend NICHT mehr
-   mit applyConstraints() verändert.
    ========================================================== */
 
 function createARScene() {
@@ -1378,7 +1504,9 @@ function createARScene() {
     arStarted
   ) return;
 
+
   arStarted = true;
+
 
   sceneHost.innerHTML = `
 
@@ -1408,12 +1536,14 @@ function createARScene() {
 
     >
 
+
       <a-marker
         id="marker0"
         type="barcode"
         value="0"
         smooth="false">
       </a-marker>
+
 
       <a-marker
         id="marker1"
@@ -1422,12 +1552,14 @@ function createARScene() {
         smooth="false">
       </a-marker>
 
+
       <a-marker
         id="marker2"
         type="barcode"
         value="2"
         smooth="false">
       </a-marker>
+
 
       <a-marker
         id="marker3"
@@ -1436,12 +1568,14 @@ function createARScene() {
         smooth="false">
       </a-marker>
 
+
       <a-marker
         id="marker4"
         type="barcode"
         value="4"
         smooth="false">
       </a-marker>
+
 
       <a-marker
         id="marker5"
@@ -1487,15 +1621,18 @@ function createARScene() {
 
       <a-entity camera></a-entity>
 
+
     </a-scene>
 
   `;
+
 
   startScreen.classList.remove(
     "visible"
   );
 
 }
+
 
 
 /* ==========================================================
@@ -1514,10 +1651,12 @@ async function startMobileAR() {
 
   }
 
+
   try {
 
     const element =
       document.documentElement;
+
 
     if (
       element.requestFullscreen
@@ -1546,6 +1685,7 @@ async function startMobileAR() {
 
   }
 
+
   try {
 
     if (
@@ -1570,12 +1710,14 @@ async function startMobileAR() {
 
   }
 
+
   setTimeout(
     createARScene,
     400
   );
 
 }
+
 
 
 /* ==========================================================
@@ -1599,6 +1741,7 @@ function getARVideo() {
   );
 
 }
+
 
 
 /* ==========================================================
@@ -1625,9 +1768,8 @@ function enforceLayers() {
       "canvas.a-canvas"
     );
 
-  if (
-    host
-  ) {
+
+  if (host) {
 
     host.style.setProperty(
       "position",
@@ -1643,9 +1785,8 @@ function enforceLayers() {
 
   }
 
-  if (
-    scene
-  ) {
+
+  if (scene) {
 
     scene.style.setProperty(
       "position",
@@ -1673,9 +1814,8 @@ function enforceLayers() {
 
   }
 
-  if (
-    video
-  ) {
+
+  if (video) {
 
     video.style.setProperty(
       "position",
@@ -1715,9 +1855,8 @@ function enforceLayers() {
 
   }
 
-  if (
-    canvas
-  ) {
+
+  if (canvas) {
 
     canvas.style.setProperty(
       "position",
@@ -1760,6 +1899,7 @@ function enforceLayers() {
 }
 
 
+
 /* ==========================================================
    VIDEO / CANVAS SYNCHRONISIEREN
    ========================================================== */
@@ -1774,18 +1914,22 @@ function synchronizeVisualGeometry() {
       "canvas.a-canvas"
     );
 
+
   if (
     !video ||
     !canvas
   ) return;
 
+
   const rect =
     video.getBoundingClientRect();
+
 
   if (
     rect.width <= 0 ||
     rect.height <= 0
   ) return;
+
 
   canvas.style.setProperty(
     "left",
@@ -1826,6 +1970,144 @@ function synchronizeVisualGeometry() {
 }
 
 
+
+/* ==========================================================
+   SMARTPHONE-KAMERA
+
+   EINZIGE ÄNDERUNG ZU 4e-6:
+   60 fps statt 30 fps
+   ========================================================== */
+
+async function optimizeMobileCamera() {
+
+  if (
+    cameraOptimized ||
+    !arStarted
+  ) return;
+
+
+  if (
+    !isMobileDevice()
+  ) {
+
+    cameraOptimized = true;
+
+    return;
+
+  }
+
+
+  const video =
+    getARVideo();
+
+
+  if (
+    !video ||
+    !video.srcObject
+  ) return;
+
+
+  const tracks =
+    video.srcObject.getVideoTracks();
+
+
+  if (
+    !tracks.length
+  ) return;
+
+
+  const track =
+    tracks[0];
+
+
+  try {
+
+    await track.applyConstraints({
+
+      width: {
+        ideal: 640
+      },
+
+      height: {
+        ideal: 480
+      },
+
+      aspectRatio: {
+        ideal: 4 / 3
+      },
+
+      frameRate: {
+        ideal: 60,
+        max: 60
+      }
+
+    });
+
+  }
+
+  catch (error) {
+
+    console.log(
+      "GeoChemAR: Kameraauflösung/Bildrate konnte nicht angepasst werden.",
+      error
+    );
+
+  }
+
+
+  try {
+
+    const capabilities =
+      track.getCapabilities
+        ? track.getCapabilities()
+        : null;
+
+
+    if (
+      capabilities &&
+      capabilities.zoom
+    ) {
+
+      const desiredZoom =
+        Math.max(
+          capabilities.zoom.min,
+          Math.min(
+            1,
+            capabilities.zoom.max
+          )
+        );
+
+
+      await track.applyConstraints({
+
+        advanced: [
+          {
+            zoom: desiredZoom
+          }
+        ]
+
+      });
+
+    }
+
+  }
+
+  catch (error) {
+
+    console.log(
+      "GeoChemAR: Zoom konnte nicht angepasst werden.",
+      error
+    );
+
+  }
+
+
+  cameraOptimized = true;
+
+}
+
+
+
 /* ==========================================================
    ORIENTIERUNGSWECHSEL
    ========================================================== */
@@ -1845,9 +2127,11 @@ function orientationChanged() {
 
   }
 
+
   if (
     !isMobileDevice()
   ) return;
+
 
   if (
     !isLandscape()
@@ -1855,6 +2139,7 @@ function orientationChanged() {
 
     const video =
       getARVideo();
+
 
     if (
       video &&
@@ -1870,11 +2155,13 @@ function orientationChanged() {
 
     }
 
+
     location.reload();
 
   }
 
 }
+
 
 
 /* ==========================================================
@@ -1925,6 +2212,7 @@ window.addEventListener(
 );
 
 
+
 /* ==========================================================
    START
    ========================================================== */
@@ -1944,11 +2232,9 @@ else {
 }
 
 
+
 /* ==========================================================
    LAUFENDE PFLEGE
-
-   Wichtig:
-   optimizeMobileCamera() gibt es in 4e-8 nicht mehr.
    ========================================================== */
 
 setInterval(
@@ -1959,7 +2245,10 @@ setInterval(
       !arStarted
     ) return;
 
+
     enforceLayers();
+
+    optimizeMobileCamera();
 
     synchronizeVisualGeometry();
 
