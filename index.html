@@ -13,15 +13,14 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4d-4</title>
+  <title>GeoChemAR – Phase 4e</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
 
   <style>
 
-    html,
-    body {
+    html, body {
       margin: 0;
       padding: 0;
       width: 100%;
@@ -72,11 +71,6 @@
       pointer-events: none !important;
     }
 
-
-    /* ======================================================
-       STARTBILDSCHIRM
-       ====================================================== */
-
     #startScreen {
       position: fixed;
       inset: 0;
@@ -84,8 +78,8 @@
       display: none;
       align-items: center;
       justify-content: center;
-      box-sizing: border-box;
       padding: 30px;
+      box-sizing: border-box;
       background: #111;
       color: white;
       text-align: center;
@@ -103,7 +97,6 @@
     #rotateIcon {
       margin-bottom: 20px;
       font-size: 64px;
-      line-height: 1;
     }
 
     #startTitle {
@@ -132,32 +125,18 @@
       color: #111;
     }
 
-
-    /* ======================================================
-       DIAGNOSEANZEIGE
-       ====================================================== */
-
     #diagnostic {
       position: fixed;
       top: 10px;
       left: 10px;
       z-index: 1000;
-
       padding: 8px 11px;
-
       border-radius: 8px;
-
-      background: rgba(0, 0, 0, 0.68);
+      background: rgba(0,0,0,0.68);
       color: white;
-
       font-size: 13px;
-      line-height: 1.35;
-
+      line-height: 1.4;
       pointer-events: none;
-    }
-
-    #activeMarker {
-      font-weight: bold;
     }
 
   </style>
@@ -166,18 +145,11 @@
 
 <body>
 
-
 <div id="sceneHost"></div>
 
-
 <div id="diagnostic">
-
-  Phase 4d-4<br>
-
-  <span id="activeMarker">
-    Marker: –
-  </span>
-
+  Phase 4e<br>
+  <span id="trackingInfo">Würfel: –</span>
 </div>
 
 
@@ -185,9 +157,7 @@
 
   <div id="startContent">
 
-    <div id="rotateIcon">
-      ↻
-    </div>
+    <div id="rotateIcon">↻</div>
 
     <div id="startTitle">
       Bitte Smartphone drehen
@@ -209,7 +179,6 @@
 
 <script>
 
-
 /* ==========================================================
    METHAN
    ========================================================== */
@@ -218,259 +187,159 @@ AFRAME.registerComponent("methane-model", {
 
   init: function () {
 
-    const THREE =
-      AFRAME.THREE;
+    const THREE = AFRAME.THREE;
 
+    const group = new THREE.Group();
 
-    const group =
-      new THREE.Group();
-
-
-    const carbonRadius =
-      0.22;
-
-    const hydrogenRadius =
-      0.14;
-
-    const hydrogenDistance =
-      0.72;
-
-    const bondRadius =
-      0.040;
-
+    const carbonRadius = 0.22;
+    const hydrogenRadius = 0.14;
+    const hydrogenDistance = 0.72;
+    const bondRadius = 0.040;
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
-
         color: 0x202020,
         roughness: 0.55,
         metalness: 0
-
       });
-
 
     const hydrogenMaterial =
       new THREE.MeshStandardMaterial({
-
         color: 0xffffff,
         roughness: 0.45,
         metalness: 0
-
       });
-
 
     const bondMaterial =
       new THREE.MeshStandardMaterial({
-
         color: 0xb8bec7,
         roughness: 0.50,
         metalness: 0
-
       });
-
-
-
-    const carbonGeometry =
-      new THREE.SphereGeometry(
-
-        carbonRadius,
-        48,
-        32
-
-      );
 
 
     const carbon =
       new THREE.Mesh(
-
-        carbonGeometry,
+        new THREE.SphereGeometry(
+          carbonRadius,
+          48,
+          32
+        ),
         carbonMaterial
-
       );
 
-
-    group.add(
-      carbon
-    );
-
+    group.add(carbon);
 
 
     const hydrogenGeometry =
       new THREE.SphereGeometry(
-
         hydrogenRadius,
         40,
         28
-
       );
 
 
     const directions = [
 
       new THREE.Vector3(1, 1, 1),
-
       new THREE.Vector3(1, -1, -1),
-
       new THREE.Vector3(-1, 1, -1),
-
       new THREE.Vector3(-1, -1, 1)
 
     ];
 
-
     directions.forEach(
-
-      direction =>
-        direction.normalize()
-
+      direction => direction.normalize()
     );
 
 
     const yAxis =
-      new THREE.Vector3(
-        0,
-        1,
-        0
+      new THREE.Vector3(0, 1, 0);
+
+
+    directions.forEach(function(direction) {
+
+      const hydrogen =
+        new THREE.Mesh(
+          hydrogenGeometry,
+          hydrogenMaterial
+        );
+
+      hydrogen.position.copy(
+        direction.clone().multiplyScalar(
+          hydrogenDistance
+        )
       );
 
-
-    directions.forEach(
-      function (direction) {
+      group.add(hydrogen);
 
 
-        const hydrogen =
-          new THREE.Mesh(
+      const startDistance =
+        carbonRadius;
 
-            hydrogenGeometry,
-            hydrogenMaterial
-
-          );
+      const endDistance =
+        hydrogenDistance - hydrogenRadius;
 
 
-        hydrogen.position.copy(
+      const startPoint =
+        direction.clone().multiplyScalar(
+          startDistance
+        );
 
-          direction
-            .clone()
-            .multiplyScalar(
-              hydrogenDistance
-            )
-
+      const endPoint =
+        direction.clone().multiplyScalar(
+          endDistance
         );
 
 
-        group.add(
-          hydrogen
-        );
+      const bondVector =
+        endPoint.clone().sub(startPoint);
+
+      const bondLength =
+        bondVector.length();
 
 
+      const bond =
+        new THREE.Mesh(
 
-        const startDistance =
-          carbonRadius;
-
-
-        const endDistance =
-          hydrogenDistance
-          -
-          hydrogenRadius;
-
-
-        const startPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              startDistance
-            );
-
-
-        const endPoint =
-
-          direction
-            .clone()
-            .multiplyScalar(
-              endDistance
-            );
-
-
-        const bondVector =
-
-          endPoint
-            .clone()
-            .sub(
-              startPoint
-            );
-
-
-        const bondLength =
-          bondVector.length();
-
-
-        const bondGeometry =
           new THREE.CylinderGeometry(
-
             bondRadius,
             bondRadius,
             bondLength,
             32,
             1,
             false
+          ),
 
-          );
-
-
-        const bond =
-          new THREE.Mesh(
-
-            bondGeometry,
-            bondMaterial
-
-          );
-
-
-        bond.position.copy(
-
-          startPoint
-            .clone()
-            .add(
-              endPoint
-            )
-            .multiplyScalar(
-              0.5
-            )
+          bondMaterial
 
         );
 
 
-        bond.quaternion.setFromUnitVectors(
+      bond.position.copy(
 
-          yAxis,
-          direction
+        startPoint
+          .clone()
+          .add(endPoint)
+          .multiplyScalar(0.5)
 
-        );
+      );
 
 
-        group.add(
-          bond
-        );
+      bond.quaternion.setFromUnitVectors(
+        yAxis,
+        direction
+      );
 
-      }
-    );
+
+      group.add(bond);
+
+    });
 
 
     this.el.setObject3D(
-
       "methaneMesh",
       group
-
-    );
-
-  },
-
-
-  remove: function () {
-
-    this.el.removeObject3D(
-      "methaneMesh"
     );
 
   }
@@ -480,555 +349,530 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   EINZELMARKER-WÜRFELPOSE
-
-   WICHTIG:
-
-   - keine Mehrmarkerfusion
-   - keine Eigenrotation
-   - keine zusätzliche Glättung
-   - ein Marker bestimmt die gesamte Pose
-
-   So testen wir ausschließlich die Geometrie.
+   PHASE 4e
+   WÜRFELSPEZIFISCHE MULTI-MARKER-POSE
    ========================================================== */
 
-AFRAME.registerComponent("single-marker-cube", {
+AFRAME.registerComponent("cube-tracker", {
 
   init: function () {
 
-    const THREE =
-      AFRAME.THREE;
+    const THREE = AFRAME.THREE;
+
+    /*
+       Würfelkante: 45 mm
+       Markerbreite: 40 mm
+
+       22.5 / 40 = 0.5625
+    */
+
+    const h = 0.5625;
+    const s = Math.SQRT1_2;
 
 
-    this.markers =
-      [];
-
-
+    this.markers = [];
     this.visible = [
-
-      false,
-      false,
-      false,
-      false,
-      false,
-      false
-
+      false, false, false,
+      false, false, false
     ];
 
 
     /*
-     * Tatsächliche Geometrie:
-     *
-     * Würfelkante       = 45 mm
-     * Markerbreite      = 40 mm
-     *
-     * Abstand Markerzentrum -> Würfelzentrum:
-     *
-     * 22.5 / 40 = 0.5625
-     */
-
-    const h =
-      0.5625;
-
-
-    const SQRT_HALF =
-      Math.SQRT1_2;
-
-
-
-    /* ======================================================
-       MARKERTRANSFORMATIONEN
-
-       Das gemeinsame Würfelkoordinatensystem wird so
-       definiert, dass Marker 1 die Referenzseite ist.
-
-       position:
-       Position des Markerzentrums im Würfelsystem.
-
-       quaternion:
-       Orientierung des Markerkoordinatensystems relativ
-       zum gemeinsamen Würfelsystem.
-       ====================================================== */
+       Exakte starre Würfelgeometrie.
+    */
 
     this.faces = [
 
-
-      /* --------------------------------------------------
-         MARKER 0
-
-         Gute Kalibrierung:
-         ungefähr -90° um X.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            0,
-            0,
-            -h
+            0, 0, -h
           ),
 
         quaternion:
           new THREE.Quaternion(
-
-            -SQRT_HALF,
-            0,
-            0,
-            SQRT_HALF
-
+            -s, 0, 0, s
           )
       },
 
 
-
-      /* --------------------------------------------------
-         MARKER 1
-
-         Referenzmarker.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            0,
-            h,
-            0
+            0, h, 0
           ),
 
         quaternion:
           new THREE.Quaternion(
-            0,
-            0,
-            0,
-            1
+            0, 0, 0, 1
           )
       },
 
 
-
-      /* --------------------------------------------------
-         MARKER 2
-
-         Die Kalibrierung ergab praktisch exakt eine
-         180°-Rotation um die Diagonale X/Y.
-
-         Dadurch zeigt seine Flächennormale nach +X.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            h,
-            0,
-            0
+            h, 0, 0
           ),
 
         quaternion:
           new THREE.Quaternion(
-
-            SQRT_HALF,
-            SQRT_HALF,
-            0,
-            0
-
+            s, s, 0, 0
           )
       },
 
 
-
-      /* --------------------------------------------------
-         MARKER 3
-
-         Gegenüberliegende Seite von Marker 1.
-
-         Die direkte 2->3-Kalibrierung war stark instabil.
-         Deshalb verwenden wir hier die exakte
-         Würfelgeometrie.
-
-         180° um Z:
-         lokale +Y-Normale -> -Y.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            0,
-            -h,
-            0
+            0, -h, 0
           ),
 
         quaternion:
           new THREE.Quaternion(
-            0,
-            0,
-            1,
-            0
+            0, 0, 1, 0
           )
       },
 
 
-
-      /* --------------------------------------------------
-         MARKER 4
-
-         Gegenüber von Marker 2.
-
-         Die Mehrwinkelmessung war stark instabil.
-         Die frühere Messung lag aber ungefähr bei
-         +90° um Z.
-
-         lokale +Y-Normale -> -X.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            -h,
-            0,
-            0
+            -h, 0, 0
           ),
 
         quaternion:
           new THREE.Quaternion(
-
-            0,
-            0,
-            SQRT_HALF,
-            SQRT_HALF
-
+            0, 0, s, s
           )
       },
 
 
-
-      /* --------------------------------------------------
-         MARKER 5
-
-         Gute Kalibrierung:
-         ungefähr +90° um X.
-
-         lokale +Y-Normale -> +Z.
-         -------------------------------------------------- */
-
       {
         position:
           new THREE.Vector3(
-            0,
-            0,
-            h
+            0, 0, h
           ),
 
         quaternion:
           new THREE.Quaternion(
-
-            SQRT_HALF,
-            0,
-            0,
-            SQRT_HALF
-
+            s, 0, 0, s
           )
       }
 
     ];
 
 
-
-    /*
-     * Aus Position + Rotation jeweils die Transformation
-     * Würfel -> Marker erzeugen.
-     */
-
-    this.faceMatrices =
-      [];
-
+    this.faceMatrices = [];
 
     const unitScale =
-      new THREE.Vector3(
-        1,
-        1,
-        1
-      );
+      new THREE.Vector3(1,1,1);
 
 
-    for (
-      let i = 0;
-      i < 6;
-      i++
-    ) {
+    for (let i = 0; i < 6; i++) {
 
       this.faceMatrices[i] =
+        new THREE.Matrix4().compose(
 
-        new THREE.Matrix4()
-          .compose(
+          this.faces[i].position,
+          this.faces[i].quaternion,
+          unitScale
 
-            this.faces[i].position,
-
-            this.faces[i].quaternion,
-
-            unitScale
-
-          );
+        );
 
     }
 
 
-
-    /*
-     * Arbeitsobjekte.
-     */
-
-    this.inverseFaceMatrix =
-      new THREE.Matrix4();
+    this.camera =
+      document.querySelector(
+        "[camera]"
+      ).object3D;
 
 
-    this.cubeWorldMatrix =
-      new THREE.Matrix4();
-
-
-    this.tempPosition =
+    this.cameraPosition =
       new THREE.Vector3();
 
+    this.markerPosition =
+      new THREE.Vector3();
 
-    this.tempQuaternion =
+    this.markerQuaternion =
       new THREE.Quaternion();
 
+    this.markerScale =
+      new THREE.Vector3();
 
-    this.tempScale =
+    this.markerNormal =
+      new THREE.Vector3();
+
+    this.toCamera =
       new THREE.Vector3();
 
 
-    this.activeMarker =
-      -1;
+    this.tempMatrix =
+      new THREE.Matrix4();
+
+    this.inverseFace =
+      new THREE.Matrix4();
 
 
-    this.activeMarkerDisplay =
+    /*
+       Gefilterte endgültige Pose.
+    */
+
+    this.currentPosition =
+      new THREE.Vector3();
+
+    this.currentQuaternion =
+      new THREE.Quaternion();
+
+    this.hasPose = false;
+
+
+    /*
+       Letzte gültige Pose bleibt kurz erhalten,
+       falls beim Drehen für einige Frames kein Marker
+       erkannt wird.
+    */
+
+    this.lastSeenTime = 0;
+
+    this.holdTime = 250;
+
+
+    this.info =
       document.getElementById(
-        "activeMarker"
+        "trackingInfo"
       );
 
 
-
     /*
-     * Marker registrieren.
-     */
+       Marker registrieren.
+    */
 
-    for (
-      let i = 0;
-      i < 6;
-      i++
-    ) {
+    for (let i = 0; i < 6; i++) {
 
       const marker =
         document.getElementById(
           "marker" + i
         );
 
-
-      this.markers[i] =
-        marker;
+      this.markers[i] = marker;
 
 
       marker.addEventListener(
-
         "markerFound",
-
         () => {
-
-          this.visible[i] =
-            true;
-
+          this.visible[i] = true;
         }
-
       );
 
 
       marker.addEventListener(
-
         "markerLost",
-
         () => {
-
-          this.visible[i] =
-            false;
-
+          this.visible[i] = false;
         }
-
       );
 
     }
 
 
-    this.el.object3D.visible =
-      false;
+    this.el.object3D.visible = false;
 
   },
 
 
 
   /* ======================================================
-     BESTEN EINZELNEN MARKER AUSWÄHLEN
-
-     Noch KEINE Fusion.
-
-     Falls der bisherige Marker noch sichtbar ist,
-     behalten wir ihn.
-
-     Dadurch wird nicht bei jedem Frame zwischen zwei
-     gleichzeitig sichtbaren Seiten hin- und hergeschaltet.
+     POSE EINES MARKERS IN EINE WÜRFELPOSE UMWANDELN
      ====================================================== */
 
-  chooseMarker: function () {
+  getCubeCandidate: function(index) {
 
-    if (
-      this.activeMarker >= 0
-      &&
-      this.visible[
-        this.activeMarker
-      ]
-    ) {
-
-      return this.activeMarker;
-
-    }
-
-
-    /*
-     * Für den Test einfache feste Priorität.
-     */
-
-    const priority = [
-
-      1,
-      0,
-      2,
-      4,
-      5,
-      3
-
-    ];
-
-
-    for (
-      const markerIndex of priority
-    ) {
-
-      if (
-        this.visible[
-          markerIndex
-        ]
-      ) {
-
-        return markerIndex;
-
-      }
-
-    }
-
-
-    return -1;
-
-  },
-
-
-
-  /* ======================================================
-     WÜRFELPOSE AUS EINEM MARKER
-     ====================================================== */
-
-  updateCubeFromMarker: function (
-    markerIndex
-  ) {
+    const THREE = AFRAME.THREE;
 
     const marker =
-      this.markers[
-        markerIndex
-      ];
+      this.markers[index];
 
 
-    marker.object3D.updateMatrixWorld(
-      true
-    );
+    marker.object3D.updateMatrixWorld(true);
 
 
-    /*
-     * Markerpose in der Welt:
-     *
-     * W_marker
-     *
-     * Bekannte Transformation:
-     *
-     * T_cube_marker
-     *
-     * Gesucht:
-     *
-     * W_cube
-     *
-     * Da:
-     *
-     * W_marker =
-     * W_cube × T_cube_marker
-     *
-     * folgt:
-     *
-     * W_cube =
-     * W_marker × inverse(T_cube_marker)
-     */
-
-    this.inverseFaceMatrix
+    this.inverseFace
       .copy(
-        this.faceMatrices[
-          markerIndex
-        ]
+        this.faceMatrices[index]
       )
       .invert();
 
 
-    this.cubeWorldMatrix
-      .multiplyMatrices(
+    this.tempMatrix.multiplyMatrices(
 
-        marker.object3D.matrixWorld,
+      marker.object3D.matrixWorld,
 
-        this.inverseFaceMatrix
+      this.inverseFace
 
-      );
+    );
 
 
-    this.cubeWorldMatrix.decompose(
+    const position =
+      new THREE.Vector3();
 
-      this.tempPosition,
+    const quaternion =
+      new THREE.Quaternion();
 
-      this.tempQuaternion,
+    const scale =
+      new THREE.Vector3();
 
-      this.tempScale
 
+    this.tempMatrix.decompose(
+      position,
+      quaternion,
+      scale
     );
 
 
     /*
-     * Würfelroot direkt setzen.
-     *
-     * Keine zusätzliche Glättung.
-     */
+       Qualitätsbewertung.
 
-    this.el.object3D.position.copy(
-      this.tempPosition
+       Je frontaler ein Marker zur Kamera steht,
+       desto stärker vertrauen wir seiner Pose.
+
+       Ein sehr schräger Marker erhält nur ein
+       kleines Gewicht.
+    */
+
+    marker.object3D.matrixWorld.decompose(
+
+      this.markerPosition,
+      this.markerQuaternion,
+      this.markerScale
+
     );
 
 
-    this.el.object3D.quaternion.copy(
-      this.tempQuaternion
+    this.markerNormal
+      .set(0,1,0)
+      .applyQuaternion(
+        this.markerQuaternion
+      )
+      .normalize();
+
+
+    this.camera.getWorldPosition(
+      this.cameraPosition
     );
 
 
-    this.el.object3D.scale.set(
-      1,
-      1,
-      1
+    this.toCamera
+      .copy(this.cameraPosition)
+      .sub(this.markerPosition)
+      .normalize();
+
+
+    let frontality =
+      Math.abs(
+        this.markerNormal.dot(
+          this.toCamera
+        )
+      );
+
+
+    /*
+       Schräge Marker stark abwerten.
+
+       frontality:
+       1 = frontal
+       0 = genau von der Seite
+    */
+
+    let weight =
+      Math.pow(
+        frontality,
+        4
+      );
+
+
+    /*
+       Marker niemals vollständig ignorieren,
+       solange AR.js ihn tatsächlich erkennt.
+    */
+
+    weight =
+      Math.max(
+        0.03,
+        weight
+      );
+
+
+    return {
+      index,
+      position,
+      quaternion,
+      weight,
+      frontality
+    };
+
+  },
+
+
+
+  /* ======================================================
+     POSITION GEWICHTET MITTELN
+     ====================================================== */
+
+  fusePositions: function(candidates) {
+
+    const THREE = AFRAME.THREE;
+
+    const result =
+      new THREE.Vector3();
+
+    let totalWeight = 0;
+
+
+    candidates.forEach(
+      candidate => {
+
+        result.addScaledVector(
+
+          candidate.position,
+
+          candidate.weight
+
+        );
+
+        totalWeight +=
+          candidate.weight;
+
+      }
     );
 
 
-    this.el.object3D.visible =
-      true;
+    if (totalWeight > 0) {
+
+      result.multiplyScalar(
+        1 / totalWeight
+      );
+
+    }
+
+
+    return result;
+
+  },
+
+
+
+  /* ======================================================
+     ROTATIONEN GEWICHTET ZUSAMMENFÜHREN
+     ====================================================== */
+
+  fuseQuaternions: function(candidates) {
+
+    const THREE = AFRAME.THREE;
+
+
+    /*
+       Zuerst den vertrauenswürdigsten Marker suchen.
+       Er dient als Quaternion-Referenz.
+    */
+
+    let best =
+      candidates[0];
+
+
+    candidates.forEach(
+      candidate => {
+
+        if (
+          candidate.weight >
+          best.weight
+        ) {
+
+          best = candidate;
+
+        }
+
+      }
+    );
+
+
+    const result =
+      best.quaternion.clone();
+
+
+    /*
+       Von der besten Pose schrittweise zu den anderen
+       Posen interpolieren.
+
+       Sehr schräge Marker haben dabei nur geringen
+       Einfluss.
+    */
+
+    let accumulatedWeight =
+      best.weight;
+
+
+    const others =
+      candidates
+        .filter(
+          c => c !== best
+        )
+        .sort(
+          (a,b) =>
+            b.weight - a.weight
+        );
+
+
+    others.forEach(
+      candidate => {
+
+        /*
+           Quaternion-Vorzeichen angleichen.
+           q und -q beschreiben dieselbe Rotation.
+        */
+
+        if (
+          result.dot(
+            candidate.quaternion
+          ) < 0
+        ) {
+
+          candidate.quaternion.x *= -1;
+          candidate.quaternion.y *= -1;
+          candidate.quaternion.z *= -1;
+          candidate.quaternion.w *= -1;
+
+        }
+
+
+        const t =
+          candidate.weight
+          /
+          (
+            accumulatedWeight
+            +
+            candidate.weight
+          );
+
+
+        result.slerp(
+          candidate.quaternion,
+          t
+        );
+
+
+        accumulatedWeight +=
+          candidate.weight;
+
+      }
+    );
+
+
+    result.normalize();
+
+
+    return result;
 
   },
 
@@ -1038,26 +882,80 @@ AFRAME.registerComponent("single-marker-cube", {
      FRAME
      ====================================================== */
 
-  tick: function () {
+  tick: function() {
 
-    const chosen =
-      this.chooseMarker();
+    const now =
+      performance.now();
 
 
-    if (
-      chosen < 0
+    const candidates =
+      [];
+
+
+    for (
+      let i = 0;
+      i < 6;
+      i++
     ) {
 
-      this.activeMarker =
-        -1;
+      if (
+        !this.visible[i]
+      ) {
+
+        continue;
+
+      }
 
 
-      this.el.object3D.visible =
-        false;
+      candidates.push(
+        this.getCubeCandidate(i)
+      );
+
+    }
 
 
-      this.activeMarkerDisplay.textContent =
-        "Marker: –";
+
+    /* --------------------------------------------------
+       Kein Marker sichtbar
+       -------------------------------------------------- */
+
+    if (
+      candidates.length === 0
+    ) {
+
+      const elapsed =
+        now - this.lastSeenTime;
+
+
+      if (
+        this.hasPose
+        &&
+        elapsed < this.holdTime
+      ) {
+
+        /*
+           Letzte Würfelpose kurz halten.
+        */
+
+        this.el.object3D.visible =
+          true;
+
+
+        this.info.textContent =
+          "Würfel: kurz gehalten";
+
+      }
+
+      else {
+
+        this.el.object3D.visible =
+          false;
+
+
+        this.info.textContent =
+          "Würfel: –";
+
+      }
 
 
       return;
@@ -1066,46 +964,183 @@ AFRAME.registerComponent("single-marker-cube", {
 
 
 
+    this.lastSeenTime =
+      now;
+
+
+
+    /* --------------------------------------------------
+       Kandidaten nach Qualität sortieren
+       -------------------------------------------------- */
+
+    candidates.sort(
+      (a,b) =>
+        b.weight - a.weight
+    );
+
+
+
     /*
-     * Markerwechsel anzeigen.
-     */
+       Sehr schlechte Kandidaten nicht gemeinsam mit
+       guten Kandidaten verrechnen.
 
-    if (
-      chosen !==
-      this.activeMarker
-    ) {
+       Das ist insbesondere bei Fingerverdeckung und
+       sehr schrägen Flächen wichtig.
+    */
 
-      console.log(
+    const bestWeight =
+      candidates[0].weight;
 
-        "GeoChemAR: aktiver Marker",
 
-        this.activeMarker,
+    let useful =
+      candidates.filter(
+        candidate =>
 
-        "->",
-
-        chosen
-
+          candidate.weight
+          >=
+          Math.max(
+            0.08,
+            bestWeight * 0.20
+          )
       );
 
 
-      this.activeMarker =
-        chosen;
+    if (
+      useful.length === 0
+    ) {
+
+      useful = [
+        candidates[0]
+      ];
 
     }
 
 
 
-    this.activeMarkerDisplay.textContent =
+    /* --------------------------------------------------
+       Gemeinsame Würfelpose
+       -------------------------------------------------- */
 
-      "Marker: "
-      +
-      this.activeMarker;
+    const fusedPosition =
+      this.fusePositions(
+        useful
+      );
+
+
+    const fusedQuaternion =
+      this.fuseQuaternions(
+        useful
+      );
 
 
 
-    this.updateCubeFromMarker(
-      this.activeMarker
+    /* --------------------------------------------------
+       Nur sehr leichte zeitliche Stabilisierung.
+
+       Rotation reagiert bewusst schneller als Position,
+       damit das Molekül synchron mit dem Würfel bleibt.
+       -------------------------------------------------- */
+
+    if (
+      !this.hasPose
+    ) {
+
+      this.currentPosition.copy(
+        fusedPosition
+      );
+
+
+      this.currentQuaternion.copy(
+        fusedQuaternion
+      );
+
+
+      this.hasPose =
+        true;
+
+    }
+
+    else {
+
+      /*
+         Position etwas beruhigen.
+      */
+
+      this.currentPosition.lerp(
+        fusedPosition,
+        0.55
+      );
+
+
+      /*
+         Rotation sehr schnell folgen lassen.
+      */
+
+      if (
+        this.currentQuaternion.dot(
+          fusedQuaternion
+        ) < 0
+      ) {
+
+        fusedQuaternion.x *= -1;
+        fusedQuaternion.y *= -1;
+        fusedQuaternion.z *= -1;
+        fusedQuaternion.w *= -1;
+
+      }
+
+
+      this.currentQuaternion.slerp(
+        fusedQuaternion,
+        0.78
+      );
+
+    }
+
+
+
+    this.el.object3D.position.copy(
+      this.currentPosition
     );
+
+
+    this.el.object3D.quaternion.copy(
+      this.currentQuaternion
+    );
+
+
+    this.el.object3D.scale.set(
+      1,1,1
+    );
+
+
+    this.el.object3D.visible =
+      true;
+
+
+
+    /* --------------------------------------------------
+       Diagnose
+       -------------------------------------------------- */
+
+    const markerText =
+      useful
+        .map(
+          candidate =>
+            candidate.index
+        )
+        .join(",");
+
+
+    this.info.textContent =
+
+      "Würfel: "
+      +
+      markerText
+      +
+      " | sichtbar: "
+      +
+      candidates.length;
 
   }
 
@@ -1122,30 +1157,25 @@ const sceneHost =
     "sceneHost"
   );
 
-
 const startScreen =
   document.getElementById(
     "startScreen"
   );
-
 
 const rotateIcon =
   document.getElementById(
     "rotateIcon"
   );
 
-
 const startTitle =
   document.getElementById(
     "startTitle"
   );
 
-
 const startText =
   document.getElementById(
     "startText"
   );
-
 
 const startButton =
   document.getElementById(
@@ -1153,12 +1183,8 @@ const startButton =
   );
 
 
-let arStarted =
-  false;
-
-
-let cameraOptimized =
-  false;
+let arStarted = false;
+let cameraOptimized = false;
 
 
 
@@ -1190,11 +1216,8 @@ function isMobileDevice() {
 function isLandscape() {
 
   return (
-
-    window.innerWidth
-    >
+    window.innerWidth >
     window.innerHeight
-
   );
 
 }
@@ -1203,9 +1226,7 @@ function isLandscape() {
 
 function updateStartScreen() {
 
-  if (
-    !isMobileDevice()
-  ) {
+  if (!isMobileDevice()) {
 
     startScreen.classList.remove(
       "visible"
@@ -1216,9 +1237,7 @@ function updateStartScreen() {
   }
 
 
-  if (
-    arStarted
-  ) {
+  if (arStarted) {
 
     startScreen.classList.remove(
       "visible"
@@ -1234,21 +1253,16 @@ function updateStartScreen() {
   );
 
 
-  if (
-    !isLandscape()
-  ) {
+  if (!isLandscape()) {
 
     rotateIcon.style.display =
       "block";
 
-
     startTitle.textContent =
       "Bitte Smartphone drehen";
 
-
     startText.textContent =
       "GeoChemAR wird im Querformat verwendet.";
-
 
     startButton.style.display =
       "none";
@@ -1260,14 +1274,11 @@ function updateStartScreen() {
     rotateIcon.style.display =
       "none";
 
-
     startTitle.textContent =
       "GeoChemAR";
 
-
     startText.textContent =
       "Das Smartphone ist im Querformat. GeoChemAR kann jetzt gestartet werden.";
-
 
     startButton.style.display =
       "block";
@@ -1284,17 +1295,10 @@ function updateStartScreen() {
 
 function createARScene() {
 
-  if (
-    arStarted
-  ) {
-
-    return;
-
-  }
+  if (arStarted) return;
 
 
-  arStarted =
-    true;
+  arStarted = true;
 
 
   sceneHost.innerHTML = `
@@ -1325,10 +1329,6 @@ function createARScene() {
 
     >
 
-
-      <!-- ============================================
-           MARKER 0–5
-           ============================================ -->
 
       <a-marker
         id="marker0"
@@ -1397,25 +1397,16 @@ function createARScene() {
 
 
 
-      <!-- ============================================
-           GEMEINSAMES WÜRFELKOORDINATENSYSTEM
-           ============================================ -->
+      <!--
+          EIN GEMEINSAMER WÜRFELROOT
+
+          Das Methan sitzt exakt im Zentrum.
+      -->
 
       <a-entity
         id="cubeRoot"
-        single-marker-cube
+        cube-tracker
       >
-
-
-        <!--
-          Methan liegt EXAKT im Würfelzentrum.
-
-          Keine Animation.
-          Keine Eigenrotation.
-
-          Jede Rotation kommt ausschließlich
-          aus der erkannten Würfelpose.
-        -->
 
         <a-entity
           id="methane"
@@ -1424,40 +1415,27 @@ function createARScene() {
           methane-model>
         </a-entity>
 
-
       </a-entity>
 
 
 
-      <!-- ============================================
-           LICHT
-           ============================================ -->
-
       <a-entity
-
         light="
           type: ambient;
           intensity: 1.0;
           color: #ffffff;
-        "
-
-      >
+        ">
       </a-entity>
 
 
       <a-entity
-
         light="
           type: directional;
           intensity: 0.8;
           color: #ffffff;
         "
-
-        position="1 2 1"
-
-      >
+        position="1 2 1">
       </a-entity>
-
 
 
       <a-entity camera></a-entity>
@@ -1482,9 +1460,7 @@ function createARScene() {
 
 async function startMobileAR() {
 
-  if (
-    !isLandscape()
-  ) {
+  if (!isLandscape()) {
 
     updateStartScreen();
 
@@ -1563,7 +1539,7 @@ async function startMobileAR() {
 
 
 /* ==========================================================
-   AR-VIDEO
+   VIDEO
    ========================================================== */
 
 function getARVideo() {
@@ -1597,16 +1573,13 @@ function enforceLayers() {
       "sceneHost"
     );
 
-
   const scene =
     document.getElementById(
       "arScene"
     );
 
-
   const video =
     getARVideo();
-
 
   const canvas =
     document.querySelector(
@@ -1696,8 +1669,7 @@ function enforceLayers() {
       ""
     );
 
-    video.muted =
-      true;
+    video.muted = true;
 
   }
 
@@ -1755,22 +1727,13 @@ function synchronizeVisualGeometry() {
   const video =
     getARVideo();
 
-
   const canvas =
     document.querySelector(
       "canvas.a-canvas"
     );
 
 
-  if (
-    !video
-    ||
-    !canvas
-  ) {
-
-    return;
-
-  }
+  if (!video || !canvas) return;
 
 
   const rect =
@@ -1778,14 +1741,9 @@ function synchronizeVisualGeometry() {
 
 
   if (
-    rect.width <= 0
-    ||
+    rect.width <= 0 ||
     rect.height <= 0
-  ) {
-
-    return;
-
-  }
+  ) return;
 
 
   canvas.style.setProperty(
@@ -1794,13 +1752,11 @@ function synchronizeVisualGeometry() {
     "important"
   );
 
-
   canvas.style.setProperty(
     "top",
     rect.top + "px",
     "important"
   );
-
 
   canvas.style.setProperty(
     "width",
@@ -1808,20 +1764,17 @@ function synchronizeVisualGeometry() {
     "important"
   );
 
-
   canvas.style.setProperty(
     "height",
     rect.height + "px",
     "important"
   );
 
-
   canvas.style.setProperty(
     "right",
     "auto",
     "important"
   );
-
 
   canvas.style.setProperty(
     "bottom",
@@ -1840,22 +1793,14 @@ function synchronizeVisualGeometry() {
 async function optimizeMobileCamera() {
 
   if (
-    cameraOptimized
-    ||
+    cameraOptimized ||
     !arStarted
-  ) {
-
-    return;
-
-  }
+  ) return;
 
 
-  if (
-    !isMobileDevice()
-  ) {
+  if (!isMobileDevice()) {
 
-    cameraOptimized =
-      true;
+    cameraOptimized = true;
 
     return;
 
@@ -1867,27 +1812,16 @@ async function optimizeMobileCamera() {
 
 
   if (
-    !video
-    ||
+    !video ||
     !video.srcObject
-  ) {
-
-    return;
-
-  }
+  ) return;
 
 
   const tracks =
     video.srcObject.getVideoTracks();
 
 
-  if (
-    !tracks.length
-  ) {
-
-    return;
-
-  }
+  if (!tracks.length) return;
 
 
   const track =
@@ -1931,49 +1865,36 @@ async function optimizeMobileCamera() {
 
   try {
 
-    if (
+    const capabilities =
       track.getCapabilities
-      &&
-      track.applyConstraints
+        ? track.getCapabilities()
+        : null;
+
+
+    if (
+      capabilities &&
+      capabilities.zoom
     ) {
 
-      const capabilities =
-        track.getCapabilities();
+      const desiredZoom =
+        Math.max(
+          capabilities.zoom.min,
+          Math.min(
+            1,
+            capabilities.zoom.max
+          )
+        );
 
 
-      if (
-        capabilities.zoom
-        &&
-        capabilities.zoom.min !== undefined
-      ) {
+      await track.applyConstraints({
 
-        const desiredZoom =
+        advanced: [
+          {
+            zoom: desiredZoom
+          }
+        ]
 
-          Math.max(
-
-            capabilities.zoom.min,
-
-            Math.min(
-              1,
-              capabilities.zoom.max
-            )
-
-          );
-
-
-        await track.applyConstraints({
-
-          advanced: [
-
-            {
-              zoom: desiredZoom
-            }
-
-          ]
-
-        });
-
-      }
+      });
 
     }
 
@@ -1989,8 +1910,7 @@ async function optimizeMobileCamera() {
   }
 
 
-  cameraOptimized =
-    true;
+  cameraOptimized = true;
 
 }
 
@@ -2002,9 +1922,7 @@ async function optimizeMobileCamera() {
 
 function orientationChanged() {
 
-  if (
-    !arStarted
-  ) {
+  if (!arStarted) {
 
     setTimeout(
       updateStartScreen,
@@ -2016,34 +1934,24 @@ function orientationChanged() {
   }
 
 
-  if (
-    !isMobileDevice()
-  ) {
-
-    return;
-
-  }
+  if (!isMobileDevice()) return;
 
 
-  if (
-    !isLandscape()
-  ) {
+  if (!isLandscape()) {
 
     const video =
       getARVideo();
 
 
     if (
-      video
-      &&
+      video &&
       video.srcObject
     ) {
 
       video.srcObject
         .getTracks()
         .forEach(
-          track =>
-            track.stop()
+          track => track.stop()
         );
 
     }
@@ -2071,7 +1979,7 @@ window.addEventListener(
 
   "orientationchange",
 
-  function () {
+  function() {
 
     setTimeout(
       orientationChanged,
@@ -2087,11 +1995,9 @@ window.addEventListener(
 
   "resize",
 
-  function () {
+  function() {
 
-    if (
-      !arStarted
-    ) {
+    if (!arStarted) {
 
       setTimeout(
         updateStartScreen,
@@ -2110,9 +2016,7 @@ window.addEventListener(
    START
    ========================================================== */
 
-if (
-  isMobileDevice()
-) {
+if (isMobileDevice()) {
 
   updateStartScreen();
 
@@ -2132,16 +2036,9 @@ else {
 
 setInterval(
 
-  function () {
+  function() {
 
-    if (
-      !arStarted
-    ) {
-
-      return;
-
-    }
-
+    if (!arStarted) return;
 
     enforceLayers();
 
@@ -2155,9 +2052,7 @@ setInterval(
 
 );
 
-
 </script>
 
 </body>
-
 </html>
