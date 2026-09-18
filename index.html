@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4e-6</title>
+  <title>GeoChemAR – Phase 4e-7 Diagnose</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -127,16 +127,18 @@
 
     #diagnostic {
       position: fixed;
-      top: 10px;
-      left: 10px;
+      top: 8px;
+      left: 8px;
       z-index: 1000;
-      padding: 8px 11px;
-      border-radius: 8px;
-      background: rgba(0,0,0,0.68);
+      padding: 8px 10px;
+      border-radius: 7px;
+      background: rgba(0,0,0,0.72);
       color: white;
-      font-size: 13px;
-      line-height: 1.4;
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.35;
       pointer-events: none;
+      white-space: nowrap;
     }
 
   </style>
@@ -148,8 +150,14 @@
 <div id="sceneHost"></div>
 
 <div id="diagnostic">
-  Phase 4e-6<br>
-  <span id="trackingInfo">Würfel: –</span>
+  <strong>GeoChemAR 4e-7 Diagnose</strong><br>
+  <span id="trackingInfo">Würfel: –</span><br>
+  <span id="diagRender">Render: –</span><br>
+  <span id="diagCamera">Kamera: –</span><br>
+  <span id="diagCanvas">Canvas: –</span><br>
+  <span id="diagPose">Pose-Updates: –</span><br>
+  <span id="diagEvents">Found/Lost: –</span><br>
+  <span id="diagJumps">Sprungfilter: –</span>
 </div>
 
 
@@ -180,6 +188,34 @@
 <script>
 
 /* ==========================================================
+   DIAGNOSE-ZÄHLER
+   ========================================================== */
+
+const diagnosticData = {
+
+  renderFrames: 0,
+  renderFPS: 0,
+
+  poseUpdates: 0,
+  poseUpdatesPerSecond: 0,
+
+  foundEvents: 0,
+  lostEvents: 0,
+
+  foundPerSecond: 0,
+  lostPerSecond: 0,
+
+  blockedJumps: 0,
+  blockedJumpsPerSecond: 0,
+
+  lastSecond:
+    performance.now()
+
+};
+
+
+
+/* ==========================================================
    METHAN
    ========================================================== */
 
@@ -189,12 +225,14 @@ AFRAME.registerComponent("methane-model", {
 
     const THREE = AFRAME.THREE;
 
-    const group = new THREE.Group();
+    const group =
+      new THREE.Group();
 
     const carbonRadius = 0.22;
     const hydrogenRadius = 0.14;
     const hydrogenDistance = 0.72;
     const bondRadius = 0.040;
+
 
     const carbonMaterial =
       new THREE.MeshStandardMaterial({
@@ -203,12 +241,14 @@ AFRAME.registerComponent("methane-model", {
         metalness: 0
       });
 
+
     const hydrogenMaterial =
       new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.45,
         metalness: 0
       });
+
 
     const bondMaterial =
       new THREE.MeshStandardMaterial({
@@ -250,92 +290,109 @@ AFRAME.registerComponent("methane-model", {
 
 
     directions.forEach(
-      direction => direction.normalize()
+      direction =>
+        direction.normalize()
     );
 
 
     const yAxis =
-      new THREE.Vector3(0, 1, 0);
+      new THREE.Vector3(0,1,0);
 
 
-    directions.forEach(function(direction) {
+    directions.forEach(
+      function(direction) {
 
-      const hydrogen =
-        new THREE.Mesh(
-          hydrogenGeometry,
-          hydrogenMaterial
-        );
-
-      hydrogen.position.copy(
-        direction.clone().multiplyScalar(
-          hydrogenDistance
-        )
-      );
-
-      group.add(hydrogen);
+        const hydrogen =
+          new THREE.Mesh(
+            hydrogenGeometry,
+            hydrogenMaterial
+          );
 
 
-      const startDistance =
-        carbonRadius;
-
-      const endDistance =
-        hydrogenDistance - hydrogenRadius;
-
-
-      const startPoint =
-        direction.clone().multiplyScalar(
-          startDistance
-        );
-
-      const endPoint =
-        direction.clone().multiplyScalar(
-          endDistance
+        hydrogen.position.copy(
+          direction
+            .clone()
+            .multiplyScalar(
+              hydrogenDistance
+            )
         );
 
 
-      const bondVector =
-        endPoint.clone().sub(startPoint);
-
-      const bondLength =
-        bondVector.length();
+        group.add(hydrogen);
 
 
-      const bond =
-        new THREE.Mesh(
+        const startDistance =
+          carbonRadius;
 
-          new THREE.CylinderGeometry(
-            bondRadius,
-            bondRadius,
-            bondLength,
-            32,
-            1,
-            false
-          ),
+        const endDistance =
+          hydrogenDistance -
+          hydrogenRadius;
 
-          bondMaterial
+
+        const startPoint =
+          direction
+            .clone()
+            .multiplyScalar(
+              startDistance
+            );
+
+
+        const endPoint =
+          direction
+            .clone()
+            .multiplyScalar(
+              endDistance
+            );
+
+
+        const bondVector =
+          endPoint
+            .clone()
+            .sub(startPoint);
+
+
+        const bondLength =
+          bondVector.length();
+
+
+        const bond =
+          new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+              bondRadius,
+              bondRadius,
+              bondLength,
+              32,
+              1,
+              false
+            ),
+
+            bondMaterial
+
+          );
+
+
+        bond.position.copy(
+
+          startPoint
+            .clone()
+            .add(endPoint)
+            .multiplyScalar(0.5)
 
         );
 
 
-      bond.position.copy(
-
-        startPoint
-          .clone()
-          .add(endPoint)
-          .multiplyScalar(0.5)
-
-      );
+        bond.quaternion
+          .setFromUnitVectors(
+            yAxis,
+            direction
+          );
 
 
-      bond.quaternion.setFromUnitVectors(
-        yAxis,
-        direction
-      );
+        group.add(bond);
 
-
-      group.add(bond);
-
-    });
+      }
+    );
 
 
     this.el.setObject3D(
@@ -350,592 +407,1284 @@ AFRAME.registerComponent("methane-model", {
 
 
 /* ==========================================================
-   WÜRFELTRACKER – PHASE 4e-6
+   WÜRFELTRACKER
 
-   Grundlage: 4e-3.
-
-   Wichtig:
-   KEINE lernenden Marker-Korrekturen mehr.
-   Die Würfelmitte wird ausschließlich aus der festen
-   Würfelgeometrie berechnet.
+   IDENTISCHE GRUNDLOGIK ZU 4e-6
+   + ausschließlich Diagnosemessungen
    ========================================================== */
 
-AFRAME.registerComponent("cube-tracker", {
+AFRAME.registerComponent(
+  "cube-tracker",
+  {
 
-  init: function () {
+    init: function () {
 
-    const THREE = AFRAME.THREE;
-
-    /*
-       Würfel:
-       45 mm Seitenlänge
-       40 mm Markerbreite
-
-       Abstand Markerebene -> Würfelzentrum:
-
-       22.5 / 40 = 0.5625
-    */
-
-    const h = 0.5625;
-    const s = Math.SQRT1_2;
+      const THREE =
+        AFRAME.THREE;
 
 
-    this.markers = [];
+      const h =
+        0.5625;
 
-    this.visible = [
-      false, false, false,
-      false, false, false
-    ];
-
-
-    /*
-       FESTE Geometrie der sechs Würfelflächen.
-
-       Diese Werte werden während des Betriebs
-       NICHT verändert.
-    */
-
-    this.faces = [
-
-      {
-        position:
-          new THREE.Vector3(0, 0, -h),
-
-        quaternion:
-          new THREE.Quaternion(-s, 0, 0, s)
-      },
-
-      {
-        position:
-          new THREE.Vector3(0, h, 0),
-
-        quaternion:
-          new THREE.Quaternion(0, 0, 0, 1)
-      },
-
-      {
-        position:
-          new THREE.Vector3(h, 0, 0),
-
-        quaternion:
-          new THREE.Quaternion(s, s, 0, 0)
-      },
-
-      {
-        position:
-          new THREE.Vector3(0, -h, 0),
-
-        quaternion:
-          new THREE.Quaternion(0, 0, 1, 0)
-      },
-
-      {
-        position:
-          new THREE.Vector3(-h, 0, 0),
-
-        quaternion:
-          new THREE.Quaternion(0, 0, s, s)
-      },
-
-      {
-        position:
-          new THREE.Vector3(0, 0, h),
-
-        quaternion:
-          new THREE.Quaternion(s, 0, 0, s)
-      }
-
-    ];
+      const s =
+        Math.SQRT1_2;
 
 
-    this.faceMatrices = [];
-
-    const unitScale =
-      new THREE.Vector3(1,1,1);
+      this.markers = [];
 
 
-    for (let i = 0; i < 6; i++) {
+      this.visible = [
+        false, false, false,
+        false, false, false
+      ];
 
-      this.faceMatrices[i] =
-        new THREE.Matrix4().compose(
-          this.faces[i].position,
-          this.faces[i].quaternion,
-          unitScale
+
+      this.faces = [
+
+        {
+          position:
+            new THREE.Vector3(
+              0,0,-h
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              -s,0,0,s
+            )
+        },
+
+        {
+          position:
+            new THREE.Vector3(
+              0,h,0
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              0,0,0,1
+            )
+        },
+
+        {
+          position:
+            new THREE.Vector3(
+              h,0,0
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              s,s,0,0
+            )
+        },
+
+        {
+          position:
+            new THREE.Vector3(
+              0,-h,0
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              0,0,1,0
+            )
+        },
+
+        {
+          position:
+            new THREE.Vector3(
+              -h,0,0
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              0,0,s,s
+            )
+        },
+
+        {
+          position:
+            new THREE.Vector3(
+              0,0,h
+            ),
+
+          quaternion:
+            new THREE.Quaternion(
+              s,0,0,s
+            )
+        }
+
+      ];
+
+
+      this.faceMatrices = [];
+
+
+      const unitScale =
+        new THREE.Vector3(
+          1,1,1
         );
 
-    }
-
-
-    this.camera =
-      document.querySelector(
-        "[camera]"
-      ).object3D;
-
-
-    this.cameraPosition =
-      new THREE.Vector3();
-
-    this.markerPosition =
-      new THREE.Vector3();
-
-    this.markerQuaternion =
-      new THREE.Quaternion();
-
-    this.markerScale =
-      new THREE.Vector3();
-
-    this.markerNormal =
-      new THREE.Vector3();
-
-    this.toCamera =
-      new THREE.Vector3();
-
-
-    this.tempMatrix =
-      new THREE.Matrix4();
-
-    this.inverseFace =
-      new THREE.Matrix4();
-
-
-    this.currentPosition =
-      new THREE.Vector3();
-
-    this.currentQuaternion =
-      new THREE.Quaternion();
-
-
-    this.hasPose = false;
-
-    this.lastSeenTime = 0;
-
-    this.holdTime = 250;
-
-
-    /*
-       Ausreißerfilter aus dem stabileren 4e-3.
-    */
-
-    this.multiPositionTolerance = 0.35;
-
-    this.multiRotationToleranceDeg = 28;
-
-
-    /*
-       Fingerschutz / Sprungschutz aus 4e-3.
-    */
-
-    this.jumpPositionThreshold = 0.48;
-
-    this.jumpRotationThresholdDeg = 38;
-
-
-    this.pendingJumpPosition =
-      new THREE.Vector3();
-
-    this.pendingJumpQuaternion =
-      new THREE.Quaternion();
-
-    this.pendingJumpFrames = 0;
-
-    this.jumpConfirmationFrames = 2;
-
-    this.hasPendingJump = false;
-
-
-    this.info =
-      document.getElementById(
-        "trackingInfo"
-      );
-
-
-    for (let i = 0; i < 6; i++) {
-
-      const marker =
-        document.getElementById(
-          "marker" + i
-        );
-
-      this.markers[i] = marker;
-
-
-      marker.addEventListener(
-        "markerFound",
-        () => {
-
-          this.visible[i] = true;
-
-        }
-      );
-
-
-      marker.addEventListener(
-        "markerLost",
-        () => {
-
-          this.visible[i] = false;
-
-        }
-      );
-
-    }
-
-
-    this.el.object3D.visible = false;
-
-  },
-
-
-
-  quaternionAngleDeg: function(a, b) {
-
-    let dot =
-      Math.abs(
-        a.dot(b)
-      );
-
-
-    dot =
-      Math.min(
-        1,
-        Math.max(
-          -1,
-          dot
-        )
-      );
-
-
-    return (
-      2 *
-      Math.acos(dot) *
-      180 /
-      Math.PI
-    );
-
-  },
-
-
-
-  /* ========================================================
-     WÜRFELPOSE AUS EINEM MARKER
-
-     W_cube = W_marker * inverse(T_cube_marker)
-
-     Es gibt hier KEINE dynamischen Offsets.
-     ======================================================== */
-
-  getCubeCandidate: function(index) {
-
-    const THREE = AFRAME.THREE;
-
-    const marker =
-      this.markers[index];
-
-
-    marker.object3D.updateMatrixWorld(true);
-
-
-    this.inverseFace
-      .copy(
-        this.faceMatrices[index]
-      )
-      .invert();
-
-
-    this.tempMatrix.multiplyMatrices(
-      marker.object3D.matrixWorld,
-      this.inverseFace
-    );
-
-
-    const position =
-      new THREE.Vector3();
-
-    const quaternion =
-      new THREE.Quaternion();
-
-    const scale =
-      new THREE.Vector3();
-
-
-    this.tempMatrix.decompose(
-      position,
-      quaternion,
-      scale
-    );
-
-
-    marker.object3D.matrixWorld.decompose(
-      this.markerPosition,
-      this.markerQuaternion,
-      this.markerScale
-    );
-
-
-    this.markerNormal
-      .set(0,1,0)
-      .applyQuaternion(
-        this.markerQuaternion
-      )
-      .normalize();
-
-
-    this.camera.getWorldPosition(
-      this.cameraPosition
-    );
-
-
-    this.toCamera
-      .copy(this.cameraPosition)
-      .sub(this.markerPosition)
-      .normalize();
-
-
-    let frontality =
-      Math.abs(
-        this.markerNormal.dot(
-          this.toCamera
-        )
-      );
-
-
-    let weight =
-      Math.pow(
-        frontality,
-        4
-      );
-
-
-    weight =
-      Math.max(
-        0.03,
-        weight
-      );
-
-
-    return {
-
-      index,
-      position,
-      quaternion,
-      weight,
-      frontality
-
-    };
-
-  },
-
-
-
-  /* ========================================================
-     MULTI-MARKER-AUSREISSERFILTER
-     ======================================================== */
-
-  rejectMultiMarkerOutliers: function(
-    candidates
-  ) {
-
-    if (
-      candidates.length <= 2
-    ) {
-
-      return candidates;
-
-    }
-
-
-    const scores =
-      candidates.map(
-        () => 0
-      );
-
-
-    for (
-      let i = 0;
-      i < candidates.length;
-      i++
-    ) {
 
       for (
-        let j = i + 1;
-        j < candidates.length;
-        j++
+        let i = 0;
+        i < 6;
+        i++
       ) {
 
-        const positionDifference =
-          candidates[i]
-            .position
-            .distanceTo(
-              candidates[j].position
+        this.faceMatrices[i] =
+          new THREE.Matrix4()
+            .compose(
+
+              this.faces[i].position,
+
+              this.faces[i].quaternion,
+
+              unitScale
+
             );
 
+      }
 
-        const rotationDifference =
-          this.quaternionAngleDeg(
-            candidates[i].quaternion,
-            candidates[j].quaternion
+
+      this.camera =
+        document
+          .querySelector(
+            "[camera]"
+          )
+          .object3D;
+
+
+      this.cameraPosition =
+        new THREE.Vector3();
+
+
+      this.markerPosition =
+        new THREE.Vector3();
+
+
+      this.markerQuaternion =
+        new THREE.Quaternion();
+
+
+      this.markerScale =
+        new THREE.Vector3();
+
+
+      this.markerNormal =
+        new THREE.Vector3();
+
+
+      this.toCamera =
+        new THREE.Vector3();
+
+
+      this.tempMatrix =
+        new THREE.Matrix4();
+
+
+      this.inverseFace =
+        new THREE.Matrix4();
+
+
+      this.currentPosition =
+        new THREE.Vector3();
+
+
+      this.currentQuaternion =
+        new THREE.Quaternion();
+
+
+      this.hasPose =
+        false;
+
+
+      this.lastSeenTime =
+        0;
+
+
+      this.holdTime =
+        250;
+
+
+      this.multiPositionTolerance =
+        0.35;
+
+
+      this.multiRotationToleranceDeg =
+        28;
+
+
+      this.jumpPositionThreshold =
+        0.48;
+
+
+      this.jumpRotationThresholdDeg =
+        38;
+
+
+      this.pendingJumpPosition =
+        new THREE.Vector3();
+
+
+      this.pendingJumpQuaternion =
+        new THREE.Quaternion();
+
+
+      this.pendingJumpFrames =
+        0;
+
+
+      this.jumpConfirmationFrames =
+        2;
+
+
+      this.hasPendingJump =
+        false;
+
+
+      this.info =
+        document.getElementById(
+          "trackingInfo"
+        );
+
+
+      /*
+         Für Diagnose:
+         letzte Marker-Matrizen speichern.
+
+         Damit messen wir nicht nur A-Frame-Ticks,
+         sondern ob AR.js tatsächlich eine neue
+         Markerpose geliefert hat.
+      */
+
+      this.lastMarkerMatrices = [];
+
+      for (
+        let i = 0;
+        i < 6;
+        i++
+      ) {
+
+        this.lastMarkerMatrices[i] =
+          null;
+
+
+        const marker =
+          document.getElementById(
+            "marker" + i
+          );
+
+
+        this.markers[i] =
+          marker;
+
+
+        marker.addEventListener(
+          "markerFound",
+          () => {
+
+            this.visible[i] =
+              true;
+
+            diagnosticData
+              .foundEvents++;
+
+          }
+        );
+
+
+        marker.addEventListener(
+          "markerLost",
+          () => {
+
+            this.visible[i] =
+              false;
+
+            diagnosticData
+              .lostEvents++;
+
+          }
+        );
+
+      }
+
+
+      this.el.object3D.visible =
+        false;
+
+    },
+
+
+
+    quaternionAngleDeg:
+      function(a,b) {
+
+        let dot =
+          Math.abs(
+            a.dot(b)
+          );
+
+
+        dot =
+          Math.min(
+            1,
+            Math.max(
+              -1,
+              dot
+            )
+          );
+
+
+        return (
+          2 *
+          Math.acos(dot) *
+          180 /
+          Math.PI
+        );
+
+      },
+
+
+
+    matrixChanged:
+      function(index, matrix) {
+
+        const elements =
+          matrix.elements;
+
+
+        const old =
+          this.lastMarkerMatrices[
+            index
+          ];
+
+
+        if (!old) {
+
+          this.lastMarkerMatrices[
+            index
+          ] =
+            elements.slice();
+
+          return true;
+
+        }
+
+
+        let changed =
+          false;
+
+
+        for (
+          let i = 0;
+          i < 16;
+          i++
+        ) {
+
+          if (
+            Math.abs(
+              elements[i] -
+              old[i]
+            ) > 0.00001
+          ) {
+
+            changed =
+              true;
+
+            break;
+
+          }
+
+        }
+
+
+        if (
+          changed
+        ) {
+
+          this.lastMarkerMatrices[
+            index
+          ] =
+            elements.slice();
+
+        }
+
+
+        return changed;
+
+      },
+
+
+
+    getCubeCandidate:
+      function(index) {
+
+        const THREE =
+          AFRAME.THREE;
+
+
+        const marker =
+          this.markers[
+            index
+          ];
+
+
+        marker.object3D
+          .updateMatrixWorld(
+            true
+          );
+
+
+        /*
+           Diagnose:
+           Hat AR.js für diesen Marker tatsächlich
+           eine neue Matrix geliefert?
+        */
+
+        if (
+          this.matrixChanged(
+            index,
+            marker.object3D.matrixWorld
+          )
+        ) {
+
+          diagnosticData
+            .poseUpdates++;
+
+        }
+
+
+        this.inverseFace
+          .copy(
+            this.faceMatrices[
+              index
+            ]
+          )
+          .invert();
+
+
+        this.tempMatrix
+          .multiplyMatrices(
+
+            marker
+              .object3D
+              .matrixWorld,
+
+            this.inverseFace
+
+          );
+
+
+        const position =
+          new THREE.Vector3();
+
+
+        const quaternion =
+          new THREE.Quaternion();
+
+
+        const scale =
+          new THREE.Vector3();
+
+
+        this.tempMatrix
+          .decompose(
+
+            position,
+            quaternion,
+            scale
+
+          );
+
+
+        marker
+          .object3D
+          .matrixWorld
+          .decompose(
+
+            this.markerPosition,
+            this.markerQuaternion,
+            this.markerScale
+
+          );
+
+
+        this.markerNormal
+          .set(
+            0,1,0
+          )
+          .applyQuaternion(
+            this.markerQuaternion
+          )
+          .normalize();
+
+
+        this.camera
+          .getWorldPosition(
+            this.cameraPosition
+          );
+
+
+        this.toCamera
+          .copy(
+            this.cameraPosition
+          )
+          .sub(
+            this.markerPosition
+          )
+          .normalize();
+
+
+        let frontality =
+          Math.abs(
+
+            this.markerNormal
+              .dot(
+                this.toCamera
+              )
+
+          );
+
+
+        let weight =
+          Math.pow(
+            frontality,
+            4
+          );
+
+
+        weight =
+          Math.max(
+            0.03,
+            weight
+          );
+
+
+        return {
+
+          index,
+          position,
+          quaternion,
+          weight,
+          frontality
+
+        };
+
+      },
+
+
+
+    rejectMultiMarkerOutliers:
+      function(candidates) {
+
+        if (
+          candidates.length <= 2
+        ) {
+
+          return candidates;
+
+        }
+
+
+        const scores =
+          candidates.map(
+            () => 0
+          );
+
+
+        for (
+          let i = 0;
+          i < candidates.length;
+          i++
+        ) {
+
+          for (
+            let j = i + 1;
+            j < candidates.length;
+            j++
+          ) {
+
+            const positionDifference =
+              candidates[i]
+                .position
+                .distanceTo(
+                  candidates[j]
+                    .position
+                );
+
+
+            const rotationDifference =
+              this
+                .quaternionAngleDeg(
+
+                  candidates[i]
+                    .quaternion,
+
+                  candidates[j]
+                    .quaternion
+
+                );
+
+
+            if (
+
+              positionDifference <=
+                this.multiPositionTolerance
+
+              &&
+
+              rotationDifference <=
+                this.multiRotationToleranceDeg
+
+            ) {
+
+              scores[i]++;
+              scores[j]++;
+
+            }
+
+          }
+
+        }
+
+
+        const bestScore =
+          Math.max(
+            ...scores
           );
 
 
         if (
-          positionDifference
-            <= this.multiPositionTolerance
-          &&
-          rotationDifference
-            <= this.multiRotationToleranceDeg
+          bestScore === 0
         ) {
 
-          scores[i]++;
-          scores[j]++;
+          return candidates;
 
         }
 
-      }
 
-    }
+        const filtered =
+          candidates.filter(
+
+            (candidate,index) =>
+
+              scores[index] ===
+                bestScore
+
+              ||
+
+              scores[index] >=
+                bestScore - 1
+
+          );
 
 
-    const bestScore =
-      Math.max(...scores);
+        return (
+          filtered.length > 0
+            ? filtered
+            : candidates
+        );
+
+      },
 
 
-    if (
-      bestScore === 0
-    ) {
 
-      return candidates;
+    fusePositions:
+      function(candidates) {
 
-    }
+        const THREE =
+          AFRAME.THREE;
 
 
-    const filtered =
-      candidates.filter(
-        (candidate, index) =>
+        const result =
+          new THREE.Vector3();
 
-          scores[index] === bestScore
+
+        let totalWeight =
+          0;
+
+
+        candidates.forEach(
+          candidate => {
+
+            result.addScaledVector(
+
+              candidate.position,
+
+              candidate.weight
+
+            );
+
+
+            totalWeight +=
+              candidate.weight;
+
+          }
+        );
+
+
+        if (
+          totalWeight > 0
+        ) {
+
+          result.multiplyScalar(
+            1 /
+            totalWeight
+          );
+
+        }
+
+
+        return result;
+
+      },
+
+
+
+    fuseQuaternions:
+      function(candidates) {
+
+        let best =
+          candidates[0];
+
+
+        candidates.forEach(
+          candidate => {
+
+            if (
+              candidate.weight >
+              best.weight
+            ) {
+
+              best =
+                candidate;
+
+            }
+
+          }
+        );
+
+
+        const result =
+          best
+            .quaternion
+            .clone();
+
+
+        let accumulatedWeight =
+          best.weight;
+
+
+        const others =
+          candidates
+            .filter(
+              candidate =>
+                candidate !== best
+            )
+            .sort(
+              (a,b) =>
+                b.weight -
+                a.weight
+            );
+
+
+        others.forEach(
+          candidate => {
+
+            const q =
+              candidate
+                .quaternion
+                .clone();
+
+
+            if (
+              result.dot(q) <
+              0
+            ) {
+
+              q.x *= -1;
+              q.y *= -1;
+              q.z *= -1;
+              q.w *= -1;
+
+            }
+
+
+            const t =
+              candidate.weight
+              /
+              (
+                accumulatedWeight +
+                candidate.weight
+              );
+
+
+            result.slerp(
+              q,
+              t
+            );
+
+
+            accumulatedWeight +=
+              candidate.weight;
+
+          }
+        );
+
+
+        result.normalize();
+
+
+        return result;
+
+      },
+
+
+
+    acceptPose:
+      function(
+        position,
+        quaternion
+      ) {
+
+        if (
+          !this.hasPose
+        ) {
+
+          this.hasPendingJump =
+            false;
+
+          this.pendingJumpFrames =
+            0;
+
+          return true;
+
+        }
+
+
+        const positionJump =
+          this.currentPosition
+            .distanceTo(
+              position
+            );
+
+
+        const rotationJump =
+          this.quaternionAngleDeg(
+
+            this.currentQuaternion,
+
+            quaternion
+
+          );
+
+
+        const isLargeJump =
+
+          positionJump >
+            this.jumpPositionThreshold
 
           ||
 
-          scores[index] >=
-            bestScore - 1
-      );
+          rotationJump >
+            this.jumpRotationThresholdDeg;
 
-
-    return (
-      filtered.length > 0
-        ? filtered
-        : candidates
-    );
-
-  },
-
-
-
-  /* ========================================================
-     POSITIONEN FUSIONIEREN
-     ======================================================== */
-
-  fusePositions: function(
-    candidates
-  ) {
-
-    const THREE = AFRAME.THREE;
-
-    const result =
-      new THREE.Vector3();
-
-    let totalWeight = 0;
-
-
-    candidates.forEach(
-      candidate => {
-
-        result.addScaledVector(
-          candidate.position,
-          candidate.weight
-        );
-
-        totalWeight +=
-          candidate.weight;
-
-      }
-    );
-
-
-    if (
-      totalWeight > 0
-    ) {
-
-      result.multiplyScalar(
-        1 / totalWeight
-      );
-
-    }
-
-
-    return result;
-
-  },
-
-
-
-  /* ========================================================
-     ROTATIONEN FUSIONIEREN
-     ======================================================== */
-
-  fuseQuaternions: function(
-    candidates
-  ) {
-
-    let best =
-      candidates[0];
-
-
-    candidates.forEach(
-      candidate => {
 
         if (
-          candidate.weight >
-          best.weight
+          !isLargeJump
         ) {
 
-          best = candidate;
+          this.hasPendingJump =
+            false;
+
+          this.pendingJumpFrames =
+            0;
+
+          return true;
 
         }
 
-      }
-    );
 
+        /*
+           Diagnose:
+           Der Filter musste eingreifen.
+        */
 
-    const result =
-      best.quaternion.clone();
-
-
-    let accumulatedWeight =
-      best.weight;
-
-
-    const others =
-      candidates
-        .filter(
-          candidate =>
-            candidate !== best
-        )
-        .sort(
-          (a,b) =>
-            b.weight - a.weight
-        );
-
-
-    others.forEach(
-      candidate => {
-
-        const q =
-          candidate.quaternion.clone();
+        diagnosticData
+          .blockedJumps++;
 
 
         if (
-          result.dot(q) < 0
+          !this.hasPendingJump
+        ) {
+
+          this.pendingJumpPosition
+            .copy(
+              position
+            );
+
+
+          this.pendingJumpQuaternion
+            .copy(
+              quaternion
+            );
+
+
+          this.pendingJumpFrames =
+            1;
+
+
+          this.hasPendingJump =
+            true;
+
+
+          return false;
+
+        }
+
+
+        const confirmationPositionDifference =
+          this.pendingJumpPosition
+            .distanceTo(
+              position
+            );
+
+
+        const confirmationRotationDifference =
+          this.quaternionAngleDeg(
+
+            this.pendingJumpQuaternion,
+
+            quaternion
+
+          );
+
+
+        const confirmsJump =
+
+          confirmationPositionDifference <
+            0.30
+
+          &&
+
+          confirmationRotationDifference <
+            25;
+
+
+        if (
+          confirmsJump
+        ) {
+
+          this.pendingJumpFrames++;
+
+
+          this.pendingJumpPosition
+            .lerp(
+              position,
+              0.5
+            );
+
+
+          const q =
+            quaternion.clone();
+
+
+          if (
+            this.pendingJumpQuaternion
+              .dot(q) < 0
+          ) {
+
+            q.x *= -1;
+            q.y *= -1;
+            q.z *= -1;
+            q.w *= -1;
+
+          }
+
+
+          this.pendingJumpQuaternion
+            .slerp(
+              q,
+              0.5
+            );
+
+
+          if (
+            this.pendingJumpFrames >=
+            this.jumpConfirmationFrames
+          ) {
+
+            this.hasPendingJump =
+              false;
+
+            this.pendingJumpFrames =
+              0;
+
+            return true;
+
+          }
+
+
+          return false;
+
+        }
+
+
+        this.pendingJumpPosition
+          .copy(
+            position
+          );
+
+
+        this.pendingJumpQuaternion
+          .copy(
+            quaternion
+          );
+
+
+        this.pendingJumpFrames =
+          1;
+
+
+        return false;
+
+      },
+
+
+
+    tick: function() {
+
+      /*
+         Diagnose:
+         A-Frame Render-/Tickrate
+      */
+
+      diagnosticData
+        .renderFrames++;
+
+
+      const now =
+        performance.now();
+
+
+      let candidates =
+        [];
+
+
+      for (
+        let i = 0;
+        i < 6;
+        i++
+      ) {
+
+        if (
+          !this.visible[i]
+        ) {
+
+          continue;
+
+        }
+
+
+        candidates.push(
+          this.getCubeCandidate(
+            i
+          )
+        );
+
+      }
+
+
+      if (
+        candidates.length === 0
+      ) {
+
+        const elapsed =
+          now -
+          this.lastSeenTime;
+
+
+        if (
+          this.hasPose &&
+          elapsed <
+            this.holdTime
+        ) {
+
+          this.el
+            .object3D
+            .visible =
+              true;
+
+
+          this.info
+            .textContent =
+              "Würfel: kurz gehalten";
+
+        }
+
+        else {
+
+          this.el
+            .object3D
+            .visible =
+              false;
+
+
+          this.info
+            .textContent =
+              "Würfel: –";
+
+        }
+
+
+        return;
+
+      }
+
+
+      this.lastSeenTime =
+        now;
+
+
+      candidates.sort(
+        (a,b) =>
+          b.weight -
+          a.weight
+      );
+
+
+      const originalCandidateCount =
+        candidates.length;
+
+
+      const bestWeight =
+        candidates[0]
+          .weight;
+
+
+      let useful =
+        candidates.filter(
+          candidate =>
+
+            candidate.weight >=
+
+            Math.max(
+              0.08,
+              bestWeight * 0.20
+            )
+        );
+
+
+      if (
+        useful.length === 0
+      ) {
+
+        useful = [
+          candidates[0]
+        ];
+
+      }
+
+
+      useful =
+        this.rejectMultiMarkerOutliers(
+          useful
+        );
+
+
+      const fusedPosition =
+        this.fusePositions(
+          useful
+        );
+
+
+      const fusedQuaternion =
+        this.fuseQuaternions(
+          useful
+        );
+
+
+      const poseAccepted =
+        this.acceptPose(
+
+          fusedPosition,
+
+          fusedQuaternion
+
+        );
+
+
+      if (
+        !poseAccepted
+      ) {
+
+        this.el
+          .object3D
+          .visible =
+            this.hasPose;
+
+
+        const markerText =
+          useful
+            .map(
+              candidate =>
+                candidate.index
+            )
+            .join(",");
+
+
+        this.info
+          .textContent =
+            "Würfel: "
+            +
+            markerText
+            +
+            " | Sprung abgefangen";
+
+
+        return;
+
+      }
+
+
+      if (
+        !this.hasPose
+      ) {
+
+        this.currentPosition
+          .copy(
+            fusedPosition
+          );
+
+
+        this.currentQuaternion
+          .copy(
+            fusedQuaternion
+          );
+
+
+        this.hasPose =
+          true;
+
+      }
+
+      else {
+
+        this.currentPosition
+          .lerp(
+            fusedPosition,
+            0.55
+          );
+
+
+        const q =
+          fusedQuaternion
+            .clone();
+
+
+        if (
+          this.currentQuaternion
+            .dot(q) < 0
         ) {
 
           q.x *= -1;
@@ -946,392 +1695,43 @@ AFRAME.registerComponent("cube-tracker", {
         }
 
 
-        const t =
-          candidate.weight
-          /
-          (
-            accumulatedWeight
-            +
-            candidate.weight
+        this.currentQuaternion
+          .slerp(
+            q,
+            0.78
           );
 
+      }
 
-        result.slerp(
-          q,
-          t
+
+      this.el
+        .object3D
+        .position
+        .copy(
+          this.currentPosition
         );
 
 
-        accumulatedWeight +=
-          candidate.weight;
-
-      }
-    );
-
-
-    result.normalize();
-
-
-    return result;
-
-  },
-
-
-
-  /* ========================================================
-     SPRUNGSCHUTZ
-     ======================================================== */
-
-  acceptPose: function(
-    position,
-    quaternion
-  ) {
-
-    if (
-      !this.hasPose
-    ) {
-
-      this.hasPendingJump = false;
-      this.pendingJumpFrames = 0;
-
-      return true;
-
-    }
-
-
-    const positionJump =
-      this.currentPosition.distanceTo(
-        position
-      );
-
-
-    const rotationJump =
-      this.quaternionAngleDeg(
-        this.currentQuaternion,
-        quaternion
-      );
-
-
-    const isLargeJump =
-
-      positionJump >
-        this.jumpPositionThreshold
-
-      ||
-
-      rotationJump >
-        this.jumpRotationThresholdDeg;
-
-
-    /*
-       Normale Bewegung wird sofort akzeptiert.
-    */
-
-    if (
-      !isLargeJump
-    ) {
-
-      this.hasPendingJump = false;
-      this.pendingJumpFrames = 0;
-
-      return true;
-
-    }
-
-
-    /*
-       Erster großer Sprung:
-       noch nicht übernehmen.
-    */
-
-    if (
-      !this.hasPendingJump
-    ) {
-
-      this.pendingJumpPosition.copy(
-        position
-      );
-
-      this.pendingJumpQuaternion.copy(
-        quaternion
-      );
-
-      this.pendingJumpFrames = 1;
-
-      this.hasPendingJump = true;
-
-      return false;
-
-    }
-
-
-    /*
-       Prüfen, ob die neue Pose bestätigt wird.
-    */
-
-    const confirmationPositionDifference =
-      this.pendingJumpPosition.distanceTo(
-        position
-      );
-
-
-    const confirmationRotationDifference =
-      this.quaternionAngleDeg(
-        this.pendingJumpQuaternion,
-        quaternion
-      );
-
-
-    const confirmsJump =
-
-      confirmationPositionDifference <
-        0.30
-
-      &&
-
-      confirmationRotationDifference <
-        25;
-
-
-    if (
-      confirmsJump
-    ) {
-
-      this.pendingJumpFrames++;
-
-
-      this.pendingJumpPosition.lerp(
-        position,
-        0.5
-      );
-
-
-      const q =
-        quaternion.clone();
-
-
-      if (
-        this.pendingJumpQuaternion.dot(q) < 0
-      ) {
-
-        q.x *= -1;
-        q.y *= -1;
-        q.z *= -1;
-        q.w *= -1;
-
-      }
-
-
-      this.pendingJumpQuaternion.slerp(
-        q,
-        0.5
-      );
-
-
-      if (
-        this.pendingJumpFrames >=
-        this.jumpConfirmationFrames
-      ) {
-
-        this.hasPendingJump = false;
-        this.pendingJumpFrames = 0;
-
-        return true;
-
-      }
-
-
-      return false;
-
-    }
-
-
-    /*
-       Der Sprung wurde nicht bestätigt.
-       Neue Messung wird neuer Prüfwert.
-    */
-
-    this.pendingJumpPosition.copy(
-      position
-    );
-
-    this.pendingJumpQuaternion.copy(
-      quaternion
-    );
-
-    this.pendingJumpFrames = 1;
-
-    return false;
-
-  },
-
-
-
-  /* ========================================================
-     HAUPTSCHLEIFE
-     ======================================================== */
-
-  tick: function() {
-
-    const now =
-      performance.now();
-
-
-    let candidates = [];
-
-
-    for (
-      let i = 0;
-      i < 6;
-      i++
-    ) {
-
-      if (
-        !this.visible[i]
-      ) {
-
-        continue;
-
-      }
-
-
-      candidates.push(
-        this.getCubeCandidate(i)
-      );
-
-    }
-
-
-    /* ======================================================
-       KEIN MARKER SICHTBAR
-       ====================================================== */
-
-    if (
-      candidates.length === 0
-    ) {
-
-      const elapsed =
-        now - this.lastSeenTime;
-
-
-      if (
-        this.hasPose &&
-        elapsed < this.holdTime
-      ) {
-
-        this.el.object3D.visible =
+      this.el
+        .object3D
+        .quaternion
+        .copy(
+          this.currentQuaternion
+        );
+
+
+      this.el
+        .object3D
+        .scale
+        .set(
+          1,1,1
+        );
+
+
+      this.el
+        .object3D
+        .visible =
           true;
-
-        this.info.textContent =
-          "Würfel: kurz gehalten";
-
-      }
-
-      else {
-
-        this.el.object3D.visible =
-          false;
-
-        this.info.textContent =
-          "Würfel: –";
-
-      }
-
-
-      return;
-
-    }
-
-
-    this.lastSeenTime =
-      now;
-
-
-    candidates.sort(
-      (a,b) =>
-        b.weight - a.weight
-    );
-
-
-    const originalCandidateCount =
-      candidates.length;
-
-
-    /* ======================================================
-       SCHRÄGE MARKER ABWERTEN
-       ====================================================== */
-
-    const bestWeight =
-      candidates[0].weight;
-
-
-    let useful =
-      candidates.filter(
-        candidate =>
-
-          candidate.weight >=
-
-          Math.max(
-            0.08,
-            bestWeight * 0.20
-          )
-      );
-
-
-    if (
-      useful.length === 0
-    ) {
-
-      useful = [
-        candidates[0]
-      ];
-
-    }
-
-
-    /* ======================================================
-       AUSREISSER ENTFERNEN
-       ====================================================== */
-
-    useful =
-      this.rejectMultiMarkerOutliers(
-        useful
-      );
-
-
-    /* ======================================================
-       GEMEINSAME WÜRFELPOSE
-       ====================================================== */
-
-    const fusedPosition =
-      this.fusePositions(
-        useful
-      );
-
-
-    const fusedQuaternion =
-      this.fuseQuaternions(
-        useful
-      );
-
-
-    /* ======================================================
-       SPRUNGSCHUTZ
-       ====================================================== */
-
-    const poseAccepted =
-      this.acceptPose(
-        fusedPosition,
-        fusedQuaternion
-      );
-
-
-    if (
-      !poseAccepted
-    ) {
-
-      this.el.object3D.visible =
-        this.hasPose;
 
 
       const markerText =
@@ -1343,124 +1743,20 @@ AFRAME.registerComponent("cube-tracker", {
           .join(",");
 
 
-      this.info.textContent =
-        "Würfel: "
-        +
-        markerText
-        +
-        " | Sprung abgefangen";
-
-
-      return;
-
-    }
-
-
-    /* ======================================================
-       POSE ÜBERNEHMEN
-
-       Werte aus 4e-3:
-       Position 0.55
-       Rotation 0.78
-       ====================================================== */
-
-    if (
-      !this.hasPose
-    ) {
-
-      this.currentPosition.copy(
-        fusedPosition
-      );
-
-
-      this.currentQuaternion.copy(
-        fusedQuaternion
-      );
-
-
-      this.hasPose = true;
+      this.info
+        .textContent =
+          "Würfel: "
+          +
+          markerText
+          +
+          " | sichtbar: "
+          +
+          originalCandidateCount;
 
     }
-
-    else {
-
-      this.currentPosition.lerp(
-        fusedPosition,
-        0.55
-      );
-
-
-      const q =
-        fusedQuaternion.clone();
-
-
-      if (
-        this.currentQuaternion.dot(q) < 0
-      ) {
-
-        q.x *= -1;
-        q.y *= -1;
-        q.z *= -1;
-        q.w *= -1;
-
-      }
-
-
-      this.currentQuaternion.slerp(
-        q,
-        0.78
-      );
-
-    }
-
-
-    /*
-       Das Molekül sitzt IMMER im Ursprung
-       des cubeRoot.
-
-       Nur cubeRoot wird bewegt.
-    */
-
-    this.el.object3D.position.copy(
-      this.currentPosition
-    );
-
-
-    this.el.object3D.quaternion.copy(
-      this.currentQuaternion
-    );
-
-
-    this.el.object3D.scale.set(
-      1,1,1
-    );
-
-
-    this.el.object3D.visible =
-      true;
-
-
-    const markerText =
-      useful
-        .map(
-          candidate =>
-            candidate.index
-        )
-        .join(",");
-
-
-    this.info.textContent =
-      "Würfel: "
-      +
-      markerText
-      +
-      " | sichtbar: "
-      +
-      originalCandidateCount;
 
   }
-
-});
+);
 
 
 
@@ -1473,25 +1769,30 @@ const sceneHost =
     "sceneHost"
   );
 
+
 const startScreen =
   document.getElementById(
     "startScreen"
   );
+
 
 const rotateIcon =
   document.getElementById(
     "rotateIcon"
   );
 
+
 const startTitle =
   document.getElementById(
     "startTitle"
   );
 
+
 const startText =
   document.getElementById(
     "startText"
   );
+
 
 const startButton =
   document.getElementById(
@@ -1499,8 +1800,12 @@ const startButton =
   );
 
 
-let arStarted = false;
-let cameraOptimized = false;
+let arStarted =
+  false;
+
+
+let cameraOptimized =
+  false;
 
 
 
@@ -1508,15 +1813,18 @@ function isMobileDevice() {
 
   return (
 
-    /Android|iPhone|iPad|iPod/i.test(
-      navigator.userAgent
-    )
+    /Android|iPhone|iPad|iPod/i
+      .test(
+        navigator.userAgent
+      )
 
     ||
 
     (
       navigator.maxTouchPoints > 1
+
       &&
+
       Math.min(
         screen.width,
         screen.height
@@ -1546,9 +1854,11 @@ function updateStartScreen() {
     !isMobileDevice()
   ) {
 
-    startScreen.classList.remove(
-      "visible"
-    );
+    startScreen
+      .classList
+      .remove(
+        "visible"
+      );
 
     return;
 
@@ -1559,18 +1869,22 @@ function updateStartScreen() {
     arStarted
   ) {
 
-    startScreen.classList.remove(
-      "visible"
-    );
+    startScreen
+      .classList
+      .remove(
+        "visible"
+      );
 
     return;
 
   }
 
 
-  startScreen.classList.add(
-    "visible"
-  );
+  startScreen
+    .classList
+    .add(
+      "visible"
+    );
 
 
   if (
@@ -1580,11 +1894,14 @@ function updateStartScreen() {
     rotateIcon.style.display =
       "block";
 
+
     startTitle.textContent =
       "Bitte Smartphone drehen";
 
+
     startText.textContent =
       "GeoChemAR wird im Querformat verwendet.";
+
 
     startButton.style.display =
       "none";
@@ -1596,11 +1913,14 @@ function updateStartScreen() {
     rotateIcon.style.display =
       "none";
 
+
     startTitle.textContent =
       "GeoChemAR";
 
+
     startText.textContent =
       "Das Smartphone ist im Querformat. GeoChemAR kann jetzt gestartet werden.";
+
 
     startButton.style.display =
       "block";
@@ -1622,7 +1942,8 @@ function createARScene() {
   ) return;
 
 
-  arStarted = true;
+  arStarted =
+    true;
 
 
   sceneHost.innerHTML = `
@@ -1744,9 +2065,11 @@ function createARScene() {
   `;
 
 
-  startScreen.classList.remove(
-    "visible"
-  );
+  startScreen
+    .classList
+    .remove(
+      "visible"
+    );
 
 }
 
@@ -1779,7 +2102,8 @@ async function startMobileAR() {
       element.requestFullscreen
     ) {
 
-      await element.requestFullscreen();
+      await element
+        .requestFullscreen();
 
     }
 
@@ -1787,13 +2111,14 @@ async function startMobileAR() {
       element.webkitRequestFullscreen
     ) {
 
-      element.webkitRequestFullscreen();
+      element
+        .webkitRequestFullscreen();
 
     }
 
   }
 
-  catch (error) {
+  catch(error) {
 
     console.log(
       "GeoChemAR: Vollbildmodus nicht verfügbar.",
@@ -1810,15 +2135,16 @@ async function startMobileAR() {
       screen.orientation.lock
     ) {
 
-      await screen.orientation.lock(
-        "landscape"
-      );
+      await screen.orientation
+        .lock(
+          "landscape"
+        );
 
     }
 
   }
 
-  catch (error) {
+  catch(error) {
 
     console.log(
       "GeoChemAR: Orientierung konnte nicht gesperrt werden.",
@@ -1872,13 +2198,16 @@ function enforceLayers() {
       "sceneHost"
     );
 
+
   const scene =
     document.getElementById(
       "arScene"
     );
 
+
   const video =
     getARVideo();
+
 
   const canvas =
     document.querySelector(
@@ -1886,9 +2215,7 @@ function enforceLayers() {
     );
 
 
-  if (
-    host
-  ) {
+  if (host) {
 
     host.style.setProperty(
       "position",
@@ -1905,9 +2232,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    scene
-  ) {
+  if (scene) {
 
     scene.style.setProperty(
       "position",
@@ -1936,9 +2261,7 @@ function enforceLayers() {
   }
 
 
-  if (
-    video
-  ) {
+  if (video) {
 
     video.style.setProperty(
       "position",
@@ -1974,14 +2297,13 @@ function enforceLayers() {
       ""
     );
 
-    video.muted = true;
+    video.muted =
+      true;
 
   }
 
 
-  if (
-    canvas
-  ) {
+  if (canvas) {
 
     canvas.style.setProperty(
       "position",
@@ -2034,6 +2356,7 @@ function synchronizeVisualGeometry() {
   const video =
     getARVideo();
 
+
   const canvas =
     document.querySelector(
       "canvas.a-canvas"
@@ -2047,7 +2370,8 @@ function synchronizeVisualGeometry() {
 
 
   const rect =
-    video.getBoundingClientRect();
+    video
+      .getBoundingClientRect();
 
 
   if (
@@ -2098,6 +2422,11 @@ function synchronizeVisualGeometry() {
 
 /* ==========================================================
    SMARTPHONE-KAMERA
+
+   UNVERÄNDERT:
+   640 × 480
+   4:3
+   30 fps
    ========================================================== */
 
 async function optimizeMobileCamera() {
@@ -2112,7 +2441,8 @@ async function optimizeMobileCamera() {
     !isMobileDevice()
   ) {
 
-    cameraOptimized = true;
+    cameraOptimized =
+      true;
 
     return;
 
@@ -2130,7 +2460,9 @@ async function optimizeMobileCamera() {
 
 
   const tracks =
-    video.srcObject.getVideoTracks();
+    video
+      .srcObject
+      .getVideoTracks();
 
 
   if (
@@ -2167,7 +2499,7 @@ async function optimizeMobileCamera() {
 
   }
 
-  catch (error) {
+  catch(error) {
 
     console.log(
       "GeoChemAR: Kameraauflösung konnte nicht angepasst werden.",
@@ -2192,11 +2524,14 @@ async function optimizeMobileCamera() {
 
       const desiredZoom =
         Math.max(
+
           capabilities.zoom.min,
+
           Math.min(
             1,
             capabilities.zoom.max
           )
+
         );
 
 
@@ -2204,7 +2539,8 @@ async function optimizeMobileCamera() {
 
         advanced: [
           {
-            zoom: desiredZoom
+            zoom:
+              desiredZoom
           }
         ]
 
@@ -2214,7 +2550,7 @@ async function optimizeMobileCamera() {
 
   }
 
-  catch (error) {
+  catch(error) {
 
     console.log(
       "GeoChemAR: Zoom konnte nicht angepasst werden.",
@@ -2224,7 +2560,306 @@ async function optimizeMobileCamera() {
   }
 
 
-  cameraOptimized = true;
+  cameraOptimized =
+    true;
+
+}
+
+
+
+/* ==========================================================
+   DIAGNOSEANZEIGE
+   ========================================================== */
+
+function updateDiagnostics() {
+
+  if (
+    !arStarted
+  ) return;
+
+
+  const now =
+    performance.now();
+
+
+  const elapsed =
+    now -
+    diagnosticData.lastSecond;
+
+
+  if (
+    elapsed < 1000
+  ) return;
+
+
+  const factor =
+    1000 /
+    elapsed;
+
+
+  diagnosticData.renderFPS =
+    diagnosticData.renderFrames *
+    factor;
+
+
+  diagnosticData.poseUpdatesPerSecond =
+    diagnosticData.poseUpdates *
+    factor;
+
+
+  diagnosticData.foundPerSecond =
+    diagnosticData.foundEvents *
+    factor;
+
+
+  diagnosticData.lostPerSecond =
+    diagnosticData.lostEvents *
+    factor;
+
+
+  diagnosticData.blockedJumpsPerSecond =
+    diagnosticData.blockedJumps *
+    factor;
+
+
+  diagnosticData.renderFrames =
+    0;
+
+
+  diagnosticData.poseUpdates =
+    0;
+
+
+  diagnosticData.foundEvents =
+    0;
+
+
+  diagnosticData.lostEvents =
+    0;
+
+
+  diagnosticData.blockedJumps =
+    0;
+
+
+  diagnosticData.lastSecond =
+    now;
+
+
+  /* --------------------------------------------------------
+     Kamera
+     -------------------------------------------------------- */
+
+  let cameraText =
+    "Kamera: –";
+
+
+  const video =
+    getARVideo();
+
+
+  if (
+    video &&
+    video.srcObject
+  ) {
+
+    const tracks =
+      video.srcObject
+        .getVideoTracks();
+
+
+    if (
+      tracks.length
+    ) {
+
+      const track =
+        tracks[0];
+
+
+      if (
+        track.getSettings
+      ) {
+
+        const settings =
+          track.getSettings();
+
+
+        const width =
+          settings.width ||
+          "?";
+
+
+        const height =
+          settings.height ||
+          "?";
+
+
+        const fps =
+          settings.frameRate
+            ? settings.frameRate
+                .toFixed(1)
+            : "?";
+
+
+        cameraText =
+          "Kamera: "
+          +
+          width
+          +
+          "×"
+          +
+          height
+          +
+          " @ "
+          +
+          fps
+          +
+          " fps";
+
+      }
+
+    }
+
+  }
+
+
+  document
+    .getElementById(
+      "diagCamera"
+    )
+    .textContent =
+      cameraText;
+
+
+  /* --------------------------------------------------------
+     Renderer / Canvas
+     -------------------------------------------------------- */
+
+  document
+    .getElementById(
+      "diagRender"
+    )
+    .textContent =
+      "Render: "
+      +
+      diagnosticData
+        .renderFPS
+        .toFixed(1)
+      +
+      " fps";
+
+
+  const canvas =
+    document.querySelector(
+      "canvas.a-canvas"
+    );
+
+
+  const scene =
+    document.getElementById(
+      "arScene"
+    );
+
+
+  let canvasText =
+    "Canvas: –";
+
+
+  if (
+    canvas
+  ) {
+
+    let pixelRatio =
+      "?";
+
+
+    if (
+      scene &&
+      scene.renderer
+    ) {
+
+      pixelRatio =
+        scene.renderer
+          .getPixelRatio()
+          .toFixed(2);
+
+    }
+
+
+    canvasText =
+      "Canvas: "
+      +
+      canvas.width
+      +
+      "×"
+      +
+      canvas.height
+      +
+      " | DPR "
+      +
+      pixelRatio;
+
+  }
+
+
+  document
+    .getElementById(
+      "diagCanvas"
+    )
+    .textContent =
+      canvasText;
+
+
+  /* --------------------------------------------------------
+     Tracking
+     -------------------------------------------------------- */
+
+  document
+    .getElementById(
+      "diagPose"
+    )
+    .textContent =
+      "Pose-Updates: "
+      +
+      diagnosticData
+        .poseUpdatesPerSecond
+        .toFixed(1)
+      +
+      "/s";
+
+
+  document
+    .getElementById(
+      "diagEvents"
+    )
+    .textContent =
+      "Found/Lost: "
+      +
+      diagnosticData
+        .foundPerSecond
+        .toFixed(1)
+      +
+      " / "
+      +
+      diagnosticData
+        .lostPerSecond
+        .toFixed(1)
+      +
+      " pro s";
+
+
+  document
+    .getElementById(
+      "diagJumps"
+    )
+    .textContent =
+      "Sprungfilter: "
+      +
+      diagnosticData
+        .blockedJumpsPerSecond
+        .toFixed(1)
+      +
+      "/s";
 
 }
 
@@ -2290,10 +2925,11 @@ function orientationChanged() {
    EVENTS
    ========================================================== */
 
-startButton.addEventListener(
-  "click",
-  startMobileAR
-);
+startButton
+  .addEventListener(
+    "click",
+    startMobileAR
+  );
 
 
 window.addEventListener(
@@ -2367,6 +3003,7 @@ setInterval(
       !arStarted
     ) return;
 
+
     enforceLayers();
 
     optimizeMobileCamera();
@@ -2379,7 +3016,14 @@ setInterval(
 
 );
 
+
+setInterval(
+  updateDiagnostics,
+  250
+);
+
 </script>
 
 </body>
+
 </html>
