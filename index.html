@@ -13,7 +13,7 @@
              viewport-fit=cover"
   >
 
-  <title>GeoChemAR – Phase 4a – Barcode-Marker</title>
+  <title>GeoChemAR – Phase 4c – Markerwürfel</title>
 
   <script src="libs/aframe.min.js"></script>
   <script src="libs/aframe-ar.js"></script>
@@ -173,20 +173,25 @@ AFRAME.registerComponent("methane-model", {
 
     const THREE = AFRAME.THREE;
 
-    const group = new THREE.Group();
+    const group =
+      new THREE.Group();
 
 
     /* ==================================================
        Größen
        ================================================== */
 
-    const carbonRadius = 0.22;
+    const carbonRadius =
+      0.22;
 
-    const hydrogenRadius = 0.14;
+    const hydrogenRadius =
+      0.14;
 
-    const hydrogenDistance = 0.72;
+    const hydrogenDistance =
+      0.72;
 
-    const bondRadius = 0.040;
+    const bondRadius =
+      0.040;
 
 
 
@@ -313,11 +318,13 @@ AFRAME.registerComponent("methane-model", {
     ];
 
 
-    directions.forEach(function (direction) {
+    directions.forEach(
+      function (direction) {
 
-      direction.normalize();
+        direction.normalize();
 
-    });
+      }
+    );
 
 
 
@@ -333,142 +340,146 @@ AFRAME.registerComponent("methane-model", {
       );
 
 
-    directions.forEach(function (direction) {
+    directions.forEach(
+      function (direction) {
 
 
-      /* ----------------------------------------------
-         Wasserstoffatom
-         ---------------------------------------------- */
+        /* --------------------------------------------
+           Wasserstoff
+           -------------------------------------------- */
 
-      const hydrogen =
-        new THREE.Mesh(
+        const hydrogen =
+          new THREE.Mesh(
 
-          hydrogenGeometry,
+            hydrogenGeometry,
 
-          hydrogenMaterial
+            hydrogenMaterial
+
+          );
+
+
+        hydrogen.position.copy(
+
+          direction
+            .clone()
+            .multiplyScalar(
+              hydrogenDistance
+            )
 
         );
 
 
-      hydrogen.position.copy(
-
-        direction
-          .clone()
-          .multiplyScalar(
-            hydrogenDistance
-          )
-
-      );
-
-
-      group.add(
-        hydrogen
-      );
+        group.add(
+          hydrogen
+        );
 
 
 
-      /* ----------------------------------------------
-         Bindungsstab exakt von Kugeloberfläche
-         zu Kugeloberfläche.
-         ---------------------------------------------- */
+        /* --------------------------------------------
+           Bindungsstab
 
-      const startDistance =
-        carbonRadius;
+           Exakt von Kugeloberfläche
+           zu Kugeloberfläche.
+           -------------------------------------------- */
 
-
-      const endDistance =
-        hydrogenDistance
-        -
-        hydrogenRadius;
+        const startDistance =
+          carbonRadius;
 
 
-      const startPoint =
+        const endDistance =
+          hydrogenDistance
+          -
+          hydrogenRadius;
 
-        direction
-          .clone()
-          .multiplyScalar(
-            startDistance
+
+        const startPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              startDistance
+            );
+
+
+        const endPoint =
+
+          direction
+            .clone()
+            .multiplyScalar(
+              endDistance
+            );
+
+
+        const bondVector =
+
+          endPoint
+            .clone()
+            .sub(
+              startPoint
+            );
+
+
+        const bondLength =
+          bondVector.length();
+
+
+        const bondGeometry =
+          new THREE.CylinderGeometry(
+
+            bondRadius,
+
+            bondRadius,
+
+            bondLength,
+
+            32,
+
+            1,
+
+            false
+
           );
 
 
-      const endPoint =
+        const bond =
+          new THREE.Mesh(
 
-        direction
-          .clone()
-          .multiplyScalar(
-            endDistance
+            bondGeometry,
+
+            bondMaterial
+
           );
 
 
-      const bondVector =
+        bond.position.copy(
 
-        endPoint
-          .clone()
-          .sub(
-            startPoint
-          );
-
-
-      const bondLength =
-        bondVector.length();
-
-
-      const bondGeometry =
-        new THREE.CylinderGeometry(
-
-          bondRadius,
-
-          bondRadius,
-
-          bondLength,
-
-          32,
-
-          1,
-
-          false
+          startPoint
+            .clone()
+            .add(
+              endPoint
+            )
+            .multiplyScalar(
+              0.5
+            )
 
         );
 
 
-      const bond =
-        new THREE.Mesh(
+        bond.quaternion.setFromUnitVectors(
 
-          bondGeometry,
+          yAxis,
 
-          bondMaterial
+          direction
 
         );
 
 
-      bond.position.copy(
+        group.add(
+          bond
+        );
 
-        startPoint
-          .clone()
-          .add(
-            endPoint
-          )
-          .multiplyScalar(
-            0.5
-          )
-
-      );
-
-
-      bond.quaternion.setFromUnitVectors(
-
-        yAxis,
-
-        direction
-
-      );
-
-
-      group.add(
-        bond
-      );
-
-    });
+      }
+    );
 
 
 
@@ -497,6 +508,8 @@ AFRAME.registerComponent("methane-model", {
 
 /* ==========================================================
    Tracking-Aussetzer kurz überbrücken
+
+   Bleibt unverändert bei 250 ms.
    ========================================================== */
 
 AFRAME.registerComponent("marker-hold", {
@@ -659,6 +672,7 @@ const startButton =
 let arStarted =
   false;
 
+
 let cameraOptimized =
   false;
 
@@ -701,7 +715,8 @@ function isLandscape() {
 
   return (
 
-    window.innerWidth >
+    window.innerWidth
+    >
     window.innerHeight
 
   );
@@ -791,9 +806,25 @@ function updateStartScreen() {
 
 
 
-/* ==================================================
-   AR-Szene
-   ================================================== */
+/* ==========================================================
+   AR-Szene – Phase 4c
+
+   Alle sechs Barcode-Marker 0 bis 5 werden gleichzeitig
+   erkannt.
+
+   WICHTIG:
+   Jeder Marker erhält momentan NOCH sein eigenes
+   Methanmolekül.
+
+   Das ist Absicht.
+
+   Dadurch testen wir zunächst nur:
+   - Erkennung aller sechs Würfelseiten
+   - Erkennung über Würfelkanten hinweg
+   - gleichzeitige Erkennung zweier Seiten
+
+   Noch KEINE gemeinsame Würfelpose.
+   ========================================================== */
 
 function createARScene() {
 
@@ -839,13 +870,9 @@ function createARScene() {
     >
 
 
-      <!-- ============================================
-           PHASE 4a:
-           eigener ARToolKit-Barcode-Marker
-
-           Der Marker hat die ID 0.
-           Keine .patt-Datei mehr notwendig.
-           ============================================ -->
+      <!-- ==========================================
+           MARKER 0
+           ========================================== -->
 
       <a-marker
 
@@ -869,10 +896,7 @@ function createARScene() {
 
       >
 
-
         <a-entity
-
-          id="methane"
 
           position="0 0.55 0"
 
@@ -881,10 +905,208 @@ function createARScene() {
         >
         </a-entity>
 
+      </a-marker>
+
+
+
+      <!-- ==========================================
+           MARKER 1
+           ========================================== -->
+
+      <a-marker
+
+        id="marker1"
+
+        type="barcode"
+
+        value="1"
+
+        smooth="true"
+
+        smoothCount="3"
+
+        smoothTolerance="0.01"
+
+        smoothThreshold="2"
+
+        marker-hold="
+          holdTime: 250;
+        "
+
+      >
+
+        <a-entity
+
+          position="0 0.55 0"
+
+          methane-model
+
+        >
+        </a-entity>
 
       </a-marker>
 
 
+
+      <!-- ==========================================
+           MARKER 2
+           ========================================== -->
+
+      <a-marker
+
+        id="marker2"
+
+        type="barcode"
+
+        value="2"
+
+        smooth="true"
+
+        smoothCount="3"
+
+        smoothTolerance="0.01"
+
+        smoothThreshold="2"
+
+        marker-hold="
+          holdTime: 250;
+        "
+
+      >
+
+        <a-entity
+
+          position="0 0.55 0"
+
+          methane-model
+
+        >
+        </a-entity>
+
+      </a-marker>
+
+
+
+      <!-- ==========================================
+           MARKER 3
+           ========================================== -->
+
+      <a-marker
+
+        id="marker3"
+
+        type="barcode"
+
+        value="3"
+
+        smooth="true"
+
+        smoothCount="3"
+
+        smoothTolerance="0.01"
+
+        smoothThreshold="2"
+
+        marker-hold="
+          holdTime: 250;
+        "
+
+      >
+
+        <a-entity
+
+          position="0 0.55 0"
+
+          methane-model
+
+        >
+        </a-entity>
+
+      </a-marker>
+
+
+
+      <!-- ==========================================
+           MARKER 4
+           ========================================== -->
+
+      <a-marker
+
+        id="marker4"
+
+        type="barcode"
+
+        value="4"
+
+        smooth="true"
+
+        smoothCount="3"
+
+        smoothTolerance="0.01"
+
+        smoothThreshold="2"
+
+        marker-hold="
+          holdTime: 250;
+        "
+
+      >
+
+        <a-entity
+
+          position="0 0.55 0"
+
+          methane-model
+
+        >
+        </a-entity>
+
+      </a-marker>
+
+
+
+      <!-- ==========================================
+           MARKER 5
+           ========================================== -->
+
+      <a-marker
+
+        id="marker5"
+
+        type="barcode"
+
+        value="5"
+
+        smooth="true"
+
+        smoothCount="3"
+
+        smoothTolerance="0.01"
+
+        smoothThreshold="2"
+
+        marker-hold="
+          holdTime: 250;
+        "
+
+      >
+
+        <a-entity
+
+          position="0 0.55 0"
+
+          methane-model
+
+        >
+        </a-entity>
+
+      </a-marker>
+
+
+
+      <!-- ==========================================
+           Beleuchtung
+           ========================================== -->
 
       <a-entity
 
@@ -911,6 +1133,11 @@ function createARScene() {
       >
       </a-entity>
 
+
+
+      <!-- ==========================================
+           Kamera
+           ========================================== -->
 
       <a-entity camera></a-entity>
 
@@ -1071,7 +1298,9 @@ function enforceLayers() {
     );
 
 
-  if (host) {
+  if (
+    host
+  ) {
 
     host.style.setProperty(
       "position",
@@ -1089,7 +1318,9 @@ function enforceLayers() {
   }
 
 
-  if (scene) {
+  if (
+    scene
+  ) {
 
     scene.style.setProperty(
       "position",
@@ -1121,7 +1352,9 @@ function enforceLayers() {
   }
 
 
-  if (video) {
+  if (
+    video
+  ) {
 
     video.style.setProperty(
       "position",
@@ -1169,7 +1402,9 @@ function enforceLayers() {
   }
 
 
-  if (canvas) {
+  if (
+    canvas
+  ) {
 
     canvas.style.setProperty(
       "position",
