@@ -8,7 +8,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>GeoChemAR – Three.js Test</title>
+  <title>GeoChemAR – Three.js Basistest</title>
 
   <style>
     html, body {
@@ -26,15 +26,13 @@
       top: 10px;
       left: 10px;
       z-index: 9999;
-
       padding: 10px 14px;
       border-radius: 8px;
-
       background: rgba(0,0,0,0.75);
       color: white;
-
       font-size: 14px;
-      line-height: 1.4;
+      line-height: 1.5;
+      pointer-events: none;
     }
 
     #error {
@@ -43,73 +41,62 @@
       right: 10px;
       bottom: 10px;
       z-index: 9999;
-
       padding: 10px;
-
       background: rgba(150,0,0,0.9);
       color: white;
-
       font-size: 13px;
       white-space: pre-wrap;
-
       display: none;
+    }
+
+    canvas {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      z-index: 2 !important;
+    }
+
+    video {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      z-index: 1 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     }
   </style>
 </head>
 
 <body>
 
-<div id="status">
-  1 – HTML geladen
-</div>
-
+<div id="status">1 – HTML geladen</div>
 <div id="error"></div>
 
 
 <script>
+  window.addEventListener("error", function(event) {
+    const box = document.getElementById("error");
 
-  /*
-   * Auch JavaScript-Fehler, die außerhalb unseres
-   * try/catch auftreten, sichtbar machen.
-   */
+    box.style.display = "block";
 
-  window.addEventListener(
-    "error",
-    function(event) {
+    box.textContent =
+      "JavaScript-Fehler:\n" +
+      event.message +
+      "\n" +
+      event.filename +
+      "\nZeile " +
+      event.lineno;
+  });
 
-      const box =
-        document.getElementById("error");
+  window.addEventListener("unhandledrejection", function(event) {
+    const box = document.getElementById("error");
 
-      box.style.display = "block";
+    box.style.display = "block";
 
-      box.textContent =
-        "JavaScript-Fehler:\n"
-        + event.message
-        + "\n"
-        + event.filename
-        + "\nZeile "
-        + event.lineno;
-
-    }
-  );
-
-
-  window.addEventListener(
-    "unhandledrejection",
-    function(event) {
-
-      const box =
-        document.getElementById("error");
-
-      box.style.display = "block";
-
-      box.textContent =
-        "Promise-Fehler:\n"
-        + String(event.reason);
-
-    }
-  );
-
+    box.textContent =
+      "Promise-Fehler:\n" +
+      String(event.reason);
+  });
 </script>
 
 
@@ -133,60 +120,43 @@ const errorBox =
 
 
 function setStatus(text) {
-
   status.textContent = text;
-
 }
 
 
 function showError(error) {
-
   console.error(error);
 
   errorBox.style.display = "block";
 
   errorBox.textContent =
-    "FEHLER:\n"
-    +
+    "FEHLER:\n" +
     (
-      error &&
-      error.stack
-
-      ? error.stack
-
-      : String(error)
+      error && error.stack
+        ? error.stack
+        : String(error)
     );
-
 }
 
 
 try {
 
-  /* ========================================================
-     MODULE LADEN
-     ======================================================== */
+  /* =====================================================
+     1. MODULE LADEN
+     ===================================================== */
 
-  setStatus(
-    "2 – Module werden geladen …"
-  );
-
+  setStatus("2 – Three.js wird geladen …");
 
   const THREE =
     await import("three");
 
-
-  setStatus(
-    "3 – Three.js geladen"
-  );
+  setStatus("3 – Three.js geladen");
 
 
   const THREEX =
     await import("threex");
 
-
-  setStatus(
-    "4 – AR.js geladen"
-  );
+  setStatus("4 – AR.js geladen");
 
 
   const {
@@ -196,9 +166,10 @@ try {
   } = THREEX;
 
 
-  /* ========================================================
-     THREE.JS
-     ======================================================== */
+
+  /* =====================================================
+     2. THREE.JS
+     ===================================================== */
 
   const scene =
     new THREE.Scene();
@@ -207,10 +178,7 @@ try {
   const camera =
     new THREE.Camera();
 
-
-  scene.add(
-    camera
-  );
+  scene.add(camera);
 
 
   const renderer =
@@ -233,7 +201,7 @@ try {
 
 
   renderer.domElement.style.position =
-    "absolute";
+    "fixed";
 
   renderer.domElement.style.top =
     "0px";
@@ -250,52 +218,40 @@ try {
   );
 
 
-  /* ========================================================
-     MARKER ROOT
-     ======================================================== */
+
+  /* =====================================================
+     3. MARKER ROOT
+     ===================================================== */
 
   const markerRoot =
     new THREE.Group();
 
-
   markerRoot.visible =
     false;
-
 
   scene.add(
     markerRoot
   );
 
 
-  /* ========================================================
-     TESTWÜRFEL
 
-     Bewusst sehr simpel und auffällig.
-     ======================================================== */
-
-  const geometry =
-    new THREE.BoxGeometry(
-      0.6,
-      0.6,
-      0.6
-    );
-
-
-  const material =
-    new THREE.MeshNormalMaterial();
-
+  /* =====================================================
+     4. TESTWÜRFEL
+     ===================================================== */
 
   const cube =
     new THREE.Mesh(
-      geometry,
-      material
+
+      new THREE.BoxGeometry(
+        0.6,
+        0.6,
+        0.6
+      ),
+
+      new THREE.MeshNormalMaterial()
+
     );
 
-
-  /*
-   * Der Würfel steht etwas oberhalb
-   * der Markerfläche.
-   */
 
   cube.position.y =
     0.3;
@@ -306,14 +262,10 @@ try {
   );
 
 
-  /* ========================================================
-     AR.JS KAMERA
-     ======================================================== */
 
-  setStatus(
-    "5 – Kamera wird vorbereitet …"
-  );
-
+  /* =====================================================
+     5. AR SOURCE
+     ===================================================== */
 
   const arToolkitSource =
     new ArToolkitSource({
@@ -336,9 +288,244 @@ try {
     });
 
 
-  /* ========================================================
-     ARTOOLKIT CONTEXT
-     ======================================================== */
+
+  /* =====================================================
+     6. KAMERA ZUERST STARTEN
+     ===================================================== */
+
+  setStatus(
+    "5 – Kamera wird angefordert …"
+  );
+
+
+  await new Promise(
+    (resolve, reject) => {
+
+      try {
+
+        arToolkitSource.init(
+          function() {
+            resolve();
+          }
+        );
+
+      }
+
+      catch(error) {
+        reject(error);
+      }
+
+    }
+  );
+
+
+
+  /* =====================================================
+     7. VIDEOELEMENT PRÜFEN
+     ===================================================== */
+
+  const video =
+    arToolkitSource.domElement;
+
+
+  if (!video) {
+    throw new Error(
+      "AR.js hat kein Videoelement erzeugt."
+    );
+  }
+
+
+  video.setAttribute(
+    "playsinline",
+    ""
+  );
+
+  video.muted =
+    true;
+
+
+  video.style.position =
+    "fixed";
+
+  video.style.top =
+    "0px";
+
+  video.style.left =
+    "0px";
+
+  video.style.zIndex =
+    "1";
+
+  video.style.visibility =
+    "visible";
+
+  video.style.opacity =
+    "1";
+
+
+  /*
+   * Jetzt warten wir ausdrücklich darauf,
+   * dass echte Videodaten verfügbar sind.
+   */
+
+  if (
+    video.readyState < 2 ||
+    video.videoWidth === 0
+  ) {
+
+    setStatus(
+      "6 – Kamera geöffnet, warte auf Videobild …"
+    );
+
+
+    await new Promise(
+      (resolve, reject) => {
+
+        const timeout =
+          setTimeout(
+            function() {
+
+              reject(
+                new Error(
+                  "Die Kamera wurde geöffnet, liefert aber nach 10 Sekunden noch kein Videobild."
+                )
+              );
+
+            },
+            10000
+          );
+
+
+        function videoReady() {
+
+          if (
+            video.videoWidth > 0 &&
+            video.videoHeight > 0
+          ) {
+
+            clearTimeout(
+              timeout
+            );
+
+
+            video.removeEventListener(
+              "canplay",
+              videoReady
+            );
+
+
+            video.removeEventListener(
+              "loadedmetadata",
+              videoReady
+            );
+
+
+            resolve();
+
+          }
+
+        }
+
+
+        video.addEventListener(
+          "canplay",
+          videoReady
+        );
+
+
+        video.addEventListener(
+          "loadedmetadata",
+          videoReady
+        );
+
+
+        videoReady();
+
+      }
+    );
+
+  }
+
+
+  setStatus(
+    "7 – Video bereit: " +
+    video.videoWidth +
+    " × " +
+    video.videoHeight
+  );
+
+
+
+  /* =====================================================
+     8. MOBIL: BEWÄHRTE KAMERAEINSTELLUNGEN
+     ===================================================== */
+
+  try {
+
+    const stream =
+      video.srcObject;
+
+
+    if (stream) {
+
+      const tracks =
+        stream.getVideoTracks();
+
+
+      if (tracks.length > 0) {
+
+        await tracks[0].applyConstraints({
+
+          width: {
+            ideal: 640
+          },
+
+          height: {
+            ideal: 480
+          },
+
+          aspectRatio: {
+            ideal: 4 / 3
+          },
+
+          frameRate: {
+            ideal: 30,
+            max: 30
+          }
+
+        });
+
+      }
+
+    }
+
+  }
+
+  catch(error) {
+
+    /*
+     * Kein Abbruch:
+     * Manche Browser akzeptieren nicht
+     * alle Constraints.
+     */
+
+    console.warn(
+      "Kamera-Constraints konnten nicht vollständig angewendet werden.",
+      error
+    );
+
+  }
+
+
+
+  /* =====================================================
+     9. ARTOOLKIT CONTEXT
+     ===================================================== */
+
+  setStatus(
+    "8 – ARToolKit wird initialisiert …"
+  );
+
 
   const arToolkitContext =
     new ArToolkitContext({
@@ -364,51 +551,6 @@ try {
     });
 
 
-  /* ========================================================
-     RESIZE
-     ======================================================== */
-
-  function onResize() {
-
-    arToolkitSource.onResizeElement();
-
-
-    arToolkitSource.copyElementSizeTo(
-      renderer.domElement
-    );
-
-
-    if (
-      arToolkitContext.arController
-    ) {
-
-      arToolkitSource.copyElementSizeTo(
-
-        arToolkitContext
-          .arController
-          .canvas
-
-      );
-
-    }
-
-  }
-
-
-  window.addEventListener(
-    "resize",
-    onResize
-  );
-
-
-  /* ========================================================
-     ARTOOLKIT INITIALISIEREN
-     ======================================================== */
-
-  setStatus(
-    "6 – ARToolKit wird initialisiert …"
-  );
-
 
   await new Promise(
     (resolve, reject) => {
@@ -416,7 +558,6 @@ try {
       try {
 
         arToolkitContext.init(
-
           function() {
 
             try {
@@ -424,10 +565,8 @@ try {
               camera
                 .projectionMatrix
                 .copy(
-
                   arToolkitContext
                     .getProjectionMatrix()
-
                 );
 
 
@@ -436,21 +575,16 @@ try {
             }
 
             catch(error) {
-
               reject(error);
-
             }
 
           }
-
         );
 
       }
 
       catch(error) {
-
         reject(error);
-
       }
 
     }
@@ -458,13 +592,14 @@ try {
 
 
   setStatus(
-    "7 – ARToolKit bereit"
+    "9 – ARToolKit bereit"
   );
 
 
-  /* ========================================================
-     BARCODE-MARKER 1
-     ======================================================== */
+
+  /* =====================================================
+     10. MARKER 1
+     ===================================================== */
 
   const markerControls =
     new ArMarkerControls(
@@ -492,55 +627,70 @@ try {
     );
 
 
-  /* ========================================================
-     KAMERA STARTEN
-     ======================================================== */
 
-  setStatus(
-    "8 – Kamerazugriff …"
-  );
+  /* =====================================================
+     11. GRÖSSEN SYNCHRONISIEREN
+     ===================================================== */
+
+  function onResize() {
+
+    arToolkitSource
+      .onResizeElement();
 
 
-  await new Promise(
-    (resolve, reject) => {
+    arToolkitSource
+      .copyElementSizeTo(
+        renderer.domElement
+      );
 
-      try {
 
-        arToolkitSource.init(
+    if (
+      arToolkitContext &&
+      arToolkitContext.arController
+    ) {
 
-          function() {
-
-            setTimeout(
-              onResize,
-              200
-            );
-
-            resolve();
-
-          }
-
+      arToolkitSource
+        .copyElementSizeTo(
+          arToolkitContext
+            .arController
+            .canvas
         );
 
-      }
-
-      catch(error) {
-
-        reject(error);
-
-      }
-
     }
+
+  }
+
+
+  window.addEventListener(
+    "resize",
+    onResize
   );
+
+
+  onResize();
+
+
+  /*
+   * Video bleibt ausdrücklich sichtbar.
+   */
+
+  video.style.zIndex =
+    "1";
+
+  renderer.domElement.style.zIndex =
+    "2";
+
 
 
   setStatus(
-    "9 – Kamera läuft – Marker 1 zeigen"
+    "10 – Kamera läuft – Marker 1 zeigen"
   );
 
 
-  /* ========================================================
-     RENDER LOOP
-     ======================================================== */
+
+  /* =====================================================
+     12. RENDER LOOP
+     ===================================================== */
 
   let previousVisible =
     false;
@@ -565,8 +715,7 @@ try {
 
 
     if (
-      markerRoot.visible
-      !==
+      markerRoot.visible !==
       previousVisible
     ) {
 
@@ -579,7 +728,7 @@ try {
       ) {
 
         setStatus(
-          "10 – Marker 1 erkannt"
+          "11 – Marker 1 erkannt"
         );
 
       }
@@ -587,7 +736,7 @@ try {
       else {
 
         setStatus(
-          "9 – Kamera läuft – Marker 1 zeigen"
+          "10 – Kamera läuft – Marker 1 zeigen"
         );
 
       }
