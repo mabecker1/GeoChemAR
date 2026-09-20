@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – AprilTag Translation</title>
+<title>GeoChemAR – 2D/3D Vergleich</title>
 
 <style>
 
@@ -29,10 +29,14 @@ body {
 #video {
   position: fixed;
   inset: 0;
+
   width: 100%;
   height: 100%;
+
   object-fit: contain;
+
   background: black;
+
   z-index: 1;
 }
 
@@ -42,24 +46,35 @@ body {
   pointer-events: none;
 }
 
+#overlay {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+}
+
 #analysisCanvas {
   display: none;
 }
 
 #status {
   position: fixed;
+
   top: 10px;
   left: 10px;
+
   z-index: 10;
 
   padding: 10px 14px;
+
   border-radius: 8px;
 
   background: rgba(0,0,0,0.82);
+
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
+
   white-space: pre-line;
 
   pointer-events: none;
@@ -67,18 +82,23 @@ body {
 
 #error {
   position: fixed;
+
   left: 10px;
   right: 10px;
   bottom: 10px;
+
   z-index: 20;
 
   padding: 10px;
+
   border-radius: 8px;
 
   background: rgba(160,0,0,0.92);
+
   color: white;
 
   font-size: 13px;
+
   white-space: pre-wrap;
 
   display: none;
@@ -98,6 +118,12 @@ body {
 
 <canvas
   id="analysisCanvas"
+  width="640"
+  height="480"
+></canvas>
+
+<canvas
+  id="overlay"
   width="640"
   height="480"
 ></canvas>
@@ -155,6 +181,12 @@ const analysisCtx =
     }
   );
 
+const overlay =
+  document.getElementById("overlay");
+
+const overlayCtx =
+  overlay.getContext("2d");
+
 const status =
   document.getElementById("status");
 
@@ -184,14 +216,17 @@ function showError(error) {
 
 
 /* =====================================================
-   KAMERA-INTRINSICS
+   VORLÄUFIGE INTRINSICS
 
-   Noch immer dieselben Werte wie bei
-   der AprilTag-Poseberechnung.
+   Noch unverändert:
+   angenommener horizontaler FOV = 60°
    ===================================================== */
 
-const cx = WIDTH / 2;
-const cy = HEIGHT / 2;
+const cx =
+  WIDTH / 2;
+
+const cy =
+  HEIGHT / 2;
 
 const horizontalFov =
   THREE.MathUtils.degToRad(60);
@@ -200,15 +235,12 @@ const fx =
   (WIDTH / 2) /
   Math.tan(horizontalFov / 2);
 
-const fy = fx;
+const fy =
+  fx;
 
 
 /* =====================================================
    THREE.JS
-
-   WICHTIG:
-   Wir behalten die funktionierende
-   PerspectiveCamera aus 5b-3.
    ===================================================== */
 
 const scene =
@@ -269,11 +301,9 @@ document.body.appendChild(
 
 
 /* =====================================================
-   TESTKUGEL
+   ROTE 3D-KUGEL
 
-   Radius 10 mm.
-
-   Die Position kommt diesmal vom Tag.
+   Position kommt aus pose.t
    ===================================================== */
 
 const sphere =
@@ -306,6 +336,8 @@ let apriltag = null;
 let detectorReady = false;
 let cameraReady = false;
 let detectionRunning = false;
+
+let latestDetection = null;
 
 let tagDetected = false;
 let poseReceived = false;
@@ -541,30 +573,13 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   APRILTAG-TRANSLATION → THREE.JS
-
-   pose.t ist nachweislich:
-
-   [tx, ty, tz]
-
-   AprilTag:
-   +X rechts
-   +Y unten
-   +Z von der Kamera weg
-
-   Three.js:
-   +X rechts
-   +Y oben
-   -Z vor der Kamera
-
-   Deshalb:
-
-   (tx, -ty, -tz)
+   3D-TRANSLATION
    ===================================================== */
 
 function applyTranslation(pose) {
 
   poseReceived = false;
+
   sphere.visible = false;
 
 
@@ -604,12 +619,6 @@ function applyTranslation(pose) {
   lastTy = ty;
   lastTz = tz;
 
-
-  /*
-   * DIE EINZIGE NEUE ÄNDERUNG
-   * gegenüber dem funktionierenden
-   * Render-Test:
-   */
 
   sphere.position.set(
     tx,
@@ -668,6 +677,10 @@ async function detectFrame() {
           )
 
         : null;
+
+
+    latestDetection =
+      detection || null;
 
 
     if (detection) {
@@ -735,7 +748,126 @@ async function detectFrame() {
 
 
 /* =====================================================
-   VIDEO / CANVAS SYNCHRON
+   GRÜNER 2D-PUNKT
+
+   detection.center kommt direkt aus
+   der Bildanalyse des AprilTags.
+
+   Keine Pose.
+   Keine Brennweite.
+   Keine 3D-Projektion.
+   ===================================================== */
+
+function drawOverlay() {
+
+  overlayCtx.clearRect(
+    0,
+    0,
+    WIDTH,
+    HEIGHT
+  );
+
+
+  if (
+    !latestDetection ||
+    !latestDetection.center
+  ) {
+
+    return;
+
+  }
+
+
+  const x =
+    Number(
+      latestDetection.center.x
+    );
+
+
+  const y =
+    Number(
+      latestDetection.center.y
+    );
+
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * Großer grüner Ring:
+   * Tagzentrum aus 2D-Detektion
+   */
+
+  overlayCtx.beginPath();
+
+  overlayCtx.arc(
+    x,
+    y,
+    12,
+    0,
+    Math.PI * 2
+  );
+
+
+  overlayCtx.lineWidth =
+    5;
+
+
+  overlayCtx.strokeStyle =
+    "#00ff00";
+
+
+  overlayCtx.stroke();
+
+
+  /*
+   * Kleines grünes Kreuz
+   */
+
+  overlayCtx.beginPath();
+
+  overlayCtx.moveTo(
+    x - 18,
+    y
+  );
+
+  overlayCtx.lineTo(
+    x + 18,
+    y
+  );
+
+  overlayCtx.moveTo(
+    x,
+    y - 18
+  );
+
+  overlayCtx.lineTo(
+    x,
+    y + 18
+  );
+
+  overlayCtx.lineWidth =
+    3;
+
+
+  overlayCtx.strokeStyle =
+    "#00ff00";
+
+
+  overlayCtx.stroke();
+
+}
+
+
+/* =====================================================
+   VIDEO / CANVASES SYNCHRON
    ===================================================== */
 
 function resize() {
@@ -785,6 +917,20 @@ function resize() {
   }
 
 
+  const left =
+    (
+      screenWidth -
+      displayWidth
+    ) / 2;
+
+
+  const top =
+    (
+      screenHeight -
+      displayHeight
+    ) / 2;
+
+
   renderer.setSize(
     displayWidth,
     displayHeight,
@@ -798,26 +944,30 @@ function resize() {
   renderer.domElement.style.height =
     displayHeight + "px";
 
-
   renderer.domElement.style.left =
-    (
-      screenWidth -
-      displayWidth
-    ) / 2 +
-    "px";
-
+    left + "px";
 
   renderer.domElement.style.top =
-    (
-      screenHeight -
-      displayHeight
-    ) / 2 +
-    "px";
+    top + "px";
+
+
+  overlay.style.width =
+    displayWidth + "px";
+
+  overlay.style.height =
+    displayHeight + "px";
+
+  overlay.style.left =
+    left + "px";
+
+  overlay.style.top =
+    top + "px";
 
 
   camera.aspect =
     displayWidth /
     displayHeight;
+
 
   camera.updateProjectionMatrix();
 
@@ -851,35 +1001,22 @@ function animate() {
   }
 
 
+  drawOverlay();
+
+
   renderer.render(
     scene,
     camera
   );
 
 
-  let positionText = "";
-
-
-  if (poseReceived) {
-
-    positionText =
-
-      "\n\nx: " +
-      lastTx.toFixed(4) +
-
-      "\ny: " +
-      lastTy.toFixed(4) +
-
-      "\nz: " +
-      lastTz.toFixed(4) +
-      " m";
-
-  }
-
-
   status.textContent =
 
-    "APRILTAG 5b-4 – TRANSLATION\n\n" +
+    "APRILTAG 5b-5\n\n" +
+
+    "GRÜN = direktes 2D-Tagzentrum\n" +
+
+    "ROT = 3D-Pose\n\n" +
 
     "Tag 0: " +
     (
@@ -888,24 +1025,15 @@ function animate() {
         : "nicht erkannt"
     ) +
 
-    "\nPose-Daten: " +
+    "\nPose: " +
     (
       poseReceived
         ? "JA"
         : "NEIN"
     ) +
 
-    "\nKugel: " +
-    (
-      sphere.visible
-        ? "AKTIV"
-        : "AUS"
-    ) +
-
     "\nErkennungen/s: " +
-    detectionFPS.toFixed(1) +
-
-    positionText;
+    detectionFPS.toFixed(1);
 
 }
 
@@ -920,10 +1048,13 @@ async function start() {
 
     await initializeAprilTag();
 
+
     status.textContent =
       "Kamera wird gestartet …";
 
+
     await startCamera();
+
 
     requestAnimationFrame(
       animate
