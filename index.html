@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-7 Continuous Cube Tracker</title>
+<title>GeoChemAR – 5c-8</title>
 
 <style>
 html, body {
@@ -121,11 +121,12 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-7";
+const VERSION = "5c-8";
 
 
 /* =====================================================
-   GEOMETRIE – UNVERÄNDERT
+   GEOMETRIE
+   UNVERÄNDERT AUS 5c-4
    ===================================================== */
 
 const WIDTH = 640;
@@ -138,56 +139,45 @@ const HALF_CUBE = CUBE_SIZE / 2;
 
 
 /* =====================================================
-   NEU: CONTINUOUS TRACKER
-
-   AprilTag = Messsystem
-   Tracker  = kontinuierliche Würfelpose
-   Renderer = 60-Hz-Ausgabe
+   5c-8 TRACKING-PARAMETER
    ===================================================== */
 
 /*
- * Wie lange darf ohne AprilTag weitergelaufen werden?
+ * Kurze Aussetzer werden vorhergesagt.
+ */
+
+const MAX_PREDICTION_TIME_MS = 260;
+
+
+/*
+ * Danach bleibt die letzte Pose noch kurz sichtbar,
+ * aber wird NICHT weiter extrapoliert.
  *
- * 5c-5 hatte 180 ms.
+ * Dadurch kein Wegschießen bei längeren Aussetzern.
+ */
+
+const MAX_HOLD_TIME_MS = 650;
+
+
+/*
+ * Danach gilt Tracking wirklich als verloren.
  *
- * Hier können wir etwas großzügiger sein,
- * weil Geschwindigkeit und Pose nicht mehr
- * direkt an der letzten Einzelmessung hängen.
+ * Die nächste gute AprilTag-Messung wird dann
+ * SOFORT als neue Pose übernommen.
  */
 
-const MAX_COAST_TIME_MS = 260;
+const LOST_TIME_MS = 650;
 
 
 /*
- * Korrekturstärke einer guten AprilTag-Messung.
- *
- * 1.0 = sofort auf Messung springen
- * kleiner = Messung zieht Tracker kontrolliert heran
+ * Geschwindigkeitsmessung für die Prognose.
  */
 
-const POSITION_CORRECTION = 0.58;
-const ROTATION_CORRECTION = 0.64;
+const VELOCITY_BLEND = 0.40;
 
 
 /*
- * Geschwindigkeit wird aus Messungen gelernt.
- */
-
-const VELOCITY_UPDATE = 0.28;
-const ANGULAR_VELOCITY_UPDATE = 0.30;
-
-
-/*
- * Geschwindigkeit langsam abbauen, wenn
- * keine Messung vorhanden ist.
- */
-
-const LINEAR_DAMPING = 0.985;
-const ANGULAR_DAMPING = 0.982;
-
-
-/*
- * Plausibilitätsgrenzen.
+ * Sicherheitsgrenzen.
  */
 
 const MAX_LINEAR_SPEED = 1.5;
@@ -195,38 +185,35 @@ const MAX_ANGULAR_SPEED = 14.0;
 
 
 /*
- * Eine Messung, die extrem weit von der
- * vorhergesagten Pose entfernt liegt,
- * wird nicht sofort übernommen.
+ * Ausreißerschutz.
+
+ * Eine einzelne Messung darf nicht plötzlich
+ * sehr weit von der erwarteten Pose entfernt sein.
  */
 
-const HARD_POSITION_JUMP = 0.075; // 7.5 cm
-const HARD_ROTATION_JUMP =
-  THREE.MathUtils.degToRad(55);
+const POSITION_OUTLIER_THRESHOLD = 0.060;
+
+const ROTATION_OUTLIER_THRESHOLD =
+  THREE.MathUtils.degToRad(48);
 
 
 /*
- * Mittlere Abweichungen dürfen korrigieren,
- * aber weniger stark.
+ * Erst zwei ähnliche ungewöhnliche Messungen
+ * hintereinander dürfen einen großen echten
+ * Positionswechsel bestätigen.
  */
 
-const SOFT_POSITION_JUMP = 0.025; // 2.5 cm
-const SOFT_ROTATION_JUMP =
-  THREE.MathUtils.degToRad(18);
+const OUTLIER_CONFIRMATION_COUNT = 2;
 
+const OUTLIER_CONFIRM_POSITION = 0.035;
 
-/*
- * Nach langer Tracking-Unterbrechung muss
- * natürlich wieder eine neue Pose angenommen
- * werden können.
- */
-
-const REACQUIRE_AFTER_MS = 350;
+const OUTLIER_CONFIRM_ROTATION =
+  THREE.MathUtils.degToRad(30);
 
 
 /* =====================================================
    KAMERAMODELL
-   BEWÄHRTER STAND
+   UNVERÄNDERT
    ===================================================== */
 
 const horizontalFovDeg = 60;
@@ -293,7 +280,7 @@ const errorBox =
 
 
 /* =====================================================
-   APRILTAG-STATUS
+   APRILTAG STATUS
    ===================================================== */
 
 let apriltag = null;
@@ -329,7 +316,11 @@ const camera =
     10
   );
 
-camera.position.set(0, 0, 0);
+camera.position.set(
+  0,
+  0,
+  0
+);
 
 
 const renderer =
@@ -364,6 +355,7 @@ scene.add(
   )
 );
 
+
 const directionalLight =
   new THREE.DirectionalLight(
     0xffffff,
@@ -382,12 +374,16 @@ scene.add(
 
 
 /* =====================================================
-   MARKER-ROOTS
+   MARKER ROOTS
    ===================================================== */
 
 const markerRoots = {};
 
-for (let id = 0; id <= 5; id++) {
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
 
   const root =
     new THREE.Group();
@@ -403,12 +399,15 @@ for (let id = 0; id <= 5; id++) {
 
 /* =====================================================
    WÜRFELZENTREN
-   STABILE 5c-4-GEOMETRIE
    ===================================================== */
 
 const centerObjects = {};
 
-for (let id = 0; id <= 5; id++) {
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
 
   const center =
     new THREE.Object3D();
@@ -419,16 +418,19 @@ for (let id = 0; id <= 5; id++) {
     -HALF_CUBE
   );
 
-  markerRoots[id].add(center);
+  markerRoots[id].add(
+    center
+  );
 
-  centerObjects[id] = center;
+  centerObjects[id] =
+    center;
 
 }
 
 
 /* =====================================================
-   IDEALE SEITENROTATIONEN
-   STABILE 5c-4-GEOMETRIE
+   WÜRFELROTATIONEN
+   STABILER 5c-4 STAND
    ===================================================== */
 
 const relativeFrom3 = {
@@ -480,9 +482,16 @@ const relativeFrom3 = {
 
 const correctionTo3 = {};
 
-for (let id = 0; id <= 5; id++) {
 
-  relativeFrom3[id].normalize();
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
+
+  relativeFrom3[id]
+    .normalize();
+
 
   correctionTo3[id] =
     relativeFrom3[id]
@@ -494,13 +503,14 @@ for (let id = 0; id <= 5; id++) {
 
 /* =====================================================
    METHAN
-   EXAKT WIE BISHER
+   UNVERÄNDERT
    ===================================================== */
 
 function createMethane() {
 
   const group =
     new THREE.Group();
+
 
   const scale = 0.05;
 
@@ -524,12 +534,14 @@ function createMethane() {
       metalness: 0
     });
 
+
   const hydrogenMaterial =
     new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.55,
       metalness: 0
     });
+
 
   const bondMaterial =
     new THREE.MeshStandardMaterial({
@@ -551,6 +563,7 @@ function createMethane() {
       carbonMaterial
 
     );
+
 
   group.add(carbon);
 
@@ -576,7 +589,10 @@ function createMethane() {
   ];
 
 
-  for (const direction of directions) {
+  for (
+    const direction
+    of directions
+  ) {
 
     const hydrogen =
       new THREE.Mesh(
@@ -591,13 +607,17 @@ function createMethane() {
 
       );
 
+
     hydrogen.position.copy(
+
       direction
         .clone()
         .multiplyScalar(
           hydrogenDistance
         )
+
     );
+
 
     group.add(hydrogen);
 
@@ -609,12 +629,14 @@ function createMethane() {
       hydrogenDistance -
       hydrogenRadius;
 
+
     const startPoint =
       direction
         .clone()
         .multiplyScalar(
           startDistance
         );
+
 
     const endPoint =
       direction
@@ -623,10 +645,14 @@ function createMethane() {
           endDistance
         );
 
+
     const bondVector =
       endPoint
         .clone()
-        .sub(startPoint);
+        .sub(
+          startPoint
+        );
+
 
     const bondLength =
       bondVector.length();
@@ -648,26 +674,39 @@ function createMethane() {
 
       );
 
+
     bond.position.copy(
+
       startPoint
         .clone()
-        .add(endPoint)
-        .multiplyScalar(0.5)
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
+
     );
+
 
     bond.quaternion
       .setFromUnitVectors(
+
         new THREE.Vector3(
           0,
           1,
           0
         ),
+
         direction
+
       );
+
 
     group.add(bond);
 
   }
+
 
   return group;
 
@@ -683,8 +722,7 @@ scene.add(methane);
 
 
 /* =====================================================
-   APRILTAG POSE
-   BEWÄHRTE 5b-10-UMRECHNUNG
+   BEWÄHRTE APRILTAG POSE
    ===================================================== */
 
 const basisChange =
@@ -717,6 +755,7 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
@@ -738,14 +777,20 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
 
 
-  const tx = Number(t[0]);
-  const ty = Number(t[1]);
-  const tz = Number(t[2]);
+  const tx =
+    Number(t[0]);
+
+  const ty =
+    Number(t[1]);
+
+  const tz =
+    Number(t[2]);
 
 
   if (
@@ -755,6 +800,7 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
@@ -801,9 +847,15 @@ function applyAprilTagPose(
 
 
   convertedRotation
-    .copy(basisChange)
-    .multiply(aprilRotation)
-    .multiply(basisChange);
+    .copy(
+      basisChange
+    )
+    .multiply(
+      aprilRotation
+    )
+    .multiply(
+      basisChange
+    );
 
 
   root.quaternion
@@ -820,7 +872,7 @@ function applyAprilTagPose(
 
 
 /* =====================================================
-   HILFSFUNKTIONEN
+   QUATERNION DISTANCE
    ===================================================== */
 
 function quaternionAngle(
@@ -833,12 +885,14 @@ function quaternionAngle(
       a.dot(b)
     );
 
+
   dot =
     THREE.MathUtils.clamp(
       dot,
       -1,
       1
     );
+
 
   return (
     2 *
@@ -854,654 +908,682 @@ function quaternionAngleDegrees(
 ) {
 
   return THREE.MathUtils.radToDeg(
-    quaternionAngle(a, b)
-  );
-
-}
-
-
-function getPoint(point) {
-
-  if (!point) {
-    return null;
-  }
-
-  if (Array.isArray(point)) {
-
-    const x =
-      Number(point[0]);
-
-    const y =
-      Number(point[1]);
-
-    if (
-      Number.isFinite(x) &&
-      Number.isFinite(y)
-    ) {
-
-      return { x, y };
-
-    }
-
-  }
-
-  const x =
-    Number(point.x);
-
-  const y =
-    Number(point.y);
-
-  if (
-    Number.isFinite(x) &&
-    Number.isFinite(y)
-  ) {
-
-    return { x, y };
-
-  }
-
-  return null;
-
-}
-
-
-/* =====================================================
-   MARKER-BILDGRÖSSE ALS QUALITÄT
-
-   Große sichtbare Tags erhalten etwas
-   mehr Gewicht als sehr schräge/kleine Tags.
-   ===================================================== */
-
-function detectionArea(
-  detection
-) {
-
-  if (
-    !detection ||
-    !Array.isArray(
-      detection.corners
-    ) ||
-    detection.corners.length < 4
-  ) {
-
-    return 1;
-
-  }
-
-  const corners =
-    detection.corners
-      .slice(0,4)
-      .map(getPoint);
-
-  if (
-    corners.some(
-      p => !p
+    quaternionAngle(
+      a,
+      b
     )
-  ) {
-
-    return 1;
-
-  }
-
-  let area = 0;
-
-  for (let i = 0; i < 4; i++) {
-
-    const a =
-      corners[i];
-
-    const b =
-      corners[
-        (i + 1) % 4
-      ];
-
-    area +=
-      a.x * b.y -
-      b.x * a.y;
-
-  }
-
-  return Math.max(
-    1,
-    Math.abs(area) / 2
   );
 
 }
 
 
 /* =====================================================
-   CONTINUOUS TRACKER STATE
+   5c-8 TRACKER STATE
    ===================================================== */
 
 let trackerInitialized = false;
 
-const trackerPosition =
+let lastGoodPoseTime = null;
+
+const currentPosition =
   new THREE.Vector3();
 
-const trackerQuaternion =
+const currentQuaternion =
   new THREE.Quaternion();
 
-const trackerVelocity =
+
+const lastMeasuredPosition =
   new THREE.Vector3();
 
-const trackerAngularAxis =
+const lastMeasuredQuaternion =
+  new THREE.Quaternion();
+
+let lastMeasuredTime = null;
+
+
+const linearVelocity =
+  new THREE.Vector3();
+
+const angularAxis =
   new THREE.Vector3(
     1,
     0,
     0
   );
 
-let trackerAngularSpeed = 0;
+let angularSpeed = 0;
 
-let lastTrackerTime =
-  performance.now();
 
-let lastMeasurementTime = null;
+/*
+ * Kandidat für großen Positionssprung.
+ */
 
-let lastAcceptedMeasurementTime = null;
+let pendingOutlier = false;
 
-const lastMeasurementPosition =
+let pendingOutlierCount = 0;
+
+const pendingPosition =
   new THREE.Vector3();
 
-const lastMeasurementQuaternion =
+const pendingQuaternion =
   new THREE.Quaternion();
 
-let hasPreviousMeasurement = false;
 
-let trackerMode =
+let trackingMode =
   "KEINE POSE";
 
 let rejectedMeasurements = 0;
+let fastReacquisitions = 0;
 
 
 /* =====================================================
-   TRACKER VORWÄRTS IN DER ZEIT BEWEGEN
+   TRACKER KOMPLETT NEU EINRASTEN
    ===================================================== */
 
-function predictTrackerTo(
+function hardReacquire(
+  position,
+  quaternion,
   now
 ) {
 
-  if (
-    !trackerInitialized
-  ) {
+  currentPosition.copy(
+    position
+  );
 
-    lastTrackerTime = now;
-    return;
-
-  }
-
-
-  let dt =
-    (
-      now -
-      lastTrackerTime
-    ) / 1000;
-
-
-  if (
-    dt <= 0
-  ) {
-
-    return;
-
-  }
-
-
-  /*
-   * Browserpause / Tabwechsel nicht
-   * als riesigen Bewegungsschritt behandeln.
-   */
-
-  dt =
-    Math.min(
-      dt,
-      0.05
-    );
-
-
-  trackerPosition.addScaledVector(
-    trackerVelocity,
-    dt
+  currentQuaternion.copy(
+    quaternion
   );
 
 
-  const angle =
-    trackerAngularSpeed *
-    dt;
+  lastMeasuredPosition.copy(
+    position
+  );
 
-
-  if (
-    Math.abs(angle) >
-    0.000001
-  ) {
-
-    const dq =
-      new THREE.Quaternion()
-        .setFromAxisAngle(
-          trackerAngularAxis,
-          angle
-        );
-
-
-    trackerQuaternion
-      .multiply(dq)
-      .normalize();
-
-  }
-
-
-  /*
-   * Sanfter Geschwindigkeitsabbau.
-   */
-
-  const dampingScale =
-    dt * 60;
-
-
-  trackerVelocity.multiplyScalar(
-    Math.pow(
-      LINEAR_DAMPING,
-      dampingScale
-    )
+  lastMeasuredQuaternion.copy(
+    quaternion
   );
 
 
-  trackerAngularSpeed *=
-    Math.pow(
-      ANGULAR_DAMPING,
-      dampingScale
-    );
+  lastMeasuredTime = now;
+  lastGoodPoseTime = now;
 
 
-  lastTrackerTime = now;
+  /*
+   * Ganz wichtig:
+   *
+   * alte Geschwindigkeit nach einem
+   * Trackingverlust NICHT weiterverwenden.
+   */
+
+  linearVelocity.set(
+    0,
+    0,
+    0
+  );
+
+  angularSpeed = 0;
+
+
+  pendingOutlier = false;
+  pendingOutlierCount = 0;
+
+
+  trackerInitialized = true;
+
+
+  trackingMode =
+    "NEU EINGERASTET";
+
+
+  fastReacquisitions++;
 
 }
 
 
 /* =====================================================
-   NEUE APRILTAG-MESSUNG IN TRACKER EINBAUEN
+   GESCHWINDIGKEIT AUS ZWEI GUTEN
+   MESSUNGEN BESTIMMEN
    ===================================================== */
 
-function correctTracker(
-  measuredPosition,
-  measuredQuaternion,
+function updateVelocity(
+  position,
+  quaternion,
   now
 ) {
 
   if (
-    !trackerInitialized
+    lastMeasuredTime === null
   ) {
 
-    trackerPosition.copy(
-      measuredPosition
-    );
-
-    trackerQuaternion.copy(
-      measuredQuaternion
-    );
-
-    trackerVelocity.set(
-      0,
-      0,
-      0
-    );
-
-    trackerAngularSpeed = 0;
-
-    lastTrackerTime = now;
-
-    lastMeasurementTime = now;
-    lastAcceptedMeasurementTime = now;
-
-    lastMeasurementPosition.copy(
-      measuredPosition
-    );
-
-    lastMeasurementQuaternion.copy(
-      measuredQuaternion
-    );
-
-    hasPreviousMeasurement = true;
-
-    trackerInitialized = true;
-
-    trackerMode =
-      "APRILTAG LOCK";
-
-    return true;
+    return;
 
   }
 
 
-  /*
-   * Tracker zuerst bis zum Zeitpunkt der
-   * neuen Messung fortschreiben.
-   */
+  const dt =
+    (
+      now -
+      lastMeasuredTime
+    ) / 1000;
 
-  predictTrackerTo(now);
-
-
-  const positionError =
-    trackerPosition.distanceTo(
-      measuredPosition
-    );
-
-
-  const rotationError =
-    quaternionAngle(
-      trackerQuaternion,
-      measuredQuaternion
-    );
-
-
-  const sinceAccepted =
-    lastAcceptedMeasurementTime === null
-      ? Infinity
-      : now -
-        lastAcceptedMeasurementTime;
-
-
-  /*
-   * EXTREMER EINZELSPRUNG:
-   *
-   * Solange der Tracker gerade zuverlässig
-   * läuft, darf ein einzelner völlig anderer
-   * Posewert das Molekül nicht teleportieren.
-   */
 
   if (
-    sinceAccepted <
-      REACQUIRE_AFTER_MS &&
-    (
-      positionError >
-        HARD_POSITION_JUMP ||
-      rotationError >
-        HARD_ROTATION_JUMP
-    )
+    dt <= 0.008 ||
+    dt >= 0.18
   ) {
 
-    rejectedMeasurements++;
+    return;
 
-    trackerMode =
-      "AUSREISSER VERWORFEN";
+  }
+
+
+  /* ===================================================
+     LINEAR
+     =================================================== */
+
+  const measuredVelocity =
+    position
+      .clone()
+      .sub(
+        lastMeasuredPosition
+      )
+      .divideScalar(
+        dt
+      );
+
+
+  const speed =
+    measuredVelocity.length();
+
+
+  if (
+    speed >
+    MAX_LINEAR_SPEED
+  ) {
+
+    measuredVelocity
+      .multiplyScalar(
+        MAX_LINEAR_SPEED /
+        speed
+      );
+
+  }
+
+
+  linearVelocity.lerp(
+    measuredVelocity,
+    VELOCITY_BLEND
+  );
+
+
+  /* ===================================================
+     ROTATION
+     =================================================== */
+
+  const delta =
+    lastMeasuredQuaternion
+      .clone()
+      .invert()
+      .multiply(
+        quaternion
+      )
+      .normalize();
+
+
+  if (
+    delta.w < 0
+  ) {
+
+    delta.x *= -1;
+    delta.y *= -1;
+    delta.z *= -1;
+    delta.w *= -1;
+
+  }
+
+
+  const w =
+    THREE.MathUtils.clamp(
+      delta.w,
+      -1,
+      1
+    );
+
+
+  const angle =
+    2 *
+    Math.acos(
+      w
+    );
+
+
+  const sinHalf =
+    Math.sqrt(
+      Math.max(
+        0,
+        1 -
+        w * w
+      )
+    );
+
+
+  if (
+    sinHalf >
+    0.00001 &&
+    angle >
+    0.00001
+  ) {
+
+    const measuredAxis =
+      new THREE.Vector3(
+
+        delta.x /
+        sinHalf,
+
+        delta.y /
+        sinHalf,
+
+        delta.z /
+        sinHalf
+
+      ).normalize();
+
+
+    let measuredSpeed =
+      angle / dt;
+
+
+    measuredSpeed =
+      Math.min(
+        measuredSpeed,
+        MAX_ANGULAR_SPEED
+      );
+
+
+    if (
+      angularSpeed >
+      0.0001 &&
+      angularAxis.dot(
+        measuredAxis
+      ) < 0
+    ) {
+
+      measuredAxis
+        .multiplyScalar(
+          -1
+        );
+
+      measuredSpeed *= -1;
+
+    }
+
+
+    angularAxis
+      .lerp(
+        measuredAxis,
+        VELOCITY_BLEND
+      )
+      .normalize();
+
+
+    angularSpeed =
+      THREE.MathUtils.lerp(
+        angularSpeed,
+        measuredSpeed,
+        VELOCITY_BLEND
+      );
+
+  }
+
+}
+
+
+/* =====================================================
+   GROSSE MESSUNG BESTÄTIGEN
+   ===================================================== */
+
+function checkOutlierConfirmation(
+  position,
+  quaternion
+) {
+
+  if (
+    !pendingOutlier
+  ) {
+
+    pendingPosition.copy(
+      position
+    );
+
+    pendingQuaternion.copy(
+      quaternion
+    );
+
+    pendingOutlier =
+      true;
+
+    pendingOutlierCount =
+      1;
 
     return false;
 
   }
 
 
-  /*
-   * Je größer die Abweichung, desto
-   * vorsichtiger korrigieren.
-   */
-
-  let positionGain =
-    POSITION_CORRECTION;
-
-  let rotationGain =
-    ROTATION_CORRECTION;
+  const positionDifference =
+    pendingPosition.distanceTo(
+      position
+    );
 
 
-  if (
-    positionError >
-    SOFT_POSITION_JUMP
-  ) {
-
-    positionGain *= 0.45;
-
-  }
+  const rotationDifference =
+    quaternionAngle(
+      pendingQuaternion,
+      quaternion
+    );
 
 
   if (
-    rotationError >
-    SOFT_ROTATION_JUMP
+    positionDifference <
+      OUTLIER_CONFIRM_POSITION &&
+    rotationDifference <
+      OUTLIER_CONFIRM_ROTATION
   ) {
 
-    rotationGain *= 0.45;
+    pendingOutlierCount++;
+
+
+    /*
+     * Kandidatenposition aktualisieren.
+     */
+
+    pendingPosition.copy(
+      position
+    );
+
+    pendingQuaternion.copy(
+      quaternion
+    );
+
+
+    return (
+      pendingOutlierCount >=
+      OUTLIER_CONFIRMATION_COUNT
+    );
 
   }
-
-
-  /* ===================================================
-     GESCHWINDIGKEIT AUS ABSOLUTEN
-     APRILTAG-MESSUNGEN LERNEN
-     =================================================== */
-
-  if (
-    hasPreviousMeasurement &&
-    lastMeasurementTime !== null
-  ) {
-
-    const dt =
-      (
-        now -
-        lastMeasurementTime
-      ) / 1000;
-
-
-    if (
-      dt > 0.008 &&
-      dt < 0.18
-    ) {
-
-      const measuredVelocity =
-        measuredPosition
-          .clone()
-          .sub(
-            lastMeasurementPosition
-          )
-          .divideScalar(dt);
-
-
-      const speed =
-        measuredVelocity.length();
-
-
-      if (
-        speed >
-        MAX_LINEAR_SPEED
-      ) {
-
-        measuredVelocity
-          .multiplyScalar(
-            MAX_LINEAR_SPEED /
-            speed
-          );
-
-      }
-
-
-      trackerVelocity.lerp(
-        measuredVelocity,
-        VELOCITY_UPDATE
-      );
-
-
-      /*
-       * Winkelgeschwindigkeit.
-       */
-
-      const delta =
-        lastMeasurementQuaternion
-          .clone()
-          .invert()
-          .multiply(
-            measuredQuaternion
-          )
-          .normalize();
-
-
-      if (
-        delta.w < 0
-      ) {
-
-        delta.x *= -1;
-        delta.y *= -1;
-        delta.z *= -1;
-        delta.w *= -1;
-
-      }
-
-
-      const w =
-        THREE.MathUtils.clamp(
-          delta.w,
-          -1,
-          1
-        );
-
-
-      const angle =
-        2 *
-        Math.acos(w);
-
-
-      const sinHalf =
-        Math.sqrt(
-          Math.max(
-            0,
-            1 -
-            w * w
-          )
-        );
-
-
-      if (
-        sinHalf >
-        0.00001 &&
-        angle >
-        0.00001
-      ) {
-
-        const axis =
-          new THREE.Vector3(
-            delta.x / sinHalf,
-            delta.y / sinHalf,
-            delta.z / sinHalf
-          ).normalize();
-
-
-        let angularSpeed =
-          angle / dt;
-
-
-        angularSpeed =
-          Math.min(
-            angularSpeed,
-            MAX_ANGULAR_SPEED
-          );
-
-
-        /*
-         * Gleiche Achsenrichtung verwenden.
-         */
-
-        if (
-          trackerAngularSpeed >
-            0.0001 &&
-          trackerAngularAxis.dot(axis) <
-            0
-        ) {
-
-          axis.multiplyScalar(-1);
-          angularSpeed *= -1;
-
-        }
-
-
-        trackerAngularAxis
-          .lerp(
-            axis,
-            ANGULAR_VELOCITY_UPDATE
-          )
-          .normalize();
-
-
-        trackerAngularSpeed =
-          THREE.MathUtils.lerp(
-            trackerAngularSpeed,
-            angularSpeed,
-            ANGULAR_VELOCITY_UPDATE
-          );
-
-      }
-
-    }
-
-  }
-
-
-  /* ===================================================
-     POSE KORRIGIEREN
-     =================================================== */
-
-  trackerPosition.lerp(
-    measuredPosition,
-    positionGain
-  );
 
 
   /*
-   * Quaternion-Vorzeichen angleichen.
+   * Ganz andere ungewöhnliche Pose:
+   * Kandidat neu beginnen.
    */
 
-  const correctedQuaternion =
-    measuredQuaternion.clone();
-
-
-  if (
-    trackerQuaternion.dot(
-      correctedQuaternion
-    ) < 0
-  ) {
-
-    correctedQuaternion.x *= -1;
-    correctedQuaternion.y *= -1;
-    correctedQuaternion.z *= -1;
-    correctedQuaternion.w *= -1;
-
-  }
-
-
-  trackerQuaternion.slerp(
-    correctedQuaternion,
-    rotationGain
+  pendingPosition.copy(
+    position
   );
 
-
-  lastMeasurementPosition.copy(
-    measuredPosition
+  pendingQuaternion.copy(
+    quaternion
   );
 
-  lastMeasurementQuaternion.copy(
-    measuredQuaternion
-  );
+  pendingOutlierCount =
+    1;
 
-  lastMeasurementTime = now;
-  lastAcceptedMeasurementTime = now;
 
-  hasPreviousMeasurement = true;
-
-  trackerMode =
-    "APRILTAG + FILTER";
-
-  return true;
+  return false;
 
 }
 
 
 /* =====================================================
-   MEHRERE TAGS → EINE GEMEINSAME MESSUNG
+   NEUE MESSUNG ANNEHMEN
+   ===================================================== */
 
-   Neu:
-   Tags werden nach sichtbarer Bildfläche
-   gewichtet.
+function acceptMeasurement(
+  position,
+  quaternion,
+  now
+) {
+
+  /* ===================================================
+     ERSTE POSE
+     =================================================== */
+
+  if (
+    !trackerInitialized
+  ) {
+
+    hardReacquire(
+      position,
+      quaternion,
+      now
+    );
+
+    return;
+
+  }
+
+
+  const age =
+    lastGoodPoseTime === null
+      ? Infinity
+      : now -
+        lastGoodPoseTime;
+
+
+  /* ===================================================
+     NACH ECHTEM TRACKINGVERLUST:
+
+     SOFORT neu einrasten.
+     Keine alte Trajektorie mehr.
+     =================================================== */
+
+  if (
+    age >
+    LOST_TIME_MS
+  ) {
+
+    hardReacquire(
+      position,
+      quaternion,
+      now
+    );
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     ERWARTETE POSE ZUM JETZIGEN ZEITPUNKT
+     =================================================== */
+
+  const dt =
+    Math.max(
+      0,
+      Math.min(
+        age / 1000,
+        MAX_PREDICTION_TIME_MS /
+        1000
+      )
+    );
+
+
+  const expectedPosition =
+    currentPosition
+      .clone();
+
+
+  if (
+    age >
+    0
+  ) {
+
+    expectedPosition.addScaledVector(
+      linearVelocity,
+      dt
+    );
+
+  }
+
+
+  const expectedQuaternion =
+    currentQuaternion
+      .clone();
+
+
+  if (
+    age >
+    0 &&
+    Math.abs(
+      angularSpeed
+    ) >
+    0.00001
+  ) {
+
+    const dq =
+      new THREE.Quaternion()
+        .setFromAxisAngle(
+          angularAxis,
+          angularSpeed *
+          dt
+        );
+
+
+    expectedQuaternion
+      .multiply(
+        dq
+      )
+      .normalize();
+
+  }
+
+
+  const positionError =
+    expectedPosition.distanceTo(
+      position
+    );
+
+
+  const rotationError =
+    quaternionAngle(
+      expectedQuaternion,
+      quaternion
+    );
+
+
+  /* ===================================================
+     EXTREMER EINZELSPRUNG
+     =================================================== */
+
+  if (
+    positionError >
+      POSITION_OUTLIER_THRESHOLD ||
+    rotationError >
+      ROTATION_OUTLIER_THRESHOLD
+  ) {
+
+    const confirmed =
+      checkOutlierConfirmation(
+        position,
+        quaternion
+      );
+
+
+    if (
+      !confirmed
+    ) {
+
+      rejectedMeasurements++;
+
+      trackingMode =
+        "AUSREISSER VERWORFEN";
+
+      return;
+
+    }
+
+
+    /*
+     * Zwei ähnliche ungewöhnliche Messungen:
+     * offenbar echte schnelle Bewegung.
+     *
+     * Direkt neu einrasten.
+     */
+
+    hardReacquire(
+      position,
+      quaternion,
+      now
+    );
+
+
+    trackingMode =
+      "SCHNELLE BEWEGUNG";
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     NORMALE GUTE MESSUNG
+
+     KEINE ZUSÄTZLICHE POSE-GLÄTTUNG.
+
+     Genau das soll die Verzögerung aus
+     5c-7 beseitigen.
+     =================================================== */
+
+  pendingOutlier =
+    false;
+
+  pendingOutlierCount =
+    0;
+
+
+  updateVelocity(
+    position,
+    quaternion,
+    now
+  );
+
+
+  currentPosition.copy(
+    position
+  );
+
+  currentQuaternion.copy(
+    quaternion
+  );
+
+
+  lastMeasuredPosition.copy(
+    position
+  );
+
+  lastMeasuredQuaternion.copy(
+    quaternion
+  );
+
+
+  lastMeasuredTime = now;
+  lastGoodPoseTime = now;
+
+
+  trackingMode =
+    "APRILTAG";
+
+}
+
+
+/* =====================================================
+   MULTI-TAG FUSION
    ===================================================== */
 
 const candidatePositions = [];
 const candidateQuaternions = [];
-const candidateWeights = [];
 const candidateIDs = [];
 
 const tempPosition =
@@ -1518,39 +1600,24 @@ const measuredQuaternion =
 
 
 function createCubeMeasurement(
-  detections,
   now
 ) {
 
   candidatePositions.length = 0;
   candidateQuaternions.length = 0;
-  candidateWeights.length = 0;
   candidateIDs.length = 0;
 
 
-  scene.updateMatrixWorld(true);
+  scene.updateMatrixWorld(
+    true
+  );
 
 
   for (
-    const detection
-    of detections
+    let id = 0;
+    id <= 5;
+    id++
   ) {
-
-    const id =
-      Number(
-        detection.id
-      );
-
-
-    if (
-      id < 0 ||
-      id > 5
-    ) {
-
-      continue;
-
-    }
-
 
     const root =
       markerRoots[id];
@@ -1571,6 +1638,11 @@ function createCubeMeasurement(
       );
 
 
+    candidatePositions.push(
+      tempPosition.clone()
+    );
+
+
     tempQuaternion
       .copy(
         root.quaternion
@@ -1581,34 +1653,14 @@ function createCubeMeasurement(
       .normalize();
 
 
-    /*
-     * Quadratwurzel der Bildfläche:
-     *
-     * Größere Marker zählen stärker,
-     * dominieren aber nicht extrem.
-     */
-
-    const weight =
-      Math.sqrt(
-        detectionArea(
-          detection
-        )
-      );
-
-
-    candidatePositions.push(
-      tempPosition.clone()
-    );
-
     candidateQuaternions.push(
       tempQuaternion.clone()
     );
 
-    candidateWeights.push(
-      weight
-    );
 
-    candidateIDs.push(id);
+    candidateIDs.push(
+      id
+    );
 
   }
 
@@ -1630,7 +1682,9 @@ function createCubeMeasurement(
 
 
   /* ===================================================
-     GEWICHTETE POSITION
+     POSITION
+
+     Bewährte gleichgewichtete Fusion aus 5c-4.
      =================================================== */
 
   measuredPosition.set(
@@ -1640,34 +1694,28 @@ function createCubeMeasurement(
   );
 
 
-  let totalWeight = 0;
-
-
   for (
-    let i = 0;
-    i <
-    candidatePositions.length;
-    i++
+    const position
+    of candidatePositions
   ) {
 
-    measuredPosition.addScaledVector(
-      candidatePositions[i],
-      candidateWeights[i]
+    measuredPosition.add(
+      position
     );
-
-    totalWeight +=
-      candidateWeights[i];
 
   }
 
 
-  measuredPosition.divideScalar(
-    totalWeight
+  measuredPosition.multiplyScalar(
+
+    1 /
+    candidatePositions.length
+
   );
 
 
   /* ===================================================
-     GEWICHTETE QUATERNION-FUSION
+     ROTATION
      =================================================== */
 
   const reference =
@@ -1681,19 +1729,17 @@ function createCubeMeasurement(
 
 
   for (
-    let i = 0;
-    i <
-    candidateQuaternions.length;
-    i++
+    const original
+    of candidateQuaternions
   ) {
 
     const q =
-      candidateQuaternions[i]
-        .clone();
+      original.clone();
 
 
     if (
-      reference.dot(q) < 0
+      reference.dot(q) <
+      0
     ) {
 
       q.x *= -1;
@@ -1704,14 +1750,10 @@ function createCubeMeasurement(
     }
 
 
-    const w =
-      candidateWeights[i];
-
-
-    qx += q.x * w;
-    qy += q.y * w;
-    qz += q.z * w;
-    qw += q.w * w;
+    qx += q.x;
+    qy += q.y;
+    qz += q.z;
+    qw += q.w;
 
   }
 
@@ -1728,8 +1770,11 @@ function createCubeMeasurement(
      DIAGNOSE
      =================================================== */
 
-  let maxPositionDifference = 0;
-  let maxRotationDifference = 0;
+  let maxPositionDifference =
+    0;
+
+  let maxRotationDifference =
+    0;
 
 
   for (
@@ -1741,21 +1786,29 @@ function createCubeMeasurement(
 
     maxPositionDifference =
       Math.max(
+
         maxPositionDifference,
+
         candidatePositions[i]
           .distanceTo(
             measuredPosition
           )
+
       );
 
 
     maxRotationDifference =
       Math.max(
+
         maxRotationDifference,
+
         quaternionAngleDegrees(
+
           candidateQuaternions[i],
           measuredQuaternion
+
         )
+
       );
 
   }
@@ -1768,14 +1821,7 @@ function createCubeMeasurement(
     maxRotationDifference;
 
 
-  /*
-   * Messung geht jetzt NICHT direkt
-   * zum Methan.
-
-   * Sie geht zum Tracker.
-   */
-
-  correctTracker(
+  acceptMeasurement(
     measuredPosition,
     measuredQuaternion,
     now
@@ -1788,7 +1834,234 @@ function createCubeMeasurement(
 
 
 /* =====================================================
-   APRILTAG
+   AKTUELLE DARSTELLUNGSPOSE
+   ===================================================== */
+
+function updateRenderedPose(
+  now
+) {
+
+  if (
+    !trackerInitialized ||
+    lastGoodPoseTime === null
+  ) {
+
+    methane.visible =
+      false;
+
+    return;
+
+  }
+
+
+  const age =
+    now -
+    lastGoodPoseTime;
+
+
+  /* ===================================================
+     FRISCHE APRILTAG-POSE
+
+     Direkt anzeigen.
+     =================================================== */
+
+  if (
+    age <= 45
+  ) {
+
+    methane.position.copy(
+      currentPosition
+    );
+
+    methane.quaternion.copy(
+      currentQuaternion
+    );
+
+    methane.visible =
+      true;
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     KURZER AUSSETZER:
+
+     Bewegung extrapolieren.
+     =================================================== */
+
+  if (
+    age <=
+    MAX_PREDICTION_TIME_MS
+  ) {
+
+    const dt =
+      age / 1000;
+
+
+    const predictedPosition =
+      currentPosition
+        .clone()
+        .addScaledVector(
+          linearVelocity,
+          dt
+        );
+
+
+    const predictedQuaternion =
+      currentQuaternion
+        .clone();
+
+
+    if (
+      Math.abs(
+        angularSpeed
+      ) >
+      0.00001
+    ) {
+
+      const dq =
+        new THREE.Quaternion()
+          .setFromAxisAngle(
+            angularAxis,
+            angularSpeed *
+            dt
+          );
+
+
+      predictedQuaternion
+        .multiply(
+          dq
+        )
+        .normalize();
+
+    }
+
+
+    methane.position.copy(
+      predictedPosition
+    );
+
+    methane.quaternion.copy(
+      predictedQuaternion
+    );
+
+    methane.visible =
+      true;
+
+
+    if (
+      trackingMode !==
+      "AUSREISSER VERWORFEN"
+    ) {
+
+      trackingMode =
+        "PROGNOSE";
+
+    }
+
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     MITTLERER AUSSETZER:
+
+     Nicht weiter extrapolieren.
+     Letzte plausible Prognose halten.
+
+     Dadurch kein Davonfliegen.
+     =================================================== */
+
+  if (
+    age <=
+    MAX_HOLD_TIME_MS
+  ) {
+
+    const dt =
+      MAX_PREDICTION_TIME_MS /
+      1000;
+
+
+    const heldPosition =
+      currentPosition
+        .clone()
+        .addScaledVector(
+          linearVelocity,
+          dt
+        );
+
+
+    const heldQuaternion =
+      currentQuaternion
+        .clone();
+
+
+    if (
+      Math.abs(
+        angularSpeed
+      ) >
+      0.00001
+    ) {
+
+      const dq =
+        new THREE.Quaternion()
+          .setFromAxisAngle(
+            angularAxis,
+            angularSpeed *
+            dt
+          );
+
+
+      heldQuaternion
+        .multiply(
+          dq
+        )
+        .normalize();
+
+    }
+
+
+    methane.position.copy(
+      heldPosition
+    );
+
+    methane.quaternion.copy(
+      heldQuaternion
+    );
+
+    methane.visible =
+      true;
+
+
+    trackingMode =
+      "HALTEN";
+
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     ECHTER VERLUST
+     =================================================== */
+
+  methane.visible =
+    false;
+
+
+  trackingMode =
+    "VERLOREN";
+
+}
+
+
+/* =====================================================
+   APRILTAG INITIALISIEREN
    ===================================================== */
 
 async function initializeAprilTag() {
@@ -1800,7 +2073,9 @@ async function initializeAprilTag() {
 
 
   const Apriltag =
-    Comlink.wrap(worker);
+    Comlink.wrap(
+      worker
+    );
 
 
   apriltag =
@@ -1808,7 +2083,9 @@ async function initializeAprilTag() {
 
       Comlink.proxy(
         function() {
+
           detectorReady = true;
+
         }
       )
 
@@ -1819,7 +2096,9 @@ async function initializeAprilTag() {
     performance.now();
 
 
-  while (!detectorReady) {
+  while (
+    !detectorReady
+  ) {
 
     await new Promise(
       resolve =>
@@ -1867,11 +2146,17 @@ async function initializeAprilTag() {
   }
 
 
-  await apriltag.set_return_pose(1);
+  await apriltag.set_return_pose(
+    1
+  );
 
-  await apriltag.set_return_solutions(1);
+  await apriltag.set_return_solutions(
+    1
+  );
 
-  await apriltag.set_max_detections(6);
+  await apriltag.set_max_detections(
+    6
+  );
 
 }
 
@@ -1916,7 +2201,8 @@ async function startCamera() {
       });
 
 
-  video.srcObject = stream;
+  video.srcObject =
+    stream;
 
 
   await new Promise(
@@ -1955,7 +2241,7 @@ async function startCamera() {
 
 
 /* =====================================================
-   GRAUSTUFENBILD
+   GRAUSTUFEN
    ===================================================== */
 
 function createGrayscaleImage() {
@@ -2063,9 +2349,6 @@ async function detectFrame() {
     }
 
 
-    const validDetections = [];
-
-
     for (
       const detection
       of detections
@@ -2082,39 +2365,26 @@ async function detectFrame() {
         id <= 5
       ) {
 
-        if (
-          applyAprilTagPose(
-            detection,
-            markerRoots[id]
-          )
-        ) {
-
-          validDetections.push(
-            detection
-          );
-
-        }
+        applyAprilTagPose(
+          detection,
+          markerRoots[id]
+        );
 
       }
 
     }
 
 
-    const measurementTime =
+    const now =
       performance.now();
 
 
     createCubeMeasurement(
-      validDetections,
-      measurementTime
+      now
     );
 
 
     detectionCounter++;
-
-
-    const now =
-      performance.now();
 
 
     if (
@@ -2151,7 +2421,8 @@ async function detectFrame() {
 
   finally {
 
-    detectionRunning = false;
+    detectionRunning =
+      false;
 
   }
 
@@ -2159,88 +2430,7 @@ async function detectFrame() {
 
 
 /* =====================================================
-   60-HZ-DARSTELLUNG
-
-   DAS IST EIN WESENTLICHER UNTERSCHIED
-   ZU DEN BISHERIGEN VERSIONEN.
-
-   Das Molekül hängt nicht mehr direkt an
-   der Detektionsfrequenz.
-   ===================================================== */
-
-function updateRenderedPose(
-  now
-) {
-
-  if (
-    !trackerInitialized
-  ) {
-
-    methane.visible = false;
-    return;
-
-  }
-
-
-  const age =
-    lastAcceptedMeasurementTime === null
-      ? Infinity
-      : now -
-        lastAcceptedMeasurementTime;
-
-
-  if (
-    age >
-    MAX_COAST_TIME_MS
-  ) {
-
-    methane.visible = false;
-
-    trackerMode =
-      "TRACKING VERLOREN";
-
-    return;
-
-  }
-
-
-  /*
-   * Kontinuierliche Bewegung bis zum
-   * aktuellen Renderzeitpunkt.
-   */
-
-  predictTrackerTo(now);
-
-
-  methane.position.copy(
-    trackerPosition
-  );
-
-
-  methane.quaternion.copy(
-    trackerQuaternion
-  );
-
-
-  methane.visible = true;
-
-
-  if (
-    age > 55 &&
-    trackerMode !==
-      "AUSREISSER VERWORFEN"
-  ) {
-
-    trackerMode =
-      "PRÄDIKTION";
-
-  }
-
-}
-
-
-/* =====================================================
-   CANVAS-GEOMETRIE
+   CANVAS
    ===================================================== */
 
 function resize() {
@@ -2250,6 +2440,7 @@ function resize() {
 
   const screenHeight =
     window.innerHeight;
+
 
   const videoAspect =
     WIDTH / HEIGHT;
@@ -2295,6 +2486,7 @@ function resize() {
       displayWidth
     ) / 2;
 
+
   const top =
     (
       screenHeight -
@@ -2334,16 +2526,16 @@ function updateStatus(
 ) {
 
   const ids =
-    lastVisibleIDs.length
+    lastVisibleIDs.length > 0
       ? lastVisibleIDs.join(", ")
       : "–";
 
 
   const age =
-    lastAcceptedMeasurementTime === null
+    lastGoodPoseTime === null
       ? 0
       : now -
-        lastAcceptedMeasurementTime;
+        lastGoodPoseTime;
 
 
   const posSpread =
@@ -2375,8 +2567,8 @@ function updateStatus(
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    "\n\nTracker: " +
-    trackerMode +
+    "\n\nTracking: " +
+    trackingMode +
 
     "\nMessalter: " +
     age.toFixed(0) +
@@ -2384,6 +2576,9 @@ function updateStatus(
 
     "\nAusreißer verworfen: " +
     rejectedMeasurements +
+
+    "\nNeueinrastungen: " +
+    fastReacquisitions +
 
     "\n\nPositionsabw.: " +
     posSpread +
@@ -2395,7 +2590,7 @@ function updateStatus(
 
 
 /* =====================================================
-   RENDERLOOP
+   RENDER LOOP
    ===================================================== */
 
 function animate(now) {
@@ -2404,10 +2599,6 @@ function animate(now) {
     animate
   );
 
-
-  /*
-   * AprilTag darf unabhängig weiterrechnen.
-   */
 
   if (
     !detectionRunning
@@ -2418,14 +2609,14 @@ function animate(now) {
   }
 
 
-  /*
-   * Tracker und Rendering laufen dagegen
-   * in jedem Displayframe.
-   */
+  updateRenderedPose(
+    now
+  );
 
-  updateRenderedPose(now);
 
-  updateStatus(now);
+  updateStatus(
+    now
+  );
 
 
   renderer.render(
