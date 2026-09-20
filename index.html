@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – 5c-18 Fresh-Frame Recovery + Corridor Rescue</title>
+<title>GeoChemAR – 5c-19 Hybrid AprilTag + Optical Flow</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
 #threeCanvas{position:fixed;z-index:2;pointer-events:none}
-#analysisCanvas,#recoveryCanvas{display:none}
+#analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
 #status{position:fixed;top:10px;left:10px;z-index:10;padding:9px 12px;border-radius:8px;background:rgba(0,0,0,.74);color:#fff;font-size:13px;line-height:1.4;white-space:pre-line;pointer-events:none}
 #error{position:fixed;left:10px;right:10px;bottom:10px;z-index:20;padding:10px;border-radius:8px;background:rgba(160,0,0,.92);color:#fff;font-size:13px;white-space:pre-wrap;display:none}
 </style>
@@ -17,6 +17,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 <video id="video" autoplay muted playsinline></video>
 <canvas id="analysisCanvas" width="640" height="480"></canvas>
 <canvas id="recoveryCanvas" width="320" height="320"></canvas>
+<canvas id="flowCanvas" width="320" height="240"></canvas>
 <canvas id="threeCanvas" width="640" height="480"></canvas>
 <div id="status">AprilTag wird geladen …</div>
 <div id="error"></div>
@@ -24,10 +25,10 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 import * as THREE from "./libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-const VERSION="5c-18";
+const VERSION="5c-19";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
-const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=700;
+const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
 const VELOCITY_BLEND=0.35, MAX_LINEAR_SPEED=1.5, MAX_ANGULAR_SPEED=12.0;
 const CONTINUITY_MAX_AGE_MS=260;
 const POSITION_SCORE_SCALE=0.025;
@@ -105,27 +106,7 @@ const MOBILE_CAPTURE_HEIGHT=960;
 const MOBILE_EXPOSURE_COMPENSATION=-0.5;
 const MOBILE_ROI_MAX_DIM=520;
 const MOBILE_FACE_ROI_MAX_DIM=384;
-const MOBILE_RECOVERY_CYCLE=4; // combined ROI, face 0, corridor/face 1, full frame
-
-/* 5c-18: final dropout reduction.
-   - Keep exactly one pending fresh video frame while AprilTag is busy.
-     As soon as the worker is free we process the newest available frame
-     instead of idling until a later video callback.
-   - If ordinary predicted-face recovery misses repeatedly, search an
-     expanding motion corridor covering the cube from its last measured
-     pose to its current predicted pose. This is less sensitive to a
-     slightly wrong velocity/face prediction during fast edge turns.
-   - Only the emergency corridor uses mild spatial sharpening. Normal
-     tracking and all proven 5c-17 pose/stabilization paths stay unchanged. */
-const FRESH_FRAME_DRAIN_MAX_AGE_MS=95;
-const CORRIDOR_MAX_DIM_DESKTOP=560;
-const CORRIDOR_MAX_DIM_MOBILE=680;
-const CORRIDOR_MAX_UPSCALE=4.0;
-const CORRIDOR_BASE_PADDING_FACTOR=0.38;
-const CORRIDOR_EXTRA_AGE_PADDING=0.70;
-const CORRIDOR_MIN_PADDING_PX=30;
-const CORRIDOR_SHARPEN_AFTER_MISSES=2;
-const CORRIDOR_SHARPEN_AMOUNT=0.55;
+const MOBILE_RECOVERY_CYCLE=4; // combined ROI, face 0, face 1, full frame
 
 /* 5c-17: mobile jitter is attacked at its source instead of by adding
    another slow pose filter. The rendered pose stays direct, while only
@@ -159,6 +140,37 @@ const MOBILE_STICKY_FORCE_DIRECT_ROT=THREE.MathUtils.degToRad(1.35);
 const MOBILE_ASSIST_MAX_POSITION_ERROR=0.006;
 const MOBILE_ASSIST_MAX_ROTATION_ERROR=THREE.MathUtils.degToRad(8);
 
+/* 5c-19: hybrid optical-flow bridge.
+   AprilTag remains the absolute reference and detector/recovery scheduling
+   stays exactly as in 5c-17. A lightweight pyramidal Lucas-Kanade tracker
+   follows known points on the currently visible cube faces between tag
+   detections. It is used only as a short bridge and as a better ROI guide;
+   every new AprilTag pose re-anchors it, so drift cannot accumulate. */
+const FLOW_WIDTH=320;
+const FLOW_HEIGHT=240;
+const FLOW_SCALE_X=FLOW_WIDTH/WIDTH;
+const FLOW_SCALE_Y=FLOW_HEIGHT/HEIGHT;
+const FLOW_LEVELS=3;
+const FLOW_PATCH_RADIUS=3;
+const FLOW_ITERATIONS=4;
+const FLOW_MAX_POINTS=28;
+const FLOW_MIN_POINTS=7;
+const FLOW_GRID_STEPS=5;
+const FLOW_GRID_EXTENT=0.78;
+const FLOW_MIN_FEATURE_SCORE=8.0;
+const FLOW_MIN_POINT_SEPARATION=5.5;
+const FLOW_MAX_PHOTOMETRIC_ERROR=34;
+const FLOW_MAX_FB_ERROR=1.6;
+const FLOW_RENDER_AFTER_MS=48;
+const FLOW_MAX_RENDER_AGE_MS=90;
+const FLOW_MAX_BRIDGE_FROM_TAG_MS=650;
+const FLOW_POSE_MAX_RMSE_PX=4.2;
+const FLOW_POSE_MAX_POSITION_STEP=0.030;
+const FLOW_POSE_MAX_ROTATION_STEP=THREE.MathUtils.degToRad(26);
+const FLOW_POSE_MAX_POSITION_FROM_SEED=0.045;
+const FLOW_POSE_MAX_ROTATION_FROM_SEED=THREE.MathUtils.degToRad(38);
+const FLOW_MAX_REPROJECTION_OUTLIER_PX=7.0;
+
 /* 5c-13: recovery jump guard.
    Recovery detection remains exactly as in 5c-12, but a single
    implausible ROI/reacquisition pose is not allowed to teleport
@@ -182,6 +194,8 @@ const analysisCanvas=document.getElementById("analysisCanvas");
 const analysisCtx=analysisCanvas.getContext("2d",{willReadFrequently:true});
 const recoveryCanvas=document.getElementById("recoveryCanvas");
 const recoveryCtx=recoveryCanvas.getContext("2d",{willReadFrequently:true});
+const flowCanvas=document.getElementById("flowCanvas");
+const flowCtx=flowCanvas.getContext("2d",{willReadFrequently:true});
 const threeCanvas=document.getElementById("threeCanvas");
 const status=document.getElementById("status");
 const errorBox=document.getElementById("error");
@@ -198,15 +212,20 @@ let faceRoiAttempts=0,faceRoiHits=0,proactiveAttempts=0,proactiveHits=0,normalFr
 let fullAttempts=0,fullHits=0,recoveryMode=false,recoveryFrames=0,consecutiveMisses=0;
 let cameraModeText="Standard";
 let mobileFastCapture=false,mobileNativeRoi=false,mobileExposureComp=null;
-let pendingFreshFrame=false,pendingFreshFrameTime=null,pendingFreshMediaTime=null;
-let freshFrameDrainRuns=0,freshFrameDrainDiscarded=0;
-let corridorAttempts=0,corridorHits=0;
 let mobileFreshRecoveryDeferrals=0,mobileSinglePassRecovery=0;
 let pendingMobileAssist=false,pendingMobileAssistExcludeIds=[];
 let mobileAssistPoseRejected=0;
 let mobileRobustSegments=0;
 let mobileStickyRadiusPos=0,mobileStickyRadiusRot=0;
 let sourceVideoText="–";
+
+let flowPrevPyramid=null,flowPrevTime=null,flowNeedsReseed=true;
+let flowPoints=[];
+let flowValid=false,flowPoseTime=null,flowPoseRmse=null,flowInliers=0;
+const flowPosePosition=new THREE.Vector3();
+const flowPoseQuaternion=new THREE.Quaternion();
+let flowFrames=0,flowAccepted=0,flowRejected=0,flowReseeds=0;
+let flowLastText="–";
 
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(verticalFovDeg,WIDTH/HEIGHT,0.01,10);
@@ -239,6 +258,25 @@ for(let id=0;id<=5;id++){
 }
 const cubeVertices=[];
 for(const x of [-HALF_CUBE,HALF_CUBE]) for(const y of [-HALF_CUBE,HALF_CUBE]) for(const z of [-HALF_CUBE,HALF_CUBE]) cubeVertices.push(new THREE.Vector3(x,y,z));
+
+/* Dense known surface points used by the optical-flow bridge.
+   Their 3D position is exact because every point lies on a known cube face.
+   At seeding time only patches with enough image gradient are retained. */
+const flowFacePoints={};
+for(let id=0;id<=5;id++){
+  const faceRotation=relativeFrom3[id];
+  const faceCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(faceRotation);
+  const points=[];
+  for(let gy=0;gy<FLOW_GRID_STEPS;gy++){
+    for(let gx=0;gx<FLOW_GRID_STEPS;gx++){
+      const u=((gx/(FLOW_GRID_STEPS-1))*2-1)*tagHalf*FLOW_GRID_EXTENT;
+      const v=((gy/(FLOW_GRID_STEPS-1))*2-1)*tagHalf*FLOW_GRID_EXTENT;
+      const p=new THREE.Vector3(u,v,0).applyQuaternion(faceRotation).add(faceCenter);
+      points.push(p);
+    }
+  }
+  flowFacePoints[id]=points;
+}
 
 function createMethane(){
   const g=new THREE.Group(), s=.05, cr=.22*s, hr=.14*s, hd=.72*s, br=.040*s;
@@ -563,6 +601,77 @@ function refineJointCubePose(initialPosition,initialQuaternion,combo){
   return {accepted:Number.isFinite(after)&&after<before*.995&&after<=JOINT_MAX_RMSE_PX&&ps<=JOINT_MAX_POSITION_SHIFT&&rs<=JOINT_MAX_ROTATION_SHIFT,position,quaternion,before,after,timeMs:performance.now()-t0};
 }
 
+
+function refinePoseFromObservations(initialPosition,initialQuaternion,observations,maxIterations=4){
+  if(!observations||observations.length<FLOW_MIN_POINTS)return null;
+
+  let position=initialPosition.clone();
+  let quaternion=initialQuaternion.clone();
+  let state=calculateResidualState(position,quaternion,observations);
+  if(!state)return null;
+
+  for(let iter=0;iter<maxIterations;iter++){
+    const m=state.weightedResiduals.length;
+    const J=Array.from({length:m},()=>new Array(6).fill(0));
+
+    for(let k=0;k<6;k++){
+      const tp=position.clone(),tq=quaternion.clone(),d=[0,0,0,0,0,0];
+      d[k]=JOINT_FD_STEP;
+      applyNormalizedPoseDelta(tp,tq,d);
+      const ts=calculateResidualState(tp,tq,observations,state.weights);
+      if(!ts)continue;
+      for(let r=0;r<m;r++){
+        J[r][k]=(ts.weightedResiduals[r]-state.weightedResiduals[r])/JOINT_FD_STEP;
+      }
+    }
+
+    const A=Array.from({length:6},()=>new Array(6).fill(0));
+    const b=new Array(6).fill(0);
+    for(let r=0;r<m;r++){
+      const rr=state.weightedResiduals[r];
+      for(let a=0;a<6;a++){
+        const ja=J[r][a];
+        b[a]-=ja*rr;
+        for(let bb=0;bb<6;bb++)A[a][bb]+=ja*J[r][bb];
+      }
+    }
+    for(let k=0;k<6;k++)A[k][k]+=JOINT_DAMPING*(A[k][k]+1);
+
+    const d=solveLinear6(A,b);
+    if(!d)break;
+
+    let tl=Math.hypot(d[0],d[1],d[2]);
+    if(tl>8){
+      const s=8/tl;
+      d[0]*=s;d[1]*=s;d[2]*=s;
+    }
+    let rl=Math.hypot(d[3],d[4],d[5]);
+    if(rl>12){
+      const s=12/rl;
+      d[3]*=s;d[4]*=s;d[5]*=s;
+    }
+
+    let improved=false;
+    for(const sf of [1,.5,.25]){
+      const tp=position.clone(),tq=quaternion.clone();
+      applyNormalizedPoseDelta(tp,tq,d,sf);
+      const ts=calculateResidualState(tp,tq,observations);
+      if(ts&&ts.cost<state.cost){
+        position=tp;
+        quaternion=tq;
+        state=ts;
+        improved=true;
+        break;
+      }
+    }
+    if(!improved||Math.hypot(...d)<.01)break;
+  }
+
+  const finalState=calculateResidualState(position,quaternion,observations);
+  if(!finalState)return null;
+  return {position,quaternion,rmse:finalState.rawRmse,cost:finalState.cost};
+}
+
 let recoveryGuardPending=false,recoveryGuardPendingCount=0,recoveryGuardRejected=0,recoveryGuardConfirmed=0;
 const recoveryGuardPosition=new THREE.Vector3();
 const recoveryGuardQuaternion=new THREE.Quaternion();
@@ -583,8 +692,6 @@ function guardRecoveryMeasurement(position,quaternion,frameTime,gapBefore,source
     source==="MOBILE-NATIVE-ROI"||
     source==="MOBILE-FACE-0"||
     source==="MOBILE-FACE-1"||
-    source==="MOBILE-CORRIDOR"||
-    source==="CORRIDOR-RECOVERY"||
     source==="MOBILE-FULL-REACQUIRE";
 
   /* Stable native full-frame measurements stay completely direct.
@@ -693,6 +800,7 @@ function processDetections(detections,frameTime){
   }
 
   registerGoodPose(finalPosition,finalQuaternion,frameTime,detectorSource);
+  flowNeedsReseed=true;
   return true;
 }
 
@@ -840,7 +948,7 @@ function polygonArea(points){
    This is used both by the proven combined recovery ROI and by the new
    single-face high-sensitivity search. */
 function predictedFaces(frameTime){
-  const pred=predictedPoseAt(frameTime,ROI_RECOVERY_MAX_AGE_MS);
+  const pred=bestRecoveryPoseAt(frameTime);
   if(!pred)return [];
 
   const faces=[];
@@ -949,79 +1057,6 @@ function predictedSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
   return {x:x0,y:y0,width:w,height:h,ids:[face.id],face};
 }
 
-/* 5c-18: build a motion-corridor ROI instead of trusting one single
-   predicted face location. The ROI contains the cube at the last measured
-   pose, halfway through the prediction and at the current predicted pose.
-   Its margin grows with loss age and motion speed. */
-function predictedMotionCorridorROI(frameTime){
-  if(!hasGoodPose||lastGoodPoseTime===null)return null;
-
-  const rawAge=Math.max(0,frameTime-lastGoodPoseTime);
-  const age=Math.min(rawAge,ROI_RECOVERY_MAX_AGE_MS);
-  const nowPose=predictedPoseAt(lastGoodPoseTime+age,ROI_RECOVERY_MAX_AGE_MS);
-  const midPose=predictedPoseAt(lastGoodPoseTime+age*0.5,ROI_RECOVERY_MAX_AGE_MS);
-  if(!nowPose||!midPose)return null;
-
-  const poses=[
-    {position:lastGoodPosition.clone(),quaternion:lastGoodQuaternion.clone()},
-    midPose,
-    nowPose
-  ];
-
-  const points=[];
-  for(const pose of poses){
-    for(const vertex of cubeVertices){
-      const p=projectCubePoint(vertex,pose.position,pose.quaternion);
-      if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y))points.push(p);
-    }
-  }
-  if(points.length<8)return null;
-
-  let minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x));
-  let minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y));
-  let w=maxX-minX,h=maxY-minY;
-  if(w<=0||h<=0)return null;
-
-  const ageFraction=THREE.MathUtils.clamp(age/ROI_RECOVERY_MAX_AGE_MS,0,1);
-  const motionFraction=THREE.MathUtils.clamp(
-    0.45*Math.min(1,linearVelocity.length()/MAX_LINEAR_SPEED)+
-    0.55*Math.min(1,Math.abs(angularVelocity)/MAX_ANGULAR_SPEED),
-    0,1
-  );
-  const padFactor=
-    CORRIDOR_BASE_PADDING_FACTOR+
-    CORRIDOR_EXTRA_AGE_PADDING*Math.max(ageFraction,motionFraction);
-  const pad=Math.max(CORRIDOR_MIN_PADDING_PX,Math.max(w,h)*padFactor);
-
-  minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
-  let cxr=(minX+maxX)/2,cyr=(minY+maxY)/2;
-  w=maxX-minX;h=maxY-minY;
-  if(w<96)w=96;
-  if(h<96)h=96;
-
-  let x0=cxr-w/2,y0=cyr-h/2,x1=cxr+w/2,y1=cyr+h/2;
-  x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(WIDTH,x1);y1=Math.min(HEIGHT,y1);
-  w=x1-x0;h=y1-y0;
-  if(w<48||h<48)return null;
-
-  return {x:x0,y:y0,width:w,height:h,ids:[0,1,2,3,4,5]};
-}
-
-function sharpenRecoveryGrayscale(gray,w,h,amount=CORRIDOR_SHARPEN_AMOUNT){
-  if(w<3||h<3||amount<=0)return gray;
-  const out=new Uint8Array(gray);
-  for(let y=1;y<h-1;y++){
-    let i=y*w+1;
-    for(let x=1;x<w-1;x++,i++){
-      const c=gray[i];
-      const cross=(gray[i-1]+gray[i+1]+gray[i-w]+gray[i+w])*0.25;
-      const v=Math.round(c+amount*(c-cross));
-      out[i]=v<0?0:(v>255?255:v);
-    }
-  }
-  return out;
-}
-
 function remapRecoveryDetection(d,roi,sx,sy){
   const map=p=>{const q=getPoint(p);return q?{x:roi.x+q.x/sx,y:roi.y+q.y/sy}:p;};
   return {...d,corners:Array.isArray(d.corners)?d.corners.map(map):d.corners,center:d.center?map(d.center):d.center};
@@ -1049,43 +1084,6 @@ function drawRecoverySource(roi,rw,rh){
   }else{
     /* Desktop keeps the exact 5c-14 same-frame source. */
     recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
-  }
-}
-
-async function detectMotionCorridorROI(frameTime){
-  const roi=predictedMotionCorridorROI(frameTime);
-  if(!roi)return [];
-
-  corridorAttempts++;
-  const maxDim=IS_MOBILE_DEVICE?CORRIDOR_MAX_DIM_MOBILE:CORRIDOR_MAX_DIM_DESKTOP;
-  const scale=Math.min(CORRIDOR_MAX_UPSCALE,maxDim/Math.max(roi.width,roi.height));
-  const rw=Math.max(112,Math.round(roi.width*scale));
-  const rh=Math.max(112,Math.round(roi.height*scale));
-
-  drawRecoverySource(roi,rw,rh);
-
-  const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
-  let g=new Uint8Array(rw*rh);
-  for(let i=0,j=0;i<rgba.length;i+=4,j++)g[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
-
-  const enhanced=consecutiveMisses>=CORRIDOR_SHARPEN_AFTER_MISSES;
-  if(enhanced)g=sharpenRecoveryGrayscale(g,rw,rh);
-
-  const sx=rw/roi.width,sy=rh/roi.height;
-  const rfx=fx*sx,rfy=fy*sy,rcx=(cx-roi.x)*sx,rcy=(cy-roi.y)*sy;
-  const t0=performance.now();
-
-  try{
-    await apriltag.set_camera_info(rfx,rfy,rcx,rcy);
-    const result=await apriltag.detect(g,rw,rh);
-    lastRoiTimeMs=performance.now()-t0;
-    const arr=Array.isArray(result)?result:[];
-    const relevant=arr.filter(isRelevantDetection).map(d=>remapRecoveryDetection(d,roi,sx,sy));
-    if(relevant.length)corridorHits++;
-    lastRoiText=`Bewegungskorridor ${Math.round(roi.width)}×${Math.round(roi.height)} → ${rw}×${rh}${enhanced?" / scharf":""}`;
-    return relevant;
-  }finally{
-    await apriltag.set_camera_info(fx,fy,cx,cy);
   }
 }
 
@@ -1183,6 +1181,411 @@ function shouldProactiveAssist(detections,frameTime){
   const fastTurn=Math.abs(angularVelocity)>=PROACTIVE_ASSIST_MIN_ANGULAR_SPEED;
   const edgeRisk=next.frontality>=PROACTIVE_ASSIST_MIN_FRONT;
   return fastTurn||edgeRisk;
+}
+
+
+/* =====================================================
+   5c-19 HYBRID OPTICAL FLOW
+
+   The detector path is NOT changed. This tracker runs in the rVFC callback
+   even while the AprilTag worker is busy. It follows a small set of strong
+   surface patches at 320×240, then refines the known 3D cube pose from the
+   resulting 2D↔3D correspondences. AprilTag remains the absolute anchor.
+   ===================================================== */
+
+function buildFlowPyramid(){
+  flowCtx.drawImage(video,0,0,FLOW_WIDTH,FLOW_HEIGHT);
+  const rgba=flowCtx.getImageData(0,0,FLOW_WIDTH,FLOW_HEIGHT).data;
+  const levels=[];
+  let w=FLOW_WIDTH,h=FLOW_HEIGHT;
+  let data=new Uint8Array(w*h);
+  for(let i=0,j=0;i<rgba.length;i+=4,j++){
+    data[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+  }
+  levels.push({data,width:w,height:h});
+
+  for(let level=1;level<FLOW_LEVELS;level++){
+    const pw=w,ph=h,pd=data;
+    w=Math.max(1,Math.floor(pw/2));
+    h=Math.max(1,Math.floor(ph/2));
+    data=new Uint8Array(w*h);
+    for(let y=0;y<h;y++){
+      const sy=y*2;
+      for(let x=0;x<w;x++){
+        const sx=x*2;
+        const i00=sy*pw+sx;
+        const i10=sy*pw+Math.min(sx+1,pw-1);
+        const i01=Math.min(sy+1,ph-1)*pw+sx;
+        const i11=Math.min(sy+1,ph-1)*pw+Math.min(sx+1,pw-1);
+        data[y*w+x]=Math.round((pd[i00]+pd[i10]+pd[i01]+pd[i11])*0.25);
+      }
+    }
+    levels.push({data,width:w,height:h});
+  }
+  return levels;
+}
+
+function sampleGray(level,x,y){
+  const {data,width,height}=level;
+  if(x<0||y<0||x>width-1||y>height-1)return null;
+  const x0=Math.floor(x),y0=Math.floor(y);
+  const x1=Math.min(x0+1,width-1),y1=Math.min(y0+1,height-1);
+  const ax=x-x0,ay=y-y0;
+  const v00=data[y0*width+x0],v10=data[y0*width+x1];
+  const v01=data[y1*width+x0],v11=data[y1*width+x1];
+  return (v00*(1-ax)+v10*ax)*(1-ay)+(v01*(1-ax)+v11*ax)*ay;
+}
+
+function flowFeatureScore(level,x,y){
+  const r=2;
+  if(x<r+1||y<r+1||x>=level.width-r-1||y>=level.height-r-1)return 0;
+  let sum=0,count=0;
+  for(let yy=-r;yy<=r;yy++){
+    for(let xx=-r;xx<=r;xx++){
+      const gx=(sampleGray(level,x+xx+1,y+yy)-sampleGray(level,x+xx-1,y+yy))*0.5;
+      const gy=(sampleGray(level,x+xx,y+yy+1)-sampleGray(level,x+xx,y+yy-1))*0.5;
+      if(!Number.isFinite(gx)||!Number.isFinite(gy))continue;
+      sum+=Math.abs(gx)+Math.abs(gy);
+      count++;
+    }
+  }
+  return count?sum/count:0;
+}
+
+function trackPointLK(prevPyr,currPyr,x,y,guessX=x,guessY=y){
+  let dx=0,dy=0;
+  const initialDx=guessX-x,initialDy=guessY-y;
+
+  for(let level=FLOW_LEVELS-1;level>=0;level--){
+    const factor=2**level;
+    const prev=prevPyr[level],curr=currPyr[level];
+    const px=x/factor,py=y/factor;
+
+    if(level===FLOW_LEVELS-1){
+      dx=initialDx/factor;
+      dy=initialDy/factor;
+    }else{
+      dx*=2;
+      dy*=2;
+    }
+
+    for(let iter=0;iter<FLOW_ITERATIONS;iter++){
+      let gxx=0,gxy=0,gyy=0,bx=0,by=0,count=0;
+      for(let yy=-FLOW_PATCH_RADIUS;yy<=FLOW_PATCH_RADIUS;yy++){
+        for(let xx=-FLOW_PATCH_RADIUS;xx<=FLOW_PATCH_RADIUS;xx++){
+          const sx=px+xx,sy=py+yy;
+          const p=sampleGray(prev,sx,sy);
+          const c=sampleGray(curr,sx+dx,sy+dy);
+          const pxp=sampleGray(prev,sx+1,sy),pxm=sampleGray(prev,sx-1,sy);
+          const pyp=sampleGray(prev,sx,sy+1),pym=sampleGray(prev,sx,sy-1);
+          if(p===null||c===null||pxp===null||pxm===null||pyp===null||pym===null)continue;
+          const ix=(pxp-pxm)*0.5;
+          const iy=(pyp-pym)*0.5;
+          const it=c-p;
+          gxx+=ix*ix;
+          gxy+=ix*iy;
+          gyy+=iy*iy;
+          bx+=ix*it;
+          by+=iy*it;
+          count++;
+        }
+      }
+
+      const det=gxx*gyy-gxy*gxy;
+      if(count<20||det<1e4)return null;
+
+      let du=(-gyy*bx+gxy*by)/det;
+      let dv=(gxy*bx-gxx*by)/det;
+      const step=Math.hypot(du,dv);
+      if(step>2.5){
+        du*=2.5/step;
+        dv*=2.5/step;
+      }
+      dx+=du;
+      dy+=dv;
+      if(du*du+dv*dv<0.0009)break;
+    }
+  }
+
+  const nx=x+dx,ny=y+dy;
+  const level=currPyr[0];
+  if(nx<FLOW_PATCH_RADIUS+1||ny<FLOW_PATCH_RADIUS+1||
+     nx>=level.width-FLOW_PATCH_RADIUS-1||ny>=level.height-FLOW_PATCH_RADIUS-1)return null;
+
+  let absError=0,count=0;
+  for(let yy=-FLOW_PATCH_RADIUS;yy<=FLOW_PATCH_RADIUS;yy++){
+    for(let xx=-FLOW_PATCH_RADIUS;xx<=FLOW_PATCH_RADIUS;xx++){
+      const a=sampleGray(prevPyr[0],x+xx,y+yy);
+      const b=sampleGray(currPyr[0],nx+xx,ny+yy);
+      if(a===null||b===null)continue;
+      absError+=Math.abs(a-b);
+      count++;
+    }
+  }
+  const error=count?absError/count:Infinity;
+  if(!Number.isFinite(error)||error>FLOW_MAX_PHOTOMETRIC_ERROR)return null;
+  return {x:nx,y:ny,error};
+}
+
+function poseForFlowTime(timeMs){
+  if(flowValid&&flowPoseTime!==null&&timeMs>=flowPoseTime&&timeMs-flowPoseTime<=FLOW_MAX_RENDER_AGE_MS){
+    const dt=Math.min((timeMs-flowPoseTime)/1000,0.05);
+    const position=flowPosePosition.clone().addScaledVector(linearVelocity,dt);
+    const quaternion=flowPoseQuaternion.clone();
+    const angle=angularVelocity*dt;
+    if(Math.abs(angle)>1e-5){
+      quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
+    }
+    return {position,quaternion,ageMs:timeMs-flowPoseTime,source:"flow"};
+  }
+  const p=predictedPoseAt(timeMs,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+  return p?{...p,source:"prediction"}:null;
+}
+
+function bestRecoveryPoseAt(timeMs){
+  const flowPose=poseForFlowTime(timeMs);
+  if(flowPose&&flowPose.source==="flow")return flowPose;
+  return predictedPoseAt(timeMs,ROI_RECOVERY_MAX_AGE_MS);
+}
+
+function facesFromPose(pose){
+  if(!pose)return [];
+  const faces=[];
+  for(let id=0;id<=5;id++){
+    const corners=[];
+    let valid=true;
+    for(const localPoint of cubeTagCorners[id]){
+      const projected=projectCubePoint(localPoint,pose.position,pose.quaternion);
+      if(!projected||!Number.isFinite(projected.x)||!Number.isFinite(projected.y)){valid=false;break;}
+      corners.push(projected);
+    }
+    if(!valid)continue;
+
+    const localNormal=new THREE.Vector3(0,0,1).applyQuaternion(relativeFrom3[id]);
+    const worldNormal=localNormal.clone().applyQuaternion(pose.quaternion).normalize();
+    const localCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(relativeFrom3[id]);
+    const worldCenter=localCenter.clone().applyQuaternion(pose.quaternion).add(pose.position);
+    const toCamera=worldCenter.clone().multiplyScalar(-1);
+    let frontality=-1;
+    if(toCamera.lengthSq()>1e-12){toCamera.normalize();frontality=worldNormal.dot(toCamera);}
+    const area=Math.max(1,polygonArea(corners));
+    faces.push({id,corners,frontality,area,score:Math.max(0.02,frontality+0.10)*Math.sqrt(area)});
+  }
+  faces.sort((a,b)=>b.score-a.score);
+  return faces;
+}
+
+function seedFlowTracker(pyramid,frameTime){
+  const pose=predictedPoseAt(frameTime,CONTINUITY_MAX_AGE_MS);
+  if(!pose||!pyramid)return false;
+
+  const candidates=[];
+  const faces=facesFromPose(pose).filter(f=>f.frontality>-0.08).slice(0,3);
+
+  for(const face of faces){
+    for(const cubePoint of flowFacePoints[face.id]){
+      const p=projectCubePoint(cubePoint,pose.position,pose.quaternion);
+      if(!p)continue;
+      const x=p.x*FLOW_SCALE_X,y=p.y*FLOW_SCALE_Y;
+      if(x<8||y<8||x>=FLOW_WIDTH-8||y>=FLOW_HEIGHT-8)continue;
+      const score=flowFeatureScore(pyramid[0],x,y);
+      if(score<FLOW_MIN_FEATURE_SCORE)continue;
+      candidates.push({cubePoint:cubePoint.clone(),x,y,score,faceId:face.id});
+    }
+  }
+
+  candidates.sort((a,b)=>b.score-a.score);
+  const selected=[];
+  for(const candidate of candidates){
+    let tooClose=false;
+    for(const s of selected){
+      if(Math.hypot(candidate.x-s.x,candidate.y-s.y)<FLOW_MIN_POINT_SEPARATION){
+        tooClose=true;break;
+      }
+    }
+    if(!tooClose)selected.push(candidate);
+    if(selected.length>=FLOW_MAX_POINTS)break;
+  }
+
+  flowPoints=selected;
+  flowPrevPyramid=pyramid;
+  flowPrevTime=frameTime;
+  flowNeedsReseed=false;
+  flowReseeds++;
+  flowLastText=`Seed ${selected.length} Punkte`;
+  return selected.length>=FLOW_MIN_POINTS;
+}
+
+function flowObservationErrors(position,quaternion,observations){
+  return observations.map(o=>{
+    const p=projectCubePoint(o.point,position,quaternion);
+    return p?Math.hypot(p.x-o.x,p.y-o.y):Infinity;
+  });
+}
+
+function updateOpticalFlow(frameTime){
+  if(!cameraReady||video.readyState<2||video.videoWidth<=0)return;
+
+  const pyramid=buildFlowPyramid();
+  flowFrames++;
+
+  if(!hasGoodPose||lastGoodPoseTime===null||frameTime-lastGoodPoseTime>FLOW_MAX_BRIDGE_FROM_TAG_MS){
+    flowPrevPyramid=pyramid;
+    flowPrevTime=frameTime;
+    flowPoints=[];
+    flowValid=false;
+    flowNeedsReseed=true;
+    flowLastText="warte auf AprilTag";
+    return;
+  }
+
+  if(flowNeedsReseed||!flowPrevPyramid||!flowPoints.length){
+    seedFlowTracker(pyramid,frameTime);
+    return;
+  }
+
+  const guessPose=poseForFlowTime(frameTime);
+  const tracked=[];
+
+  for(const point of flowPoints){
+    let guessX=point.x,guessY=point.y;
+    if(guessPose){
+      const gp=projectCubePoint(point.cubePoint,guessPose.position,guessPose.quaternion);
+      if(gp){
+        guessX=gp.x*FLOW_SCALE_X;
+        guessY=gp.y*FLOW_SCALE_Y;
+      }
+    }
+
+    const forward=trackPointLK(flowPrevPyramid,pyramid,point.x,point.y,guessX,guessY);
+    if(!forward)continue;
+
+    const back=trackPointLK(
+      pyramid,flowPrevPyramid,
+      forward.x,forward.y,
+      point.x,point.y
+    );
+    if(!back||Math.hypot(back.x-point.x,back.y-point.y)>FLOW_MAX_FB_ERROR)continue;
+
+    tracked.push({
+      cubePoint:point.cubePoint,
+      x:forward.x,
+      y:forward.y,
+      score:point.score,
+      error:forward.error,
+      faceId:point.faceId
+    });
+  }
+
+  flowPrevPyramid=pyramid;
+  flowPrevTime=frameTime;
+  flowPoints=tracked;
+
+  if(tracked.length<FLOW_MIN_POINTS){
+    flowValid=false;
+    flowNeedsReseed=true;
+    flowRejected++;
+    flowLastText=`zu wenig Punkte ${tracked.length}`;
+    return;
+  }
+
+  const observations=tracked.map(p=>({
+    point:p.cubePoint,
+    x:p.x/FLOW_SCALE_X,
+    y:p.y/FLOW_SCALE_Y,
+    baseWeight:THREE.MathUtils.clamp(1-p.error/FLOW_MAX_PHOTOMETRIC_ERROR,0.20,1)
+  }));
+
+  const initial=flowValid&&flowPoseTime!==null&&frameTime-flowPoseTime<100
+    ? {position:flowPosePosition.clone(),quaternion:flowPoseQuaternion.clone()}
+    : predictedPoseAt(frameTime,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+
+  if(!initial){
+    flowValid=false;
+    flowNeedsReseed=true;
+    return;
+  }
+
+  let refined=refinePoseFromObservations(initial.position,initial.quaternion,observations,4);
+  if(!refined){
+    flowValid=false;
+    flowRejected++;
+    flowLastText="Pose-Lösung fehlgeschlagen";
+    return;
+  }
+
+  const errors=flowObservationErrors(refined.position,refined.quaternion,observations);
+  const finite=errors.filter(Number.isFinite).sort((a,b)=>a-b);
+  const median=finite.length?finite[Math.floor(finite.length/2)]:Infinity;
+  const outlierLimit=Math.min(
+    FLOW_MAX_REPROJECTION_OUTLIER_PX,
+    Math.max(3.0,median*2.5)
+  );
+
+  const inlierObs=observations.filter((o,i)=>errors[i]<=outlierLimit);
+  if(inlierObs.length>=FLOW_MIN_POINTS&&inlierObs.length<observations.length){
+    const refined2=refinePoseFromObservations(refined.position,refined.quaternion,inlierObs,3);
+    if(refined2)refined=refined2;
+  }
+
+  const reference=flowValid&&flowPoseTime!==null
+    ? {position:flowPosePosition,quaternion:flowPoseQuaternion}
+    : initial;
+
+  const stepPos=refined.position.distanceTo(reference.position);
+  const stepRot=quaternionAngle(refined.quaternion,reference.quaternion);
+  const seedPose=predictedPoseAt(frameTime,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+  const seedPos=seedPose?refined.position.distanceTo(seedPose.position):0;
+  const seedRot=seedPose?quaternionAngle(refined.quaternion,seedPose.quaternion):0;
+
+  /* Once optical flow is already locked, frame-to-frame geometry is the
+     stronger constraint than the older constant-velocity prediction. This
+     lets the bridge survive a real acceleration/turn instead of falling
+     back exactly when AprilTag is absent. The seed-distance check is only
+     required for the first flow pose after an AprilTag anchor. */
+  const seedConsistent=
+    flowValid||
+    (
+      seedPos<=FLOW_POSE_MAX_POSITION_FROM_SEED&&
+      seedRot<=FLOW_POSE_MAX_ROTATION_FROM_SEED
+    );
+
+  const acceptable=
+    refined.rmse<=FLOW_POSE_MAX_RMSE_PX&&
+    stepPos<=FLOW_POSE_MAX_POSITION_STEP&&
+    stepRot<=FLOW_POSE_MAX_ROTATION_STEP&&
+    seedConsistent;
+
+  if(!acceptable){
+    flowValid=false;
+    flowRejected++;
+    flowLastText=`verworfen ${refined.rmse.toFixed(1)} px / ${Math.round(stepPos*1000)} mm / ${THREE.MathUtils.radToDeg(stepRot).toFixed(0)}°`;
+    return;
+  }
+
+  flowPosePosition.copy(refined.position);
+  flowPoseQuaternion.copy(refined.quaternion);
+  flowPoseTime=frameTime;
+  flowPoseRmse=refined.rmse;
+  flowInliers=inlierObs.length>=FLOW_MIN_POINTS?inlierObs.length:observations.length;
+  flowValid=true;
+  flowAccepted++;
+  flowLastText=`${flowInliers}/${tracked.length} Punkte / ${flowPoseRmse.toFixed(1)} px`;
+}
+
+function flowPoseForRender(now){
+  if(!flowValid||flowPoseTime===null)return null;
+  const age=now-flowPoseTime;
+  if(age<0||age>FLOW_MAX_RENDER_AGE_MS)return null;
+
+  const dt=Math.min(age/1000,0.05);
+  const position=flowPosePosition.clone().addScaledVector(linearVelocity,dt);
+  const quaternion=flowPoseQuaternion.clone();
+  const angle=angularVelocity*dt;
+  if(Math.abs(angle)>1e-5){
+    quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
+  }
+  return {position,quaternion,ageMs:age};
 }
 
 async function detectFullFrame(fullGray){
@@ -1306,13 +1709,8 @@ async function detectCurrentVideoFrame(frameTime){
             detections=await detectSingleFaceROI(frameTime,[],0);
             detectorSource=detections.length?"MOBILE-FACE-0":"MOBILE-FACE-0-MISS";
           }else if(phase===2){
-            if(consecutiveMisses>=2){
-              detections=await detectMotionCorridorROI(frameTime);
-              detectorSource=detections.length?"MOBILE-CORRIDOR":"MOBILE-CORRIDOR-MISS";
-            }else{
-              detections=await detectSingleFaceROI(frameTime,[],1);
-              detectorSource=detections.length?"MOBILE-FACE-1":"MOBILE-FACE-1-MISS";
-            }
+            detections=await detectSingleFaceROI(frameTime,[],1);
+            detectorSource=detections.length?"MOBILE-FACE-1":"MOBILE-FACE-1-MISS";
           }else{
             detections=await detectFullFrame(getFullGray());
             detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
@@ -1327,14 +1725,9 @@ async function detectCurrentVideoFrame(frameTime){
         if(detections.length){
           detectorSource="FACE-ROI-RECOVERY";
         }else if(canRecover&&recoveryFrames%RECOVERY_FULL_EVERY_N!==0){
-          if(consecutiveMisses>=2){
-            detections=await detectMotionCorridorROI(frameTime);
-            detectorSource=detections.length?"CORRIDOR-RECOVERY":"CORRIDOR-SUCHE";
-          }else{
-            const rankOffset=Math.floor(recoveryFrames/RECOVERY_FULL_EVERY_N)%FACE_ROI_CANDIDATES;
-            detections=await detectSingleFaceROI(frameTime,[],rankOffset);
-            detectorSource=detections.length?"FACE-ROI-HIGH-SENS":"ROI-SUCHE";
-          }
+          const rankOffset=Math.floor(recoveryFrames/RECOVERY_FULL_EVERY_N)%FACE_ROI_CANDIDATES;
+          detections=await detectSingleFaceROI(frameTime,[],rankOffset);
+          detectorSource=detections.length?"FACE-ROI-HIGH-SENS":"ROI-SUCHE";
         }else{
           detections=await detectFullFrame(getFullGray());
           detectorSource=detections.length?"FULL-REACQUIRE":"NICHTS";
@@ -1377,42 +1770,6 @@ async function detectCurrentVideoFrame(frameTime){
     console.error(e);
   }finally{
     detectionRunning=false;
-
-    /* 5c-18: one-slot latest-frame queue. requestVideoFrameCallback can
-       deliver new camera frames while the WASM worker is still busy. Older
-       versions discarded them and then waited for yet another callback.
-       Keep only the newest one and drain it immediately when the detector
-       becomes free. This raises effective detector coverage without ever
-       building a stale multi-frame backlog. */
-    if(pendingFreshFrame&&cameraReady&&detectorReady){
-      let queuedTime=pendingFreshFrameTime;
-      const queuedMediaTime=pendingFreshMediaTime;
-      pendingFreshFrame=false;
-      pendingFreshFrameTime=null;
-      pendingFreshMediaTime=null;
-
-      if(Number.isFinite(queuedMediaTime)&&Number.isFinite(video.currentTime)){
-        const mediaAdvance=(video.currentTime-queuedMediaTime)*1000;
-        if(mediaAdvance>0&&mediaAdvance<80)queuedTime+=mediaAdvance;
-      }
-      queuedTime=Math.min(performance.now(),queuedTime);
-      const queuedAge=performance.now()-queuedTime;
-
-      if(Number.isFinite(queuedTime)&&queuedAge<=FRESH_FRAME_DRAIN_MAX_AGE_MS){
-        freshFrameDrainRuns++;
-        queueMicrotask(()=>{
-          if(!detectionRunning&&cameraReady&&detectorReady){
-            detectCurrentVideoFrame(queuedTime);
-          }else{
-            pendingFreshFrame=true;
-            pendingFreshFrameTime=queuedTime;
-            pendingFreshMediaTime=Number.isFinite(video.currentTime)?video.currentTime:null;
-          }
-        });
-      }else{
-        freshFrameDrainDiscarded++;
-      }
-    }
   }
 }
 
@@ -1421,18 +1778,28 @@ function onVideoFrame(callbackNow,metadata){
   if(typeof metadata?.presentedFrames==="number"&&Number.isFinite(metadata.presentedFrames)){if(lastPresentedFrames!==null){const d=metadata.presentedFrames-lastPresentedFrames;if(d>1)skippedPresentedFrames+=d-1;}lastPresentedFrames=metadata.presentedFrames;}
   const now=performance.now();if(now-videoFpsStart>=1000){videoFPS=videoFrameCounter/((now-videoFpsStart)/1000);videoFrameCounter=0;videoFpsStart=now;}
   if(!cameraReady||!detectorReady)return;
+
   const frameTime=getFrameTimestamp(callbackNow,metadata);
-  if(detectionRunning){
-    skippedBecauseBusy++;
-    pendingFreshFrame=true;
-    pendingFreshFrameTime=frameTime;
-    pendingFreshMediaTime=Number.isFinite(metadata?.mediaTime)?metadata.mediaTime:null;
-    return;
-  }
+
+  /* Crucial difference from rejected 5c-18: detector scheduling is untouched.
+     Only the lightweight optical-flow bridge sees every fresh video frame. */
+  updateOpticalFlow(frameTime);
+
+  if(detectionRunning){skippedBecauseBusy++;return;}
   detectCurrentVideoFrame(frameTime);
 }
 let fallbackLastVideoTime=-1;
-function fallbackVideoFrameLoop(){requestAnimationFrame(fallbackVideoFrameLoop);if(!cameraReady||!detectorReady||detectionRunning)return;if(video.currentTime===fallbackLastVideoTime)return;fallbackLastVideoTime=video.currentTime;frameTimeSource="Fallback";detectCurrentVideoFrame(performance.now());}
+function fallbackVideoFrameLoop(){
+  requestAnimationFrame(fallbackVideoFrameLoop);
+  if(!cameraReady||!detectorReady)return;
+  if(video.currentTime===fallbackLastVideoTime)return;
+  fallbackLastVideoTime=video.currentTime;
+  frameTimeSource="Fallback";
+  const frameTime=performance.now();
+  updateOpticalFlow(frameTime);
+  if(detectionRunning){skippedBecauseBusy++;return;}
+  detectCurrentVideoFrame(frameTime);
+}
 function startVideoProcessing(){if(typeof video.requestVideoFrameCallback==="function")video.requestVideoFrameCallback(onVideoFrame);else requestAnimationFrame(fallbackVideoFrameLoop);}
 
 /* =====================================================
@@ -1574,6 +1941,25 @@ function updateRenderedPose(now){
 
   const age=Math.max(0,now-lastGoodPoseTime);
 
+  /* 5c-19: use optical flow only when the absolute AprilTag pose is no
+     longer fresh. It therefore cannot add jitter during normal tracking,
+     but it bridges exactly the frames that previously became a dropout. */
+  if(
+    (age>=FLOW_RENDER_AFTER_MS||recoveryMode||consecutiveMisses>0)&&
+    flowPoseTime!==null&&
+    flowPoseTime>=lastGoodPoseTime
+  ){
+    const fp=flowPoseForRender(now);
+    if(fp){
+      const stabilized=stabilizeMicroJitter(fp.position,fp.quaternion,now);
+      methane.position.copy(stabilized.position);
+      methane.quaternion.copy(stabilized.quaternion);
+      methane.visible=true;
+      trackingMode="OPTICAL-FLOW-BRÜCKE";
+      return;
+    }
+  }
+
   /* Keep the successful 5c-12 prediction/recovery windows unchanged. */
   if(age<=MAX_PREDICTION_TIME_MS){
     const p=predictedPoseAt(now,MAX_PREDICTION_TIME_MS);
@@ -1655,10 +2041,13 @@ function updateStatus(now){
     `\nMobile robuste V-Segmente: ${mobileRobustSegments}`+
     `\nMobile Sticky-Radius: ${(mobileStickyRadiusPos*1000).toFixed(2)} mm / ${THREE.MathUtils.radToDeg(mobileStickyRadiusRot).toFixed(2)}°`+
     `\nAssist-Pose verworfen: ${mobileAssistPoseRejected}`+
-    `\nFresh-Frame-Drain: ${freshFrameDrainRuns} (alt verworfen ${freshFrameDrainDiscarded})`+
-    `\nKorridor-ROI: ${corridorHits}/${corridorAttempts}`+
     `\nRecovery-Guard: ${recoveryGuardText}`+
     `\nGuard verworfen/bestätigt: ${recoveryGuardRejected}/${recoveryGuardConfirmed}`+
+    `\n\nOptical Flow: ${flowValid?"AKTIV":"bereit"}`+
+    `\nFlow-Punkte/RMSE: ${flowInliers} / ${flowPoseRmse===null?"–":flowPoseRmse.toFixed(1)+" px"}`+
+    `\nFlow akzeptiert/verworfen: ${flowAccepted}/${flowRejected}`+
+    `\nFlow Reseeds: ${flowReseeds}`+
+    `\nFlow Status: ${flowLastText}`+
     `\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}`+
     `\nJoint-Tags: ${lastJointTags}`+
     `\nReprojektion: ${repro}`+
