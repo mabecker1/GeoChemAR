@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-2c Würfelzentrum</title>
+<title>GeoChemAR – 5c-2d Würfelpose</title>
 
 <style>
 html,
@@ -138,46 +138,32 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION =
-  "5c-2c";
+const VERSION = "5c-2d";
 
 
 /* =====================================================
    GRUNDWERTE
    ===================================================== */
 
-const WIDTH =
-  640;
+const WIDTH = 640;
+const HEIGHT = 480;
 
-const HEIGHT =
-  480;
-
-const TAG_SIZE =
-  0.0395;
-
+const TAG_SIZE = 0.0395;
 
 /*
- * Physische Würfelkante:
- * 45,0 mm
- *
- * Abstand Markerfläche -> Würfelzentrum:
- * 22,5 mm
+ * Würfelkante = 45,0 mm
+ * Markerfläche -> Würfelzentrum = 22,5 mm
  */
-
-const CUBE_SIZE =
-  0.045;
-
-const HALF_CUBE =
-  CUBE_SIZE / 2;
+const CUBE_SIZE = 0.045;
+const HALF_CUBE = CUBE_SIZE / 2;
 
 
 /* =====================================================
    KAMERAMODELL
-   Unverändert aus 5b-10 / 5c-2b
+   UNVERÄNDERT
    ===================================================== */
 
-const horizontalFovDeg =
-  60;
+const horizontalFovDeg = 60;
 
 const horizontalFovRad =
   THREE.MathUtils.degToRad(
@@ -190,14 +176,9 @@ const fx =
     horizontalFovRad / 2
   );
 
-const fy =
-  fx;
-
-const cx =
-  WIDTH / 2;
-
-const cy =
-  HEIGHT / 2;
+const fy = fx;
+const cx = WIDTH / 2;
+const cy = HEIGHT / 2;
 
 const verticalFovRad =
   2 *
@@ -217,9 +198,7 @@ const verticalFovDeg =
    ===================================================== */
 
 const video =
-  document.getElementById(
-    "video"
-  );
+  document.getElementById("video");
 
 const analysisCanvas =
   document.getElementById(
@@ -245,48 +224,35 @@ const overlay =
   );
 
 const overlayCtx =
-  overlay.getContext(
-    "2d"
-  );
+  overlay.getContext("2d");
 
 const status =
-  document.getElementById(
-    "status"
-  );
+  document.getElementById("status");
 
 const errorBox =
-  document.getElementById(
-    "error"
-  );
+  document.getElementById("error");
 
 
 /* =====================================================
    STATUS
    ===================================================== */
 
-let apriltag =
-  null;
+let apriltag = null;
 
-let detectorReady =
-  false;
+let detectorReady = false;
+let cameraReady = false;
+let detectionRunning = false;
 
-let cameraReady =
-  false;
+let latestDetections = [];
 
-let detectionRunning =
-  false;
-
-let latestDetections =
-  [];
-
-let detectionCounter =
-  0;
-
-let detectionFPS =
-  0;
+let detectionCounter = 0;
+let detectionFPS = 0;
 
 let fpsStart =
   performance.now();
+
+let lastCenterDistance = null;
+let lastRotationDifference = null;
 
 
 /* =====================================================
@@ -339,9 +305,7 @@ const renderer =
     antialias: true
   });
 
-renderer.setPixelRatio(
-  1
-);
+renderer.setPixelRatio(1);
 
 renderer.setSize(
   WIDTH,
@@ -356,10 +320,35 @@ renderer.setClearColor(
 
 
 /* =====================================================
-   MARKER-ROOTS
+   LICHT
+   ===================================================== */
 
-   Diese beiden Roots erhalten weiterhin exakt die
-   bewährte AprilTag-Pose aus 5b-10.
+scene.add(
+  new THREE.AmbientLight(
+    0xffffff,
+    2
+  )
+);
+
+const directionalLight =
+  new THREE.DirectionalLight(
+    0xffffff,
+    2
+  );
+
+directionalLight.position.set(
+  1,
+  2,
+  2
+);
+
+scene.add(
+  directionalLight
+);
+
+
+/* =====================================================
+   MARKER-ROOTS
    ===================================================== */
 
 const marker3Root =
@@ -368,99 +357,237 @@ const marker3Root =
 const marker1Root =
   new THREE.Group();
 
-marker3Root.visible =
-  false;
+marker3Root.visible = false;
+marker1Root.visible = false;
 
-marker1Root.visible =
-  false;
+scene.add(marker3Root);
+scene.add(marker1Root);
 
-scene.add(
-  marker3Root
+
+/* =====================================================
+   UNSICHTBARE ZENTRUMSPUNKTE
+
+   Genau die in 5c-2c bestätigte Konstruktion.
+   ===================================================== */
+
+const centerFrom3 =
+  new THREE.Object3D();
+
+centerFrom3.position.set(
+  0,
+  0,
+  -HALF_CUBE
 );
 
-scene.add(
-  marker1Root
+marker3Root.add(
+  centerFrom3
+);
+
+
+const centerFrom1 =
+  new THREE.Object3D();
+
+centerFrom1.position.set(
+  0,
+  0,
+  -HALF_CUBE
+);
+
+marker1Root.add(
+  centerFrom1
 );
 
 
 /* =====================================================
-   ACHSEN-DIAGNOSE
-
-   X = rot
-   Y = grün
-   Z = blau
+   METHAN
+   Exakt die bewährte Geometrie.
+   C-Atom sitzt im lokalen Ursprung.
    ===================================================== */
 
-function createDiagnosticAxes() {
+function createMethane() {
 
   const group =
     new THREE.Group();
 
-  const axisLength =
-    0.015;
+  const scale = 0.05;
 
-  const axisRadius =
-    0.0008;
+  const carbonRadius =
+    0.22 * scale;
+
+  const hydrogenRadius =
+    0.14 * scale;
+
+  const hydrogenDistance =
+    0.72 * scale;
+
+  const bondRadius =
+    0.040 * scale;
 
 
-  const origin =
+  const carbonMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x202020,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.55,
+      metalness: 0
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xb8bec7,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const carbon =
     new THREE.Mesh(
 
       new THREE.SphereGeometry(
-        0.0025,
-        24,
-        16
+        carbonRadius,
+        48,
+        32
       ),
 
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff
-      })
+      carbonMaterial
 
     );
 
-  group.add(
-    origin
-  );
+  group.add(carbon);
 
 
-  function createAxis(
-    direction,
-    color
+  const directions = [
+
+    new THREE.Vector3(
+      1, 1, 1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1, -1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, 1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, -1, 1
+    ).normalize()
+
+  ];
+
+
+  for (
+    const direction
+    of directions
   ) {
 
-    const material =
-      new THREE.MeshBasicMaterial({
-        color
-      });
-
-
-    const cylinder =
+    const hydrogen =
       new THREE.Mesh(
 
-        new THREE.CylinderGeometry(
-          axisRadius,
-          axisRadius,
-          axisLength,
-          12,
-          1,
-          false
+        new THREE.SphereGeometry(
+          hydrogenRadius,
+          40,
+          28
         ),
 
-        material
+        hydrogenMaterial
 
       );
 
 
-    cylinder.position.copy(
+    hydrogen.position.copy(
       direction
         .clone()
         .multiplyScalar(
-          axisLength / 2
+          hydrogenDistance
         )
     );
 
+    group.add(hydrogen);
 
-    cylinder.quaternion
+
+    /*
+     * Bindung exakt von Kugeloberfläche
+     * zu Kugeloberfläche.
+     */
+
+    const startDistance =
+      carbonRadius;
+
+    const endDistance =
+      hydrogenDistance -
+      hydrogenRadius;
+
+
+    const startPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          startDistance
+        );
+
+
+    const endPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          endDistance
+        );
+
+
+    const bondVector =
+      endPoint
+        .clone()
+        .sub(
+          startPoint
+        );
+
+
+    const bondLength =
+      bondVector.length();
+
+
+    const bond =
+      new THREE.Mesh(
+
+        new THREE.CylinderGeometry(
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+        ),
+
+        bondMaterial
+
+      );
+
+
+    bond.position.copy(
+
+      startPoint
+        .clone()
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
+
+    );
+
+
+    bond.quaternion
       .setFromUnitVectors(
 
         new THREE.Vector3(
@@ -474,69 +601,9 @@ function createDiagnosticAxes() {
       );
 
 
-    group.add(
-      cylinder
-    );
-
-
-    const tip =
-      new THREE.Mesh(
-
-        new THREE.SphereGeometry(
-          0.0017,
-          16,
-          12
-        ),
-
-        material
-
-      );
-
-
-    tip.position.copy(
-      direction
-        .clone()
-        .multiplyScalar(
-          axisLength
-        )
-    );
-
-
-    group.add(
-      tip
-    );
+    group.add(bond);
 
   }
-
-
-  createAxis(
-    new THREE.Vector3(
-      1,
-      0,
-      0
-    ),
-    0xff3030
-  );
-
-
-  createAxis(
-    new THREE.Vector3(
-      0,
-      1,
-      0
-    ),
-    0x30ff30
-  );
-
-
-  createAxis(
-    new THREE.Vector3(
-      0,
-      0,
-      1
-    ),
-    0x3080ff
-  );
 
 
   return group;
@@ -544,93 +611,17 @@ function createDiagnosticAxes() {
 }
 
 
-marker3Root.add(
-  createDiagnosticAxes()
-);
+const methane =
+  createMethane();
 
-marker1Root.add(
-  createDiagnosticAxes()
-);
+methane.visible = false;
 
-
-/* =====================================================
-   NEU IN 5c-2c:
-   WÜRFELZENTREN ALS CHILD DER MARKER-ROOTS
-
-   +Z (blau) zeigt nachweislich aus dem Würfel heraus.
-   Daher liegt das Würfelzentrum bei:
-
-   z = -22,5 mm
-
-   im jeweiligen lokalen Marker-Koordinatensystem.
-   ===================================================== */
-
-
-/*
- * Zentrum aus ID 3
- * ROT
- */
-
-const cubeCenterFrom3 =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.004,
-      24,
-      16
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xff3030
-    })
-
-  );
-
-cubeCenterFrom3.position.set(
-  0,
-  0,
-  -HALF_CUBE
-);
-
-marker3Root.add(
-  cubeCenterFrom3
-);
-
-
-/*
- * Zentrum aus ID 1
- * GELB
- */
-
-const cubeCenterFrom1 =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.003,
-      24,
-      16
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xffff00
-    })
-
-  );
-
-cubeCenterFrom1.position.set(
-  0,
-  0,
-  -HALF_CUBE
-);
-
-marker1Root.add(
-  cubeCenterFrom1
-);
+scene.add(methane);
 
 
 /* =====================================================
-   5b-10 POSE-UMRECHNUNG
-   UNVERÄNDERT
+   APRILTAG -> THREE.JS
+   BEWÄHRTE 5b-10-UMRECHNUNG
    ===================================================== */
 
 const basisChange =
@@ -662,9 +653,7 @@ function applyAprilTagPose(
     )
   ) {
 
-    root.visible =
-      false;
-
+    root.visible = false;
     return false;
 
   }
@@ -685,22 +674,15 @@ function applyAprilTagPose(
     !Array.isArray(R[2])
   ) {
 
-    root.visible =
-      false;
-
+    root.visible = false;
     return false;
 
   }
 
 
-  const tx =
-    Number(t[0]);
-
-  const ty =
-    Number(t[1]);
-
-  const tz =
-    Number(t[2]);
+  const tx = Number(t[0]);
+  const ty = Number(t[1]);
+  const tz = Number(t[2]);
 
 
   if (
@@ -709,17 +691,11 @@ function applyAprilTagPose(
     !Number.isFinite(tz)
   ) {
 
-    root.visible =
-      false;
-
+    root.visible = false;
     return false;
 
   }
 
-
-  /*
-   * Bewährte Translation aus 5b-10.
-   */
 
   root.position.set(
     tx,
@@ -729,7 +705,8 @@ function applyAprilTagPose(
 
 
   /*
-   * Bewährte Rotation aus 5b-10.
+   * Transponierte AprilTag-Rotation:
+   * bewährte Lösung aus 5b-10.
    */
 
   const aprilRotation =
@@ -783,10 +760,370 @@ function applyAprilTagPose(
     );
 
 
-  root.visible =
-    true;
+  root.visible = true;
 
   return true;
+
+}
+
+
+/* =====================================================
+   STARRE WÜRFELGEOMETRIE
+   ===================================================== */
+
+/*
+ * Wir definieren die Orientierung des Würfels über ID 3.
+ *
+ * ID 3 ist die Vorderseite des Netzes.
+ *
+ * Deshalb:
+ *
+ * Würfelpose aus ID 3 =
+ * direkt die Orientierung von ID 3.
+ */
+
+const cubeCorrectionFrom3 =
+  new THREE.Quaternion();
+
+
+/*
+ * ID 1 liegt im Netz direkt ÜBER ID 3.
+ *
+ * Nach dem Falten:
+ *
+ * Tag 3: +Z zeigt nach vorne.
+ * Tag 1: +Z zeigt nach oben.
+ *
+ * Die lokale X-Achse bleibt entlang
+ * derselben Würfelkante.
+ *
+ * Dadurch entsteht eine feste
+ * 90°-Drehung um X.
+ *
+ * R_cube_from_tag1 entspricht:
+ *
+ * Tag-X -> Cube-X
+ * Tag-Y -> Cube-(-Z)
+ * Tag-Z -> Cube-Y
+ */
+
+const cubeFromTag1Matrix =
+  new THREE.Matrix4();
+
+cubeFromTag1Matrix.set(
+
+  1,  0,  0, 0,
+  0,  0,  1, 0,
+  0, -1,  0, 0,
+  0,  0,  0, 1
+
+);
+
+
+const cubeFromTag1Quaternion =
+  new THREE.Quaternion();
+
+cubeFromTag1Quaternion
+  .setFromRotationMatrix(
+    cubeFromTag1Matrix
+  );
+
+
+/*
+ * Gesucht ist:
+ *
+ * worldCube =
+ * worldTag *
+ * inverse(cubeFromTag)
+ */
+
+const cubeCorrectionFrom1 =
+  cubeFromTag1Quaternion
+    .clone()
+    .invert();
+
+
+/* =====================================================
+   TEMPORÄRE VEKTOREN / QUATERNIONEN
+   ===================================================== */
+
+const worldCenter3 =
+  new THREE.Vector3();
+
+const worldCenter1 =
+  new THREE.Vector3();
+
+const cubeQuaternion3 =
+  new THREE.Quaternion();
+
+const cubeQuaternion1 =
+  new THREE.Quaternion();
+
+const fusedPosition =
+  new THREE.Vector3();
+
+const fusedQuaternion =
+  new THREE.Quaternion();
+
+
+/* =====================================================
+   QUATERNION-WINKEL
+   ===================================================== */
+
+function quaternionAngleDegrees(
+  a,
+  b
+) {
+
+  let dot =
+    Math.abs(
+      a.dot(b)
+    );
+
+
+  dot =
+    THREE.MathUtils.clamp(
+      dot,
+      -1,
+      1
+    );
+
+
+  return THREE.MathUtils.radToDeg(
+    2 *
+    Math.acos(dot)
+  );
+
+}
+
+
+/* =====================================================
+   WÜRFELPOSE BERECHNEN
+   ===================================================== */
+
+function updateCubePose() {
+
+  const has3 =
+    marker3Root.visible;
+
+  const has1 =
+    marker1Root.visible;
+
+
+  if (
+    !has3 &&
+    !has1
+  ) {
+
+    methane.visible = false;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+    return;
+
+  }
+
+
+  /*
+   * Weltmatrizen aktualisieren.
+   */
+
+  scene.updateMatrixWorld(true);
+
+
+  let valid3 = false;
+  let valid1 = false;
+
+
+  /*
+   * Kandidat aus ID 3
+   */
+
+  if (has3) {
+
+    centerFrom3.getWorldPosition(
+      worldCenter3
+    );
+
+
+    cubeQuaternion3
+      .copy(
+        marker3Root.quaternion
+      )
+      .multiply(
+        cubeCorrectionFrom3
+      )
+      .normalize();
+
+
+    valid3 = true;
+
+  }
+
+
+  /*
+   * Kandidat aus ID 1
+   */
+
+  if (has1) {
+
+    centerFrom1.getWorldPosition(
+      worldCenter1
+    );
+
+
+    cubeQuaternion1
+      .copy(
+        marker1Root.quaternion
+      )
+      .multiply(
+        cubeCorrectionFrom1
+      )
+      .normalize();
+
+
+    valid1 = true;
+
+  }
+
+
+  /*
+   * Beide Tags sichtbar:
+   *
+   * Position = Mittelwert
+   * Rotation = Quaternion-Mittel über slerp 50 %
+   *
+   * KEINE zeitliche Glättung.
+   */
+
+  if (
+    valid3 &&
+    valid1
+  ) {
+
+    lastCenterDistance =
+      worldCenter3.distanceTo(
+        worldCenter1
+      );
+
+
+    lastRotationDifference =
+      quaternionAngleDegrees(
+        cubeQuaternion3,
+        cubeQuaternion1
+      );
+
+
+    fusedPosition
+      .copy(
+        worldCenter3
+      )
+      .add(
+        worldCenter1
+      )
+      .multiplyScalar(
+        0.5
+      );
+
+
+    /*
+     * Quaternion-Vorzeichen angleichen.
+     * q und -q beschreiben dieselbe Rotation,
+     * aber für slerp wollen wir denselben Ast.
+     */
+
+    const q1 =
+      cubeQuaternion1.clone();
+
+
+    if (
+      cubeQuaternion3.dot(q1) < 0
+    ) {
+
+      q1.x *= -1;
+      q1.y *= -1;
+      q1.z *= -1;
+      q1.w *= -1;
+
+    }
+
+
+    fusedQuaternion
+      .copy(
+        cubeQuaternion3
+      )
+      .slerp(
+        q1,
+        0.5
+      );
+
+
+    methane.position.copy(
+      fusedPosition
+    );
+
+
+    methane.quaternion.copy(
+      fusedQuaternion
+    );
+
+
+    methane.visible = true;
+
+    return;
+
+  }
+
+
+  /*
+   * Nur ID 3 sichtbar.
+   */
+
+  if (valid3) {
+
+    methane.position.copy(
+      worldCenter3
+    );
+
+
+    methane.quaternion.copy(
+      cubeQuaternion3
+    );
+
+
+    methane.visible = true;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+    return;
+
+  }
+
+
+  /*
+   * Nur ID 1 sichtbar.
+   */
+
+  if (valid1) {
+
+    methane.position.copy(
+      worldCenter1
+    );
+
+
+    methane.quaternion.copy(
+      cubeQuaternion1
+    );
+
+
+    methane.visible = true;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+  }
 
 }
 
@@ -815,8 +1152,7 @@ async function initializeAprilTag() {
       Comlink.proxy(
         function() {
 
-          detectorReady =
-            true;
+          detectorReady = true;
 
         }
       )
@@ -828,9 +1164,7 @@ async function initializeAprilTag() {
     performance.now();
 
 
-  while (
-    !detectorReady
-  ) {
+  while (!detectorReady) {
 
     await new Promise(
       resolve =>
@@ -933,8 +1267,7 @@ async function startCamera() {
       });
 
 
-  video.srcObject =
-    stream;
+  video.srcObject = stream;
 
 
   await new Promise(
@@ -967,8 +1300,7 @@ async function startCamera() {
 
   await video.play();
 
-  cameraReady =
-    true;
+  cameraReady = true;
 
 }
 
@@ -1047,8 +1379,7 @@ async function detectFrame() {
   }
 
 
-  detectionRunning =
-    true;
+  detectionRunning = true;
 
 
   try {
@@ -1074,16 +1405,14 @@ async function detectFrame() {
     const detection3 =
       latestDetections.find(
         detection =>
-          Number(detection.id) ===
-          3
+          Number(detection.id) === 3
       ) || null;
 
 
     const detection1 =
       latestDetections.find(
         detection =>
-          Number(detection.id) ===
-          1
+          Number(detection.id) === 1
       ) || null;
 
 
@@ -1098,8 +1427,7 @@ async function detectFrame() {
 
     else {
 
-      marker3Root.visible =
-        false;
+      marker3Root.visible = false;
 
     }
 
@@ -1115,10 +1443,17 @@ async function detectFrame() {
 
     else {
 
-      marker1Root.visible =
-        false;
+      marker1Root.visible = false;
 
     }
+
+
+    /*
+     * Erst nachdem beide Marker-Roots
+     * aktualisiert wurden, Würfelpose bestimmen.
+     */
+
+    updateCubePose();
 
 
     detectionCounter++;
@@ -1146,11 +1481,8 @@ async function detectFrame() {
         seconds;
 
 
-      detectionCounter =
-        0;
-
-      fpsStart =
-        now;
+      detectionCounter = 0;
+      fpsStart = now;
 
     }
 
@@ -1158,78 +1490,20 @@ async function detectFrame() {
 
   catch(error) {
 
-    marker3Root.visible =
-      false;
+    marker3Root.visible = false;
+    marker1Root.visible = false;
 
-    marker1Root.visible =
-      false;
+    methane.visible = false;
 
-    showError(
-      error
-    );
+    showError(error);
 
   }
 
   finally {
 
-    detectionRunning =
-      false;
+    detectionRunning = false;
 
   }
-
-}
-
-
-/* =====================================================
-   ABSTAND DER BEIDEN BERECHNETEN ZENTREN
-
-   Nur Diagnose.
-   ===================================================== */
-
-const worldCenter3 =
-  new THREE.Vector3();
-
-const worldCenter1 =
-  new THREE.Vector3();
-
-
-function getCenterDistance() {
-
-  if (
-    !marker3Root.visible ||
-    !marker1Root.visible
-  ) {
-
-    return null;
-
-  }
-
-
-  /*
-   * Sicherstellen, dass die Weltmatrizen aktuell sind.
-   */
-
-  marker3Root.updateMatrixWorld(
-    true
-  );
-
-  marker1Root.updateMatrixWorld(
-    true
-  );
-
-
-  cubeCenterFrom3.getWorldPosition(
-    worldCenter3
-  );
-
-  cubeCenterFrom1.getWorldPosition(
-    worldCenter1
-  );
-
-
-  return worldCenter3.distanceTo(
-    worldCenter1
-  );
 
 }
 
@@ -1238,18 +1512,14 @@ function getCenterDistance() {
    2D OVERLAY
    ===================================================== */
 
-function getPoint(
-  point
-) {
+function getPoint(point) {
 
   if (!point) {
     return null;
   }
 
 
-  if (
-    Array.isArray(point)
-  ) {
+  if (Array.isArray(point)) {
 
     const x =
       Number(point[0]);
@@ -1263,10 +1533,7 @@ function getPoint(
       Number.isFinite(y)
     ) {
 
-      return {
-        x,
-        y
-      };
+      return { x, y };
 
     }
 
@@ -1285,10 +1552,7 @@ function getPoint(
     Number.isFinite(y)
   ) {
 
-    return {
-      x,
-      y
-    };
+    return { x, y };
 
   }
 
@@ -1319,15 +1583,12 @@ function drawDetection(
   const corners =
     detection.corners
       .slice(0, 4)
-      .map(
-        getPoint
-      );
+      .map(getPoint);
 
 
   if (
     corners.some(
-      point =>
-        !point
+      point => !point
     )
   ) {
 
@@ -1360,8 +1621,7 @@ function drawDetection(
 
   overlayCtx.closePath();
 
-  overlayCtx.lineWidth =
-    3;
+  overlayCtx.lineWidth = 3;
 
   overlayCtx.strokeStyle =
     color;
@@ -1422,9 +1682,7 @@ function drawOverlay() {
       );
 
 
-    if (
-      id === 3
-    ) {
+    if (id === 3) {
 
       drawDetection(
         detection,
@@ -1434,9 +1692,7 @@ function drawOverlay() {
     }
 
 
-    if (
-      id === 1
-    ) {
+    if (id === 1) {
 
       drawDetection(
         detection,
@@ -1545,7 +1801,6 @@ window.addEventListener(
   resize
 );
 
-
 resize();
 
 
@@ -1558,37 +1813,43 @@ function updateStatus() {
   const has3 =
     latestDetections.some(
       detection =>
-        Number(detection.id) ===
-        3
+        Number(detection.id) === 3
     );
 
 
   const has1 =
     latestDetections.some(
       detection =>
-        Number(detection.id) ===
-        1
+        Number(detection.id) === 1
     );
 
 
-  const distance =
-    getCenterDistance();
-
-
-  let distanceText =
-    "–";
+  let centerText = "–";
+  let rotationText = "–";
 
 
   if (
-    distance !== null
+    lastCenterDistance !== null
   ) {
 
-    distanceText =
+    centerText =
       (
-        distance *
+        lastCenterDistance *
         1000
       ).toFixed(1) +
       " mm";
+
+  }
+
+
+  if (
+    lastRotationDifference !== null
+  ) {
+
+    rotationText =
+      lastRotationDifference
+        .toFixed(1) +
+      "°";
 
   }
 
@@ -1597,7 +1858,7 @@ function updateStatus() {
 
     "GeoChemAR " +
     VERSION +
-    " – Würfelzentrum\n\n" +
+    " – Würfelpose\n\n" +
 
     "ID 3: " +
     (
@@ -1617,11 +1878,12 @@ function updateStatus() {
     detectionFPS.toFixed(1) +
 
     "\n\nAbstand Zentren: " +
-    distanceText +
+    centerText +
 
-    "\n\nROT = Zentrum aus ID 3" +
+    "\nRotationsdifferenz: " +
+    rotationText +
 
-    "\nGELB = Zentrum aus ID 1";
+    "\n\nC-Atom = Würfelzentrum";
 
 }
 
@@ -1637,9 +1899,7 @@ function animate() {
   );
 
 
-  if (
-    !detectionRunning
-  ) {
+  if (!detectionRunning) {
 
     detectFrame();
 
@@ -1689,9 +1949,7 @@ async function start() {
 
   catch(error) {
 
-    showError(
-      error
-    );
+    showError(error);
 
   }
 
