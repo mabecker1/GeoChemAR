@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-3b Kalibrierung ID 3 ↔ ID 4</title>
+<title>GeoChemAR – 5c-3c Doppelkalibrierung</title>
 
 <style>
 html,
@@ -57,14 +57,16 @@ body {
   left: 10px;
   z-index: 10;
 
+  max-width: calc(100vw - 40px);
+
   padding: 10px 13px;
   border-radius: 8px;
 
-  background: rgba(0,0,0,0.82);
+  background: rgba(0,0,0,0.84);
   color: white;
 
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.35;
   white-space: pre-line;
 
   pointer-events: none;
@@ -138,7 +140,7 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-3b";
+const VERSION = "5c-3c";
 
 
 /* =====================================================
@@ -157,7 +159,8 @@ const CALIBRATION_FRAMES = 30;
 
 
 /* =====================================================
-   KAMERAMODELL – UNVERÄNDERT
+   KAMERAMODELL
+   UNVERÄNDERT AUS DEM STABILEN STAND
    ===================================================== */
 
 const horizontalFovDeg = 60;
@@ -174,6 +177,7 @@ const fx =
   );
 
 const fy = fx;
+
 const cx = WIDTH / 2;
 const cy = HEIGHT / 2;
 
@@ -250,19 +254,46 @@ let fpsStart =
 
 
 /* =====================================================
-   KALIBRIERUNG
+   KALIBRIERUNGS-DATEN
+
+   A: ID 1 -> ID 0
+   B: ID 4 -> ID 5
    ===================================================== */
 
-let calibrationSamples = [];
+const calibrationA = {
 
-let calibrationFinished = false;
+  label: "ID1 → ID0",
 
-let calibratedRelativeQuaternion = null;
+  samples: [],
 
-let calibratedAxis =
-  new THREE.Vector3();
+  finished: false,
 
-let calibratedAngleDeg = 0;
+  quaternion: null,
+
+  axis:
+    new THREE.Vector3(),
+
+  angleDeg: 0
+
+};
+
+
+const calibrationB = {
+
+  label: "ID4 → ID5",
+
+  samples: [],
+
+  finished: false,
+
+  quaternion: null,
+
+  axis:
+    new THREE.Vector3(),
+
+  angleDeg: 0
+
+};
 
 
 /* =====================================================
@@ -331,26 +362,45 @@ renderer.setClearColor(
 
 /* =====================================================
    MARKER-ROOTS
-
-   ID 3 = Referenz
-   ID 4 = zu kalibrierende Nachbarseite
    ===================================================== */
 
-const marker3Root =
+const marker0Root =
+  new THREE.Group();
+
+const marker1Root =
   new THREE.Group();
 
 const marker4Root =
   new THREE.Group();
 
-marker3Root.visible = false;
-marker4Root.visible = false;
+const marker5Root =
+  new THREE.Group();
 
-scene.add(marker3Root);
-scene.add(marker4Root);
+
+const markerRoots = {
+
+  0: marker0Root,
+  1: marker1Root,
+  4: marker4Root,
+  5: marker5Root
+
+};
+
+
+for (
+  const root
+  of Object.values(markerRoots)
+) {
+
+  root.visible = false;
+
+  scene.add(root);
+
+}
 
 
 /* =====================================================
-   ACHSEN-DIAGNOSE
+   DIAGNOSE-ACHSEN
 
    X = rot
    Y = grün
@@ -496,11 +546,19 @@ function createDiagnosticAxes() {
 }
 
 
-marker3Root.add(
+marker0Root.add(
+  createDiagnosticAxes()
+);
+
+marker1Root.add(
   createDiagnosticAxes()
 );
 
 marker4Root.add(
+  createDiagnosticAxes()
+);
+
+marker5Root.add(
   createDiagnosticAxes()
 );
 
@@ -508,65 +566,83 @@ marker4Root.add(
 /* =====================================================
    WÜRFELZENTREN
 
+   Nur zur Kontrolle der Geometrie.
    +Z zeigt nach außen.
-   Zentrum liegt daher bei -22,5 mm.
+   Würfelzentrum liegt bei -22,5 mm.
    ===================================================== */
 
-const centerFrom3 =
-  new THREE.Mesh(
+function createCenterMarker(
+  color
+) {
 
-    new THREE.SphereGeometry(
-      0.0035,
-      20,
-      14
-    ),
+  const center =
+    new THREE.Mesh(
 
-    new THREE.MeshBasicMaterial({
-      color: 0xff3030
-    })
+      new THREE.SphereGeometry(
+        0.0027,
+        20,
+        14
+      ),
 
+      new THREE.MeshBasicMaterial({
+        color
+      })
+
+    );
+
+
+  center.position.set(
+    0,
+    0,
+    -HALF_CUBE
   );
 
-centerFrom3.position.set(
-  0,
-  0,
-  -HALF_CUBE
-);
 
-marker3Root.add(
-  centerFrom3
-);
+  return center;
 
+}
+
+
+const centerFrom0 =
+  createCenterMarker(
+    0xffff00
+  );
+
+const centerFrom1 =
+  createCenterMarker(
+    0xff3030
+  );
 
 const centerFrom4 =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.0027,
-      20,
-      14
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xffff00
-    })
-
+  createCenterMarker(
+    0x00ffff
   );
 
-centerFrom4.position.set(
-  0,
-  0,
-  -HALF_CUBE
+const centerFrom5 =
+  createCenterMarker(
+    0xff00ff
+  );
+
+
+marker0Root.add(
+  centerFrom0
+);
+
+marker1Root.add(
+  centerFrom1
 );
 
 marker4Root.add(
   centerFrom4
 );
 
+marker5Root.add(
+  centerFrom5
+);
+
 
 /* =====================================================
-   5b-10 POSE-UMRECHNUNG
-   UNVERÄNDERT
+   BEWÄHRTE 5b-10 POSE-UMRECHNUNG
    ===================================================== */
 
 const basisChange =
@@ -599,6 +675,7 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
@@ -620,14 +697,20 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
 
 
-  const tx = Number(t[0]);
-  const ty = Number(t[1]);
-  const tz = Number(t[2]);
+  const tx =
+    Number(t[0]);
+
+  const ty =
+    Number(t[1]);
+
+  const tz =
+    Number(t[2]);
 
 
   if (
@@ -637,10 +720,15 @@ function applyAprilTagPose(
   ) {
 
     root.visible = false;
+
     return false;
 
   }
 
+
+  /*
+   * Bewährte Translation.
+   */
 
   root.position.set(
     tx,
@@ -648,6 +736,11 @@ function applyAprilTagPose(
     -tz
   );
 
+
+  /*
+   * Bewährte transponierte
+   * AprilTag-Rotation.
+   */
 
   const aprilRotation =
     new THREE.Matrix4();
@@ -710,23 +803,24 @@ function applyAprilTagPose(
 /* =====================================================
    RELATIVE ROTATION
 
-   qRelative = inverse(q3) * q4
-
-   Das ergibt die tatsächliche starre
-   Orientierung ID 3 -> ID 4.
+   qRelative =
+   inverse(qReference) * qTarget
    ===================================================== */
 
-function calculateRelativeQuaternion() {
+function calculateRelativeQuaternion(
+  referenceRoot,
+  targetRoot
+) {
 
-  const inverseQ3 =
-    marker3Root.quaternion
+  const inverseReference =
+    referenceRoot.quaternion
       .clone()
       .invert();
 
 
   const relative =
-    inverseQ3.multiply(
-      marker4Root.quaternion
+    inverseReference.multiply(
+      targetRoot.quaternion
     );
 
 
@@ -735,6 +829,8 @@ function calculateRelativeQuaternion() {
 
   /*
    * q und -q beschreiben dieselbe Rotation.
+   * Für die Mittelung einheitliches
+   * Vorzeichen wählen.
    */
 
   if (
@@ -755,7 +851,7 @@ function calculateRelativeQuaternion() {
 
 
 /* =====================================================
-   QUATERNION MITTELN
+   QUATERNION-MITTELUNG
    ===================================================== */
 
 function averageQuaternions(
@@ -917,13 +1013,17 @@ function quaternionToAxisAngle(
 
 
 /* =====================================================
-   KALIBRIERUNG
+   EINE KALIBRIERUNG AKTUALISIEREN
    ===================================================== */
 
-function updateCalibration() {
+function updateOneCalibration(
+  calibration,
+  referenceRoot,
+  targetRoot
+) {
 
   if (
-    calibrationFinished
+    calibration.finished
   ) {
 
     return;
@@ -932,8 +1032,8 @@ function updateCalibration() {
 
 
   if (
-    !marker3Root.visible ||
-    !marker4Root.visible
+    !referenceRoot.visible ||
+    !targetRoot.visible
   ) {
 
     return;
@@ -942,60 +1042,69 @@ function updateCalibration() {
 
 
   const relative =
-    calculateRelativeQuaternion();
+    calculateRelativeQuaternion(
+      referenceRoot,
+      targetRoot
+    );
 
 
-  calibrationSamples.push(
+  calibration.samples.push(
     relative
   );
 
 
   if (
-    calibrationSamples.length >=
+    calibration.samples.length >=
     CALIBRATION_FRAMES
   ) {
 
-    calibratedRelativeQuaternion =
+    calibration.quaternion =
       averageQuaternions(
-        calibrationSamples
+        calibration.samples
       );
 
 
     const axisAngle =
       quaternionToAxisAngle(
-        calibratedRelativeQuaternion
+        calibration.quaternion
       );
 
 
-    calibratedAxis.copy(
+    calibration.axis.copy(
       axisAngle.axis
     );
 
 
-    calibratedAngleDeg =
+    calibration.angleDeg =
       axisAngle.angleDeg;
 
 
-    calibrationFinished = true;
+    calibration.finished =
+      true;
 
 
     console.log(
-      "=== GeoChemAR 5c-3b ==="
+      "=== " +
+      calibration.label +
+      " ==="
     );
 
+
     console.log(
-      "Relative Quaternion ID3 -> ID4:",
-      calibratedRelativeQuaternion
+      "Quaternion:",
+      calibration.quaternion
     );
+
 
     console.log(
       "Achse:",
-      calibratedAxis
+      calibration.axis
     );
+
 
     console.log(
       "Winkel:",
-      calibratedAngleDeg
+      calibration.angleDeg
     );
 
   }
@@ -1004,21 +1113,58 @@ function updateCalibration() {
 
 
 /* =====================================================
-   ABSTAND DER WÜRFELZENTREN
+   BEIDE KALIBRIERUNGEN
    ===================================================== */
 
-const worldCenter3 =
+function updateCalibrations() {
+
+  /*
+   * Kalibrierung A:
+   * ID 1 -> ID 0
+   */
+
+  updateOneCalibration(
+    calibrationA,
+    marker1Root,
+    marker0Root
+  );
+
+
+  /*
+   * Kalibrierung B:
+   * ID 4 -> ID 5
+   */
+
+  updateOneCalibration(
+    calibrationB,
+    marker4Root,
+    marker5Root
+  );
+
+}
+
+
+/* =====================================================
+   ABSTÄNDE DER WÜRFELZENTREN
+   ===================================================== */
+
+const tempCenterA =
   new THREE.Vector3();
 
-const worldCenter4 =
+const tempCenterB =
   new THREE.Vector3();
 
 
-function getCenterDistance() {
+function getCenterDistance(
+  rootA,
+  centerA,
+  rootB,
+  centerB
+) {
 
   if (
-    !marker3Root.visible ||
-    !marker4Root.visible
+    !rootA.visible ||
+    !rootB.visible
   ) {
 
     return null;
@@ -1031,18 +1177,18 @@ function getCenterDistance() {
   );
 
 
-  centerFrom3.getWorldPosition(
-    worldCenter3
+  centerA.getWorldPosition(
+    tempCenterA
   );
 
 
-  centerFrom4.getWorldPosition(
-    worldCenter4
+  centerB.getWorldPosition(
+    tempCenterB
   );
 
 
-  return worldCenter3.distanceTo(
-    worldCenter4
+  return tempCenterA.distanceTo(
+    tempCenterB
   );
 
 }
@@ -1118,14 +1264,27 @@ async function initializeAprilTag() {
   );
 
 
+  /*
+   * Alle vier benötigten Tags.
+   */
+
   await apriltag.set_tag_size(
-    3,
+    0,
     TAG_SIZE
   );
 
+  await apriltag.set_tag_size(
+    1,
+    TAG_SIZE
+  );
 
   await apriltag.set_tag_size(
     4,
+    TAG_SIZE
+  );
+
+  await apriltag.set_tag_size(
+    5,
     TAG_SIZE
   );
 
@@ -1323,53 +1482,46 @@ async function detectFrame() {
         : [];
 
 
-    const detection3 =
-      latestDetections.find(
-        detection =>
-          Number(detection.id) === 3
-      ) || null;
+    /*
+     * Zunächst alle vier Roots unsichtbar.
+     * Danach nur tatsächlich erkannte
+     * Marker wieder aktivieren.
+     */
+
+    marker0Root.visible = false;
+    marker1Root.visible = false;
+    marker4Root.visible = false;
+    marker5Root.visible = false;
 
 
-    const detection4 =
-      latestDetections.find(
-        detection =>
-          Number(detection.id) === 4
-      ) || null;
+    for (
+      const detection
+      of latestDetections
+    ) {
+
+      const id =
+        Number(
+          detection.id
+        );
 
 
-    if (detection3) {
-
-      applyAprilTagPose(
-        detection3,
-        marker3Root
-      );
-
-    }
-
-    else {
-
-      marker3Root.visible = false;
-
-    }
+      const root =
+        markerRoots[id];
 
 
-    if (detection4) {
+      if (root) {
 
-      applyAprilTagPose(
-        detection4,
-        marker4Root
-      );
+        applyAprilTagPose(
+          detection,
+          root
+        );
 
-    }
-
-    else {
-
-      marker4Root.visible = false;
+      }
 
     }
 
 
-    updateCalibration();
+    updateCalibrations();
 
 
     detectionCounter++;
@@ -1398,6 +1550,7 @@ async function detectFrame() {
 
 
       detectionCounter = 0;
+
       fpsStart = now;
 
     }
@@ -1406,8 +1559,10 @@ async function detectFrame() {
 
   catch(error) {
 
-    marker3Root.visible = false;
+    marker0Root.visible = false;
+    marker1Root.visible = false;
     marker4Root.visible = false;
+    marker5Root.visible = false;
 
     showError(error);
 
@@ -1447,7 +1602,10 @@ function getPoint(point) {
       Number.isFinite(y)
     ) {
 
-      return { x, y };
+      return {
+        x,
+        y
+      };
 
     }
 
@@ -1466,7 +1624,10 @@ function getPoint(point) {
     Number.isFinite(y)
   ) {
 
-    return { x, y };
+    return {
+      x,
+      y
+    };
 
   }
 
@@ -1512,6 +1673,7 @@ function drawDetection(
 
 
   overlayCtx.beginPath();
+
 
   overlayCtx.moveTo(
     corners[0].x,
@@ -1563,6 +1725,7 @@ function drawDetection(
     overlayCtx.fillStyle =
       color;
 
+
     overlayCtx.fillText(
       "ID " +
       detection.id,
@@ -1596,21 +1759,37 @@ function drawOverlay() {
       );
 
 
-    if (id === 3) {
+    let color =
+      "#ffffff";
 
-      drawDetection(
-        detection,
-        "#00ff55"
-      );
 
+    if (id === 0) {
+      color = "#ffff00";
+    }
+
+    if (id === 1) {
+      color = "#ff4040";
+    }
+
+    if (id === 4) {
+      color = "#00ffff";
+    }
+
+    if (id === 5) {
+      color = "#ff40ff";
     }
 
 
-    if (id === 4) {
+    if (
+      id === 0 ||
+      id === 1 ||
+      id === 4 ||
+      id === 5
+    ) {
 
       drawDetection(
         detection,
-        "#3399ff"
+        color
       );
 
     }
@@ -1730,98 +1909,134 @@ function f(value) {
 }
 
 
+function formatCalibration(
+  calibration
+) {
+
+  if (
+    !calibration.finished ||
+    !calibration.quaternion
+  ) {
+
+    return (
+      calibration.label +
+      ": " +
+      calibration.samples.length +
+      " / " +
+      CALIBRATION_FRAMES
+    );
+
+  }
+
+
+  const q =
+    calibration.quaternion;
+
+
+  return (
+
+    calibration.label +
+    "  FERTIG ✓" +
+
+    "\nQuaternion:" +
+
+    "\nx = " + f(q.x) +
+
+    "\ny = " + f(q.y) +
+
+    "\nz = " + f(q.z) +
+
+    "\nw = " + f(q.w) +
+
+    "\nAchse:" +
+
+    "\nx = " +
+    f(calibration.axis.x) +
+
+    "\ny = " +
+    f(calibration.axis.y) +
+
+    "\nz = " +
+    f(calibration.axis.z) +
+
+    "\nWinkel = " +
+    calibration.angleDeg.toFixed(2) +
+    "°"
+
+  );
+
+}
+
+
 /* =====================================================
    STATUS
    ===================================================== */
 
 function updateStatus() {
 
-  const has3 =
-    marker3Root.visible;
-
-  const has4 =
-    marker4Root.visible;
-
-
-  const distance =
-    getCenterDistance();
+  const distance10 =
+    getCenterDistance(
+      marker1Root,
+      centerFrom1,
+      marker0Root,
+      centerFrom0
+    );
 
 
-  let distanceText = "–";
+  const distance45 =
+    getCenterDistance(
+      marker4Root,
+      centerFrom4,
+      marker5Root,
+      centerFrom5
+    );
+
+
+  const distance10Text =
+    distance10 === null
+      ? "–"
+      : (
+          distance10 *
+          1000
+        ).toFixed(1) +
+        " mm";
+
+
+  const distance45Text =
+    distance45 === null
+      ? "–"
+      : (
+          distance45 *
+          1000
+        ).toFixed(1) +
+        " mm";
+
+
+  let instruction;
 
 
   if (
-    distance !== null
+    !calibrationA.finished
   ) {
 
-    distanceText =
-      (
-        distance *
-        1000
-      ).toFixed(1) +
-      " mm";
+    instruction =
+      "Jetzt Kante ID 1 / ID 0 zeigen.";
 
   }
 
-
-  let calibrationText;
-
-
-  if (
-    calibrationFinished &&
-    calibratedRelativeQuaternion
+  else if (
+    !calibrationB.finished
   ) {
 
-    const q =
-      calibratedRelativeQuaternion;
-
-
-    calibrationText =
-
-      "KALIBRIERUNG FERTIG ✓" +
-
-      "\n\nQuaternion ID3 → ID4:" +
-
-      "\nx = " + f(q.x) +
-
-      "\ny = " + f(q.y) +
-
-      "\nz = " + f(q.z) +
-
-      "\nw = " + f(q.w) +
-
-      "\n\nAchse:" +
-
-      "\nx = " +
-      f(calibratedAxis.x) +
-
-      "\ny = " +
-      f(calibratedAxis.y) +
-
-      "\nz = " +
-      f(calibratedAxis.z) +
-
-      "\n\nWinkel = " +
-      calibratedAngleDeg.toFixed(2) +
-      "°";
+    instruction =
+      "ID1→0 fertig. Jetzt Kante ID 4 / ID 5 zeigen.";
 
   }
 
   else {
 
-    calibrationText =
-
-      "Kalibrierung: " +
-
-      calibrationSamples.length +
-
-      " / " +
-
-      CALIBRATION_FRAMES +
-
-      "\n\nWürfel ruhig halten." +
-
-      "\nID 3 und ID 4 gleichzeitig sichtbar.";
+    instruction =
+      "BEIDE KALIBRIERUNGEN FERTIG ✓";
 
   }
 
@@ -1830,31 +2045,59 @@ function updateStatus() {
 
     "GeoChemAR " +
     VERSION +
-
-    "\nKalibrierung ID 3 ↔ ID 4" +
-
-    "\n\nID 3: " +
-    (
-      has3
-        ? "JA"
-        : "NEIN"
-    ) +
-
-    "\nID 4: " +
-    (
-      has4
-        ? "JA"
-        : "NEIN"
-    ) +
+    " – Doppelkalibrierung" +
 
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    "\nAbstand Zentren: " +
-    distanceText +
+    "\n\n" +
+    instruction +
+
+    "\n\nID 1: " +
+    (
+      marker1Root.visible
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "   ID 0: " +
+    (
+      marker0Root.visible
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "\nZentrumsabstand 1/0: " +
+    distance10Text +
 
     "\n\n" +
-    calibrationText;
+    formatCalibration(
+      calibrationA
+    ) +
+
+    "\n\n------------------------" +
+
+    "\n\nID 4: " +
+    (
+      marker4Root.visible
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "   ID 5: " +
+    (
+      marker5Root.visible
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "\nZentrumsabstand 4/5: " +
+    distance45Text +
+
+    "\n\n" +
+    formatCalibration(
+      calibrationB
+    );
 
 }
 
@@ -1870,7 +2113,9 @@ function animate() {
   );
 
 
-  if (!detectionRunning) {
+  if (
+    !detectionRunning
+  ) {
 
     detectFrame();
 
