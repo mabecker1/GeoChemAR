@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+
 <meta
   name="viewport"
   content="width=device-width,
@@ -10,383 +11,1755 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – OpenCV Diagnosetest</title>
+<title>GeoChemAR – 5c-2a Würfelzentrum</title>
 
 <style>
 html,
 body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: black;
-  color: white;
   font-family: Arial, sans-serif;
 }
 
+#video {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: black;
+  z-index: 1;
+}
+
+#threeCanvas {
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+}
+
+#overlay {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+}
+
+#analysisCanvas {
+  display: none;
+}
+
 #status {
-  margin: 20px;
-  padding: 15px;
-  background: #222;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+
+  padding: 9px 12px;
   border-radius: 8px;
+
+  background: rgba(0,0,0,0.78);
+  color: white;
+
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-line;
+
+  pointer-events: none;
+}
+
+#error {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 20;
+
+  padding: 10px;
+  border-radius: 8px;
+
+  background: rgba(160,0,0,0.92);
+  color: white;
+
+  font-size: 13px;
   white-space: pre-wrap;
-  font-size: 16px;
-  line-height: 1.5;
-}
 
-.ok {
-  color: #70ff70;
-}
-
-.error {
-  color: #ff7070;
+  display: none;
 }
 </style>
 </head>
 
 <body>
 
-<div id="status">HTML geladen ✓</div>
+<video
+  id="video"
+  autoplay
+  muted
+  playsinline
+></video>
 
-<script>
+<canvas
+  id="analysisCanvas"
+  width="640"
+  height="480"
+></canvas>
+
+<canvas
+  id="threeCanvas"
+  width="640"
+  height="480"
+></canvas>
+
+<canvas
+  id="overlay"
+  width="640"
+  height="480"
+></canvas>
+
+<div id="status">
+GeoChemAR wird gestartet …
+</div>
+
+<div id="error"></div>
+
+
+<script type="module">
+
+import * as THREE
+  from "./libs/three.module.min.js";
+
+import * as Comlink
+  from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+
+
+/* =====================================================
+   VERSION
+   ===================================================== */
+
+const VERSION =
+  "5c-2a";
+
+
+/* =====================================================
+   GRUNDWERTE
+   ===================================================== */
+
+const WIDTH =
+  640;
+
+const HEIGHT =
+  480;
+
+/*
+ * Gemessene schwarze Tag-Kantenlänge.
+ * Für die AprilTag-Pose zunächst wie bisher verwendet.
+ */
+const TAG_SIZE =
+  0.0395;
+
+/*
+ * Physische Würfelkante:
+ * 45,0 mm
+ */
+const CUBE_SIZE =
+  0.045;
+
+const HALF_CUBE =
+  CUBE_SIZE / 2;
+
+
+/* =====================================================
+   KAMERAMODELL – UNVERÄNDERT AUS 5b-10
+   ===================================================== */
+
+const horizontalFovDeg =
+  60;
+
+const horizontalFovRad =
+  THREE.MathUtils.degToRad(
+    horizontalFovDeg
+  );
+
+const fx =
+  (WIDTH / 2) /
+  Math.tan(
+    horizontalFovRad / 2
+  );
+
+const fy =
+  fx;
+
+const cx =
+  WIDTH / 2;
+
+const cy =
+  HEIGHT / 2;
+
+const verticalFovRad =
+  2 *
+  Math.atan(
+    HEIGHT /
+    (2 * fy)
+  );
+
+const verticalFovDeg =
+  THREE.MathUtils.radToDeg(
+    verticalFovRad
+  );
+
+
+/* =====================================================
+   DOM
+   ===================================================== */
+
+const video =
+  document.getElementById(
+    "video"
+  );
+
+const analysisCanvas =
+  document.getElementById(
+    "analysisCanvas"
+  );
+
+const analysisCtx =
+  analysisCanvas.getContext(
+    "2d",
+    {
+      willReadFrequently: true
+    }
+  );
+
+const threeCanvas =
+  document.getElementById(
+    "threeCanvas"
+  );
+
+const overlay =
+  document.getElementById(
+    "overlay"
+  );
+
+const overlayCtx =
+  overlay.getContext(
+    "2d"
+  );
 
 const status =
-  document.getElementById("status");
+  document.getElementById(
+    "status"
+  );
 
-function addStatus(text) {
+const errorBox =
+  document.getElementById(
+    "error"
+  );
 
-  status.textContent +=
-    "\n" + text;
+
+/* =====================================================
+   STATUS
+   ===================================================== */
+
+let apriltag =
+  null;
+
+let detectorReady =
+  false;
+
+let cameraReady =
+  false;
+
+let detectionRunning =
+  false;
+
+let latestDetections =
+  [];
+
+let detectionCounter =
+  0;
+
+let detectionFPS =
+  0;
+
+let fpsStart =
+  performance.now();
+
+
+/* =====================================================
+   FEHLER
+   ===================================================== */
+
+function showError(error) {
+
+  console.error(error);
+
+  errorBox.style.display =
+    "block";
+
+  errorBox.textContent =
+    "FEHLER:\n" +
+    (
+      error?.stack ||
+      String(error)
+    );
 
 }
 
-addStatus(
-  "Normales JavaScript läuft ✓"
+
+/* =====================================================
+   THREE.JS
+   ===================================================== */
+
+const scene =
+  new THREE.Scene();
+
+const camera =
+  new THREE.PerspectiveCamera(
+    verticalFovDeg,
+    WIDTH / HEIGHT,
+    0.01,
+    10
+  );
+
+camera.position.set(
+  0,
+  0,
+  0
+);
+
+
+const renderer =
+  new THREE.WebGLRenderer({
+    canvas: threeCanvas,
+    alpha: true,
+    antialias: true
+  });
+
+renderer.setPixelRatio(
+  1
+);
+
+renderer.setSize(
+  WIDTH,
+  HEIGHT,
+  false
+);
+
+renderer.setClearColor(
+  0x000000,
+  0
 );
 
 
 /* =====================================================
-   GLOBALE FEHLER SICHTBAR MACHEN
+   LICHT
    ===================================================== */
 
-window.addEventListener(
-  "error",
-  event => {
-
-    addStatus(
-      "\n❌ JAVASCRIPT-FEHLER:\n" +
-      event.message +
-      "\nDatei: " +
-      event.filename +
-      "\nZeile: " +
-      event.lineno
-    );
-
-  }
+scene.add(
+  new THREE.AmbientLight(
+    0xffffff,
+    2
+  )
 );
 
-window.addEventListener(
-  "unhandledrejection",
-  event => {
+const light =
+  new THREE.DirectionalLight(
+    0xffffff,
+    2
+  );
 
-    addStatus(
-      "\n❌ PROMISE-FEHLER:\n" +
-      String(event.reason)
-    );
+light.position.set(
+  1,
+  2,
+  2
+);
 
-  }
+scene.add(
+  light
 );
 
 
 /* =====================================================
-   TEST STARTEN
+   DIAGNOSEPUNKTE
    ===================================================== */
 
-async function runTest() {
+/*
+ * Grün = aus ID 3 berechnetes Würfelzentrum
+ * Blau = aus ID 1 berechnetes Würfelzentrum
+ */
 
-  try {
+const center3 =
+  new THREE.Mesh(
+    new THREE.SphereGeometry(
+      0.004,
+      24,
+      16
+    ),
+    new THREE.MeshBasicMaterial({
+      color: 0x00ff55
+    })
+  );
 
-    /* -----------------------------------------------
-       1. THREE.JS
-       ----------------------------------------------- */
+center3.visible =
+  false;
 
-    addStatus(
-      "\n1. Three.js wird geladen …"
+scene.add(
+  center3
+);
+
+
+const center1 =
+  new THREE.Mesh(
+    new THREE.SphereGeometry(
+      0.003,
+      24,
+      16
+    ),
+    new THREE.MeshBasicMaterial({
+      color: 0x3399ff
+    })
+  );
+
+center1.visible =
+  false;
+
+scene.add(
+  center1
+);
+
+
+/* =====================================================
+   METHAN
+   ===================================================== */
+
+function createMethane() {
+
+  const group =
+    new THREE.Group();
+
+  const scale =
+    0.05;
+
+  const carbonRadius =
+    0.22 * scale;
+
+  const hydrogenRadius =
+    0.14 * scale;
+
+  const hydrogenDistance =
+    0.72 * scale;
+
+  const bondRadius =
+    0.040 * scale;
+
+
+  const carbonMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x202020,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+  const hydrogenMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.55,
+      metalness: 0
+    });
+
+  const bondMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xb8bec7,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const carbon =
+    new THREE.Mesh(
+      new THREE.SphereGeometry(
+        carbonRadius,
+        48,
+        32
+      ),
+      carbonMaterial
     );
 
-    const THREE =
-      await import(
-        "./libs/three.module.min.js"
+  group.add(
+    carbon
+  );
+
+
+  const directions = [
+
+    new THREE.Vector3(
+      1, 1, 1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1, -1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, 1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, -1, 1
+    ).normalize()
+
+  ];
+
+
+  for (
+    const direction
+    of directions
+  ) {
+
+    const hydrogen =
+      new THREE.Mesh(
+        new THREE.SphereGeometry(
+          hydrogenRadius,
+          40,
+          28
+        ),
+        hydrogenMaterial
       );
 
-    addStatus(
-      "   Three.js geladen ✓"
+
+    hydrogen.position.copy(
+      direction
+        .clone()
+        .multiplyScalar(
+          hydrogenDistance
+        )
     );
 
-    addStatus(
-      "   THREE.REVISION = " +
-      THREE.REVISION
+    group.add(
+      hydrogen
     );
 
 
-    /* -----------------------------------------------
-       2. COMLINK
-       ----------------------------------------------- */
+    const startDistance =
+      carbonRadius;
 
-    addStatus(
-      "\n2. Comlink wird geladen …"
-    );
+    const endDistance =
+      hydrogenDistance -
+      hydrogenRadius;
 
-    const Comlink =
-      await import(
-        "https://unpkg.com/comlink/dist/esm/comlink.mjs"
+
+    const startPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          startDistance
+        );
+
+    const endPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          endDistance
+        );
+
+    const bondVector =
+      endPoint
+        .clone()
+        .sub(
+          startPoint
+        );
+
+    const bondLength =
+      bondVector.length();
+
+
+    const bond =
+      new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+        ),
+        bondMaterial
       );
 
-    addStatus(
-      "   Comlink geladen ✓"
+
+    bond.position.copy(
+      startPoint
+        .clone()
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
     );
 
 
-    /* -----------------------------------------------
-       3. OPENCV.JS DATEI
-       ----------------------------------------------- */
+    bond.quaternion
+      .setFromUnitVectors(
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+        direction
+      );
 
-    addStatus(
-      "\n3. opencv.js wird geladen …"
+
+    group.add(
+      bond
     );
 
+  }
+
+
+  return group;
+
+}
+
+
+const methane =
+  createMethane();
+
+methane.visible =
+  false;
+
+scene.add(
+  methane
+);
+
+
+/* =====================================================
+   APRILTAG-POSE -> THREE.JS
+
+   EXAKT DIE BEWÄHRTE 5b-10-UMRECHNUNG
+   ===================================================== */
+
+const basisChange =
+  new THREE.Matrix4();
+
+basisChange.set(
+
+  1,  0,  0, 0,
+  0, -1,  0, 0,
+  0,  0, -1, 0,
+  0,  0,  0, 1
+
+);
+
+
+function poseToThree(
+  detection
+) {
+
+  if (
+    !detection ||
+    !detection.pose ||
+    !Array.isArray(
+      detection.pose.t
+    ) ||
+    !Array.isArray(
+      detection.pose.R
+    )
+  ) {
+
+    return null;
+
+  }
+
+
+  const t =
+    detection.pose.t;
+
+  const R =
+    detection.pose.R;
+
+
+  if (
+    t.length < 3 ||
+    R.length < 3
+  ) {
+
+    return null;
+
+  }
+
+
+  const tx =
+    Number(t[0]);
+
+  const ty =
+    Number(t[1]);
+
+  const tz =
+    Number(t[2]);
+
+
+  if (
+    !Number.isFinite(tx) ||
+    !Number.isFinite(ty) ||
+    !Number.isFinite(tz)
+  ) {
+
+    return null;
+
+  }
+
+
+  /*
+   * WICHTIG:
+   *
+   * 5b-10 verwendete die TRANSponierte
+   * AprilTag-Rotationsmatrix.
+   */
+
+  const aprilRotation =
+    new THREE.Matrix4();
+
+
+  aprilRotation.set(
+
+    R[0][0],
+    R[1][0],
+    R[2][0],
+    0,
+
+    R[0][1],
+    R[1][1],
+    R[2][1],
+    0,
+
+    R[0][2],
+    R[1][2],
+    R[2][2],
+    0,
+
+    0,
+    0,
+    0,
+    1
+
+  );
+
+
+  const convertedRotation =
+    new THREE.Matrix4();
+
+
+  convertedRotation
+    .copy(
+      basisChange
+    )
+    .multiply(
+      aprilRotation
+    )
+    .multiply(
+      basisChange
+    );
+
+
+  const quaternion =
+    new THREE.Quaternion();
+
+  quaternion
+    .setFromRotationMatrix(
+      convertedRotation
+    );
+
+
+  const position =
+    new THREE.Vector3(
+      tx,
+      -ty,
+      -tz
+    );
+
+
+  return {
+    position,
+    quaternion
+  };
+
+}
+
+
+/* =====================================================
+   WÜRFELZENTRUM AUS EINEM TAG
+   ===================================================== */
+
+function cubeCenterFromTagPose(
+  pose
+) {
+
+  /*
+   * Ein AprilTag liegt auf der Außenfläche.
+   *
+   * Seine lokale Z-Achse steht senkrecht
+   * auf der Tag-Ebene.
+   *
+   * Das Würfelzentrum liegt HALF_CUBE
+   * hinter der Tag-Ebene.
+   *
+   * Für die 5b-10-Koordinatenumrechnung
+   * testen wir zunächst -Z als Richtung
+   * in den Würfel hinein.
+   */
+
+  const inward =
+    new THREE.Vector3(
+      0,
+      0,
+      -HALF_CUBE
+    );
+
+
+  inward.applyQuaternion(
+    pose.quaternion
+  );
+
+
+  return pose.position
+    .clone()
+    .add(
+      inward
+    );
+
+}
+
+
+/* =====================================================
+   MITTELPUNKT DER BEIDEN KANDIDATEN
+   ===================================================== */
+
+function updateCubePose(
+  detection3,
+  detection1
+) {
+
+  center3.visible =
+    false;
+
+  center1.visible =
+    false;
+
+  methane.visible =
+    false;
+
+
+  let p3 =
+    null;
+
+  let p1 =
+    null;
+
+
+  if (detection3) {
+
+    const pose3 =
+      poseToThree(
+        detection3
+      );
+
+
+    if (pose3) {
+
+      p3 =
+        cubeCenterFromTagPose(
+          pose3
+        );
+
+
+      center3.position.copy(
+        p3
+      );
+
+      center3.visible =
+        true;
+
+    }
+
+  }
+
+
+  if (detection1) {
+
+    const pose1 =
+      poseToThree(
+        detection1
+      );
+
+
+    if (pose1) {
+
+      p1 =
+        cubeCenterFromTagPose(
+          pose1
+        );
+
+
+      center1.position.copy(
+        p1
+      );
+
+      center1.visible =
+        true;
+
+    }
+
+  }
+
+
+  /*
+   * Methan dient hier bereits als zusätzliche
+   * Orientierung.
+   *
+   * Sind beide Marker sichtbar, sitzt es genau
+   * zwischen den beiden berechneten Zentren.
+   *
+   * Sind die beiden grünen/blauen Punkte korrekt
+   * deckungsgleich, entspricht das unmittelbar
+   * dem Würfelzentrum.
+   */
+
+  if (
+    p3 &&
+    p1
+  ) {
+
+    methane.position
+      .copy(
+        p3
+      )
+      .add(
+        p1
+      )
+      .multiplyScalar(
+        0.5
+      );
+
+
+    methane.visible =
+      true;
+
+  }
+
+  else if (p3) {
+
+    methane.position.copy(
+      p3
+    );
+
+    methane.visible =
+      true;
+
+  }
+
+  else if (p1) {
+
+    methane.position.copy(
+      p1
+    );
+
+    methane.visible =
+      true;
+
+  }
+
+
+  /*
+   * Rotation des Methans ist in diesem
+   * Diagnoseschritt ABSICHTLICH noch nicht
+   * an den Würfel gekoppelt.
+   *
+   * Zuerst muss die Translation stimmen.
+   */
+
+}
+
+
+/* =====================================================
+   APRILTAG INITIALISIEREN
+   ===================================================== */
+
+async function initializeAprilTag() {
+
+  const worker =
+    new Worker(
+      "./libs/apriltag.js"
+    );
+
+
+  const Apriltag =
+    Comlink.wrap(
+      worker
+    );
+
+
+  apriltag =
+    await new Apriltag(
+
+      Comlink.proxy(
+        function() {
+
+          detectorReady =
+            true;
+
+        }
+      )
+
+    );
+
+
+  const start =
+    performance.now();
+
+
+  while (
+    !detectorReady
+  ) {
 
     await new Promise(
-      (resolve, reject) => {
-
-        const script =
-          document.createElement(
-            "script"
-          );
-
-        script.src =
-          "./libs/opencv.js";
-
-        script.async =
-          true;
+      resolve =>
+        setTimeout(
+          resolve,
+          20
+        )
+    );
 
 
-        script.onload =
-          () => {
+    if (
+      performance.now() -
+      start >
+      15000
+    ) {
 
-            addStatus(
-              "   opencv.js-Datei geladen ✓"
-            );
+      throw new Error(
+        "AprilTag-WASM wurde nicht bereit."
+      );
 
-            resolve();
+    }
 
-          };
-
-
-        script.onerror =
-          () => {
-
-            reject(
-              new Error(
-                "libs/opencv.js konnte nicht geladen werden."
-              )
-            );
-
-          };
+  }
 
 
-        document.head.appendChild(
-          script
+  /*
+   * Pose wieder aktivieren:
+   * bewährter 5b-10-Weg.
+   */
+
+  await apriltag.set_return_pose(
+    1
+  );
+
+
+  /*
+   * Beide Testmarker benötigen ihre
+   * physische Größe.
+   */
+
+  await apriltag.set_tag_size(
+    3,
+    TAG_SIZE
+  );
+
+  await apriltag.set_tag_size(
+    1,
+    TAG_SIZE
+  );
+
+
+  await apriltag.set_max_detections(
+    6
+  );
+
+}
+
+
+/* =====================================================
+   KAMERA
+   ===================================================== */
+
+async function startCamera() {
+
+  const stream =
+    await navigator.mediaDevices
+      .getUserMedia({
+
+        audio: false,
+
+        video: {
+
+          facingMode: {
+            ideal: "environment"
+          },
+
+          width: {
+            ideal: WIDTH
+          },
+
+          height: {
+            ideal: HEIGHT
+          },
+
+          aspectRatio: {
+            ideal: 4 / 3
+          },
+
+          frameRate: {
+            ideal: 30,
+            max: 30
+          }
+
+        }
+
+      });
+
+
+  video.srcObject =
+    stream;
+
+
+  await new Promise(
+    resolve => {
+
+      if (
+        video.readyState >= 2 &&
+        video.videoWidth > 0
+      ) {
+
+        resolve();
+
+      }
+
+      else {
+
+        video.addEventListener(
+          "loadedmetadata",
+          resolve,
+          {
+            once: true
+          }
         );
 
       }
+
+    }
+  );
+
+
+  await video.play();
+
+
+  cameraReady =
+    true;
+
+}
+
+
+/* =====================================================
+   GRAUSTUFENBILD
+   ===================================================== */
+
+function createGrayscaleImage() {
+
+  analysisCtx.drawImage(
+    video,
+    0,
+    0,
+    WIDTH,
+    HEIGHT
+  );
+
+
+  const imageData =
+    analysisCtx.getImageData(
+      0,
+      0,
+      WIDTH,
+      HEIGHT
     );
 
 
-    /* -----------------------------------------------
-       4. CV UNTERSUCHEN
-       ----------------------------------------------- */
+  const rgba =
+    imageData.data;
 
-    addStatus(
-      "\n4. cv wird untersucht …"
+
+  const grayscale =
+    new Uint8Array(
+      WIDTH * HEIGHT
     );
 
 
-    addStatus(
-      "   typeof cv = " +
-      typeof window.cv
+  for (
+    let i = 0, j = 0;
+    i < rgba.length;
+    i += 4, j++
+  ) {
+
+    grayscale[j] =
+      Math.round(
+        (
+          rgba[i] +
+          rgba[i + 1] +
+          rgba[i + 2]
+        ) / 3
+      );
+
+  }
+
+
+  return grayscale;
+
+}
+
+
+/* =====================================================
+   DETEKTION
+   ===================================================== */
+
+async function detectFrame() {
+
+  if (
+    !detectorReady ||
+    !cameraReady ||
+    detectionRunning
+  ) {
+
+    return;
+
+  }
+
+
+  detectionRunning =
+    true;
+
+
+  try {
+
+    const grayscale =
+      createGrayscaleImage();
+
+
+    const result =
+      await apriltag.detect(
+        grayscale,
+        WIDTH,
+        HEIGHT
+      );
+
+
+    latestDetections =
+      Array.isArray(result)
+        ? result
+        : [];
+
+
+    const detection3 =
+      latestDetections.find(
+        detection =>
+          Number(detection.id) ===
+          3
+      ) || null;
+
+
+    const detection1 =
+      latestDetections.find(
+        detection =>
+          Number(detection.id) ===
+          1
+      ) || null;
+
+
+    updateCubePose(
+      detection3,
+      detection1
     );
+
+
+    detectionCounter++;
+
+
+    const now =
+      performance.now();
 
 
     if (
-      typeof window.cv ===
-      "undefined"
+      now -
+      fpsStart >=
+      1000
     ) {
 
-      throw new Error(
-        "opencv.js wurde geladen, aber window.cv existiert nicht."
+      const seconds =
+        (
+          now -
+          fpsStart
+        ) / 1000;
+
+
+      detectionFPS =
+        detectionCounter /
+        seconds;
+
+
+      detectionCounter =
+        0;
+
+      fpsStart =
+        now;
+
+    }
+
+  }
+
+  catch(error) {
+
+    showError(
+      error
+    );
+
+  }
+
+  finally {
+
+    detectionRunning =
+      false;
+
+  }
+
+}
+
+
+/* =====================================================
+   2D OVERLAY
+   ===================================================== */
+
+function getPoint(
+  point
+) {
+
+  if (!point) {
+    return null;
+  }
+
+
+  if (
+    Array.isArray(point)
+  ) {
+
+    return {
+      x: Number(point[0]),
+      y: Number(point[1])
+    };
+
+  }
+
+
+  return {
+    x: Number(point.x),
+    y: Number(point.y)
+  };
+
+}
+
+
+function drawDetection(
+  detection,
+  color
+) {
+
+  if (
+    !detection ||
+    !Array.isArray(
+      detection.corners
+    ) ||
+    detection.corners.length < 4
+  ) {
+
+    return;
+
+  }
+
+
+  const corners =
+    detection.corners
+      .slice(0, 4)
+      .map(
+        getPoint
+      );
+
+
+  if (
+    corners.some(
+      p =>
+        !p ||
+        !Number.isFinite(p.x) ||
+        !Number.isFinite(p.y)
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  overlayCtx.beginPath();
+
+  overlayCtx.moveTo(
+    corners[0].x,
+    corners[0].y
+  );
+
+
+  for (
+    let i = 1;
+    i < 4;
+    i++
+  ) {
+
+    overlayCtx.lineTo(
+      corners[i].x,
+      corners[i].y
+    );
+
+  }
+
+
+  overlayCtx.closePath();
+
+  overlayCtx.lineWidth =
+    3;
+
+  overlayCtx.strokeStyle =
+    color;
+
+  overlayCtx.stroke();
+
+
+  const center =
+    detection.center
+      ? getPoint(
+          detection.center
+        )
+      : null;
+
+
+  if (center) {
+
+    overlayCtx.font =
+      "bold 18px Arial";
+
+    overlayCtx.textAlign =
+      "center";
+
+    overlayCtx.fillStyle =
+      color;
+
+    overlayCtx.fillText(
+      "ID " +
+      detection.id,
+      center.x,
+      center.y
+    );
+
+  }
+
+}
+
+
+function drawOverlay() {
+
+  overlayCtx.clearRect(
+    0,
+    0,
+    WIDTH,
+    HEIGHT
+  );
+
+
+  for (
+    const detection
+    of latestDetections
+  ) {
+
+    const id =
+      Number(
+        detection.id
+      );
+
+
+    if (
+      id === 3
+    ) {
+
+      drawDetection(
+        detection,
+        "#00ff55"
       );
 
     }
 
 
-    const isPromise =
-      window.cv &&
-      typeof window.cv.then ===
-      "function";
+    if (
+      id === 1
+    ) {
+
+      drawDetection(
+        detection,
+        "#3399ff"
+      );
+
+    }
+
+  }
+
+}
 
 
-    addStatus(
-      "   cv ist Promise: " +
+/* =====================================================
+   CANVAS-GEOMETRIE
+   ===================================================== */
+
+function resize() {
+
+  const screenWidth =
+    window.innerWidth;
+
+  const screenHeight =
+    window.innerHeight;
+
+
+  const videoAspect =
+    WIDTH / HEIGHT;
+
+  const screenAspect =
+    screenWidth /
+    screenHeight;
+
+
+  let displayWidth;
+  let displayHeight;
+
+
+  if (
+    screenAspect >
+    videoAspect
+  ) {
+
+    displayHeight =
+      screenHeight;
+
+    displayWidth =
+      displayHeight *
+      videoAspect;
+
+  }
+
+  else {
+
+    displayWidth =
+      screenWidth;
+
+    displayHeight =
+      displayWidth /
+      videoAspect;
+
+  }
+
+
+  const left =
+    (
+      screenWidth -
+      displayWidth
+    ) / 2;
+
+
+  const top =
+    (
+      screenHeight -
+      displayHeight
+    ) / 2;
+
+
+  for (
+    const canvas
+    of [
+      threeCanvas,
+      overlay
+    ]
+  ) {
+
+    canvas.style.width =
+      displayWidth + "px";
+
+    canvas.style.height =
+      displayHeight + "px";
+
+    canvas.style.left =
+      left + "px";
+
+    canvas.style.top =
+      top + "px";
+
+  }
+
+}
+
+
+window.addEventListener(
+  "resize",
+  resize
+);
+
+
+resize();
+
+
+/* =====================================================
+   STATUS
+   ===================================================== */
+
+function updateStatus() {
+
+  const has3 =
+    latestDetections.some(
+      d =>
+        Number(d.id) === 3
+    );
+
+
+  const has1 =
+    latestDetections.some(
+      d =>
+        Number(d.id) === 1
+    );
+
+
+  let distanceText =
+    "–";
+
+
+  if (
+    center3.visible &&
+    center1.visible
+  ) {
+
+    const distance =
+      center3.position
+        .distanceTo(
+          center1.position
+        );
+
+
+    distanceText =
       (
-        isPromise
-          ? "JA"
-          : "NEIN"
-      )
-    );
+        distance *
+        1000
+      ).toFixed(1) +
+      " mm";
+
+  }
 
 
-    /* -----------------------------------------------
-       5. PROMISE FALLS NÖTIG AUFLÖSEN
-       ----------------------------------------------- */
+  status.textContent =
 
-    let resolvedCV =
-      window.cv;
+    "GeoChemAR " +
+    VERSION +
+    "\n\n" +
 
+    "ID 3: " +
+    (
+      has3
+        ? "JA"
+        : "NEIN"
+    ) +
 
-    if (isPromise) {
+    "\nID 1: " +
+    (
+      has1
+        ? "JA"
+        : "NEIN"
+    ) +
 
-      addStatus(
-        "\n5. Warte auf cv-Promise …"
-      );
+    "\nAbstand Zentren: " +
+    distanceText +
 
+    "\nErkennungen/s: " +
+    detectionFPS.toFixed(1);
 
-      resolvedCV =
-        await Promise.race([
-
-          window.cv,
-
-          new Promise(
-            (_, reject) => {
-
-              setTimeout(
-                () => {
-
-                  reject(
-                    new Error(
-                      "cv-Promise nach 20 Sekunden noch nicht aufgelöst."
-                    )
-                  );
-
-                },
-                20000
-              );
-
-            }
-          )
-
-        ]);
+}
 
 
-      addStatus(
-        "   cv-Promise aufgelöst ✓"
-      );
+/* =====================================================
+   RENDERLOOP
+   ===================================================== */
 
-    }
+function animate() {
 
-    else {
-
-      addStatus(
-        "\n5. Kein cv-Promise vorhanden."
-      );
-
-    }
+  requestAnimationFrame(
+    animate
+  );
 
 
-    /* -----------------------------------------------
-       6. OPENCV FUNKTIONEN
-       ----------------------------------------------- */
+  if (
+    !detectionRunning
+  ) {
 
-    addStatus(
-      "\n6. OpenCV-Funktionen:"
-    );
+    detectFrame();
 
-
-    addStatus(
-      "   Mat: " +
-      typeof resolvedCV.Mat
-    );
+  }
 
 
-    addStatus(
-      "   matFromArray: " +
-      typeof resolvedCV.matFromArray
-    );
+  drawOverlay();
+
+  updateStatus();
 
 
-    addStatus(
-      "   solvePnP: " +
-      typeof resolvedCV.solvePnP
-    );
+  renderer.render(
+    scene,
+    camera
+  );
+
+}
 
 
-    addStatus(
-      "   Rodrigues: " +
-      typeof resolvedCV.Rodrigues
-    );
+/* =====================================================
+   START
+   ===================================================== */
+
+async function start() {
+
+  try {
+
+    status.textContent =
+      "AprilTag wird geladen …";
 
 
-    if (
-      typeof resolvedCV.Mat !==
-        "function" ||
-      typeof resolvedCV.solvePnP !==
-        "function" ||
-      typeof resolvedCV.Rodrigues !==
-        "function"
-    ) {
-
-      throw new Error(
-        "OpenCV wurde geladen, aber benötigte Funktionen fehlen."
-      );
-
-    }
+    await initializeAprilTag();
 
 
-    addStatus(
-      "\n=============================="
-    );
+    status.textContent =
+      "AprilTag bereit ✓\nKamera wird gestartet …";
 
-    addStatus(
-      "✅ OPENCV IST VOLLSTÄNDIG BEREIT"
-    );
 
-    addStatus(
-      "=============================="
+    await startCamera();
+
+
+    requestAnimationFrame(
+      animate
     );
 
   }
 
   catch(error) {
 
-    console.error(
+    showError(
       error
-    );
-
-    addStatus(
-      "\n=============================="
-    );
-
-    addStatus(
-      "❌ FEHLER"
-    );
-
-    addStatus(
-      String(
-        error?.stack ||
-        error
-      )
-    );
-
-    addStatus(
-      "=============================="
     );
 
   }
@@ -394,15 +1767,7 @@ async function runTest() {
 }
 
 
-/*
- * Wichtig:
- *
- * Dieser Aufruf erfolgt aus einem normalen
- * klassischen Script und hängt daher NICHT
- * von einem statischen ES-Modul-Import ab.
- */
-
-runTest();
+start();
 
 </script>
 
