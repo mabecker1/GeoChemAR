@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-3c Doppelkalibrierung</title>
+<title>GeoChemAR – 5c-4 Vollständiges Cube-Tracking</title>
 
 <style>
 html,
@@ -57,18 +57,14 @@ body {
   left: 10px;
   z-index: 10;
 
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 40px);
-  overflow: auto;
-
-  padding: 10px 13px;
+  padding: 9px 12px;
   border-radius: 8px;
 
-  background: rgba(0,0,0,0.84);
+  background: rgba(0,0,0,0.78);
   color: white;
 
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: pre-line;
 
   pointer-events: none;
@@ -142,7 +138,7 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-3c";
+const VERSION = "5c-4";
 
 
 /* =====================================================
@@ -157,12 +153,10 @@ const TAG_SIZE = 0.0395;
 const CUBE_SIZE = 0.045;
 const HALF_CUBE = CUBE_SIZE / 2;
 
-const CALIBRATION_FRAMES = 30;
-
 
 /* =====================================================
    KAMERAMODELL
-   UNVERÄNDERT
+   UNVERÄNDERT AUS 5b-10 / 5c-2f
    ===================================================== */
 
 const horizontalFovDeg = 60;
@@ -254,48 +248,9 @@ let detectionFPS = 0;
 let fpsStart =
   performance.now();
 
-
-/* =====================================================
-   KALIBRIERUNGEN
-
-   A: ID 2 -> ID 0
-   B: ID 4 -> ID 5
-   ===================================================== */
-
-const calibrationA = {
-
-  label: "ID2 → ID0",
-
-  samples: [],
-
-  finished: false,
-
-  quaternion: null,
-
-  axis:
-    new THREE.Vector3(),
-
-  angleDeg: 0
-
-};
-
-
-const calibrationB = {
-
-  label: "ID4 → ID5",
-
-  samples: [],
-
-  finished: false,
-
-  quaternion: null,
-
-  axis:
-    new THREE.Vector3(),
-
-  angleDeg: 0
-
-};
+let lastVisibleIDs = [];
+let lastCenterSpread = null;
+let lastRotationSpread = null;
 
 
 /* =====================================================
@@ -363,38 +318,53 @@ renderer.setClearColor(
 
 
 /* =====================================================
+   LICHT
+   ===================================================== */
+
+scene.add(
+  new THREE.AmbientLight(
+    0xffffff,
+    2
+  )
+);
+
+
+const directionalLight =
+  new THREE.DirectionalLight(
+    0xffffff,
+    2
+  );
+
+directionalLight.position.set(
+  1,
+  2,
+  2
+);
+
+scene.add(
+  directionalLight
+);
+
+
+/* =====================================================
    MARKER-ROOTS
    ===================================================== */
 
-const marker0Root =
-  new THREE.Group();
-
-const marker2Root =
-  new THREE.Group();
-
-const marker4Root =
-  new THREE.Group();
-
-const marker5Root =
-  new THREE.Group();
-
-
-const markerRoots = {
-
-  0: marker0Root,
-  2: marker2Root,
-  4: marker4Root,
-  5: marker5Root
-
-};
-
+const markerRoots = {};
 
 for (
-  const root
-  of Object.values(markerRoots)
+  let id = 0;
+  id <= 5;
+  id++
 ) {
 
+  const root =
+    new THREE.Group();
+
   root.visible = false;
+
+  markerRoots[id] =
+    root;
 
   scene.add(root);
 
@@ -402,81 +372,348 @@ for (
 
 
 /* =====================================================
-   DIAGNOSE-ACHSEN
+   WÜRFELZENTREN
 
-   X = rot
-   Y = grün
-   Z = blau
+   Für jeden Tag:
+   lokales +Z zeigt aus dem Würfel heraus.
+
+   Das Würfelzentrum liegt deshalb
+   22,5 mm in lokaler -Z-Richtung.
    ===================================================== */
 
-function createDiagnosticAxes() {
+const centerObjects = {};
+
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
+
+  const center =
+    new THREE.Object3D();
+
+  center.position.set(
+    0,
+    0,
+    -HALF_CUBE
+  );
+
+  markerRoots[id].add(
+    center
+  );
+
+  centerObjects[id] =
+    center;
+
+}
+
+
+/* =====================================================
+   IDEALE ROTATIONEN
+
+   qRelative[id] beschreibt:
+
+   ID3 -> ID[id]
+
+   Alle Werte stammen aus den jetzt
+   abgeschlossenen Kalibrierungen,
+   auf ideale Würfelrotationen gerundet.
+   ===================================================== */
+
+const relativeFrom3 = {
+
+  /*
+   * ID 0
+   */
+  0: new THREE.Quaternion(
+     0.5,
+    -0.5,
+     0.5,
+     0.5
+  ),
+
+  /*
+   * ID 1
+   */
+  1: new THREE.Quaternion(
+    -0.5,
+    -0.5,
+    -0.5,
+     0.5
+  ),
+
+  /*
+   * ID 2
+   */
+  2: new THREE.Quaternion(
+    0,
+    Math.SQRT1_2,
+    0,
+    Math.SQRT1_2
+  ),
+
+  /*
+   * ID 3 = Referenz
+   */
+  3: new THREE.Quaternion(
+    0,
+    0,
+    0,
+    1
+  ),
+
+  /*
+   * ID 4
+   */
+  4: new THREE.Quaternion(
+    0,
+    -Math.SQRT1_2,
+    0,
+    Math.SQRT1_2
+  ),
+
+  /*
+   * ID 5
+   */
+  5: new THREE.Quaternion(
+    0,
+    -1,
+    0,
+    0
+  )
+
+};
+
+
+const correctionTo3 = {};
+
+
+/*
+ * Gemessen gilt:
+ *
+ * qTagID = qCube * qRelative
+ *
+ * daher:
+ *
+ * qCube =
+ * qTagID * inverse(qRelative)
+ */
+
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
+
+  relativeFrom3[id]
+    .normalize();
+
+
+  correctionTo3[id] =
+    relativeFrom3[id]
+      .clone()
+      .invert();
+
+}
+
+
+/* =====================================================
+   METHAN
+   ===================================================== */
+
+function createMethane() {
 
   const group =
     new THREE.Group();
 
-  const axisLength =
-    0.015;
 
-  const axisRadius =
-    0.0008;
+  const scale = 0.05;
+
+  const carbonRadius =
+    0.22 * scale;
+
+  const hydrogenRadius =
+    0.14 * scale;
+
+  const hydrogenDistance =
+    0.72 * scale;
+
+  const bondRadius =
+    0.040 * scale;
 
 
-  const origin =
+  const carbonMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x202020,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.55,
+      metalness: 0
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xb8bec7,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const carbon =
     new THREE.Mesh(
 
       new THREE.SphereGeometry(
-        0.0025,
-        24,
-        16
+        carbonRadius,
+        48,
+        32
       ),
 
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff
-      })
+      carbonMaterial
 
     );
 
-  group.add(origin);
+
+  /*
+   * C-Atom exakt im Ursprung.
+   */
+
+  group.add(carbon);
 
 
-  function createAxis(
-    direction,
-    color
+  const directions = [
+
+    new THREE.Vector3(
+      1, 1, 1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1, -1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, 1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, -1, 1
+    ).normalize()
+
+  ];
+
+
+  for (
+    const direction
+    of directions
   ) {
 
-    const material =
-      new THREE.MeshBasicMaterial({
-        color
-      });
-
-
-    const cylinder =
+    const hydrogen =
       new THREE.Mesh(
 
-        new THREE.CylinderGeometry(
-          axisRadius,
-          axisRadius,
-          axisLength,
-          12,
-          1,
-          false
+        new THREE.SphereGeometry(
+          hydrogenRadius,
+          40,
+          28
         ),
 
-        material
+        hydrogenMaterial
 
       );
 
 
-    cylinder.position.copy(
+    hydrogen.position.copy(
+
       direction
         .clone()
         .multiplyScalar(
-          axisLength / 2
+          hydrogenDistance
         )
+
     );
 
 
-    cylinder.quaternion
+    group.add(hydrogen);
+
+
+    /*
+     * Bindung exakt Kugeloberfläche
+     * zu Kugeloberfläche.
+     */
+
+    const startDistance =
+      carbonRadius;
+
+    const endDistance =
+      hydrogenDistance -
+      hydrogenRadius;
+
+
+    const startPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          startDistance
+        );
+
+
+    const endPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          endDistance
+        );
+
+
+    const bondVector =
+      endPoint
+        .clone()
+        .sub(
+          startPoint
+        );
+
+
+    const bondLength =
+      bondVector.length();
+
+
+    const bond =
+      new THREE.Mesh(
+
+        new THREE.CylinderGeometry(
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+        ),
+
+        bondMaterial
+
+      );
+
+
+    bond.position.copy(
+
+      startPoint
+        .clone()
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
+
+    );
+
+
+    bond.quaternion
       .setFromUnitVectors(
 
         new THREE.Vector3(
@@ -490,57 +727,9 @@ function createDiagnosticAxes() {
       );
 
 
-    group.add(cylinder);
-
-
-    const tip =
-      new THREE.Mesh(
-
-        new THREE.SphereGeometry(
-          0.0017,
-          16,
-          12
-        ),
-
-        material
-
-      );
-
-
-    tip.position.copy(
-      direction
-        .clone()
-        .multiplyScalar(
-          axisLength
-        )
-    );
-
-
-    group.add(tip);
+    group.add(bond);
 
   }
-
-
-  createAxis(
-    new THREE.Vector3(
-      1, 0, 0
-    ),
-    0xff3030
-  );
-
-  createAxis(
-    new THREE.Vector3(
-      0, 1, 0
-    ),
-    0x30ff30
-  );
-
-  createAxis(
-    new THREE.Vector3(
-      0, 0, 1
-    ),
-    0x3080ff
-  );
 
 
   return group;
@@ -548,102 +737,16 @@ function createDiagnosticAxes() {
 }
 
 
-marker0Root.add(
-  createDiagnosticAxes()
-);
+const methane =
+  createMethane();
 
-marker2Root.add(
-  createDiagnosticAxes()
-);
+methane.visible = false;
 
-marker4Root.add(
-  createDiagnosticAxes()
-);
-
-marker5Root.add(
-  createDiagnosticAxes()
-);
+scene.add(methane);
 
 
 /* =====================================================
-   WÜRFELZENTREN
-
-   +Z des Tags zeigt nach außen.
-   Würfelzentrum liegt bei -22,5 mm.
-   ===================================================== */
-
-function createCenterMarker(
-  color
-) {
-
-  const center =
-    new THREE.Mesh(
-
-      new THREE.SphereGeometry(
-        0.0027,
-        20,
-        14
-      ),
-
-      new THREE.MeshBasicMaterial({
-        color
-      })
-
-    );
-
-
-  center.position.set(
-    0,
-    0,
-    -HALF_CUBE
-  );
-
-
-  return center;
-
-}
-
-
-const centerFrom0 =
-  createCenterMarker(
-    0xffff00
-  );
-
-const centerFrom2 =
-  createCenterMarker(
-    0xff3030
-  );
-
-const centerFrom4 =
-  createCenterMarker(
-    0x00ffff
-  );
-
-const centerFrom5 =
-  createCenterMarker(
-    0xff00ff
-  );
-
-
-marker0Root.add(
-  centerFrom0
-);
-
-marker2Root.add(
-  centerFrom2
-);
-
-marker4Root.add(
-  centerFrom4
-);
-
-marker5Root.add(
-  centerFrom5
-);
-
-
-/* =====================================================
-   BEWÄHRTE 5b-10 POSE-UMRECHNUNG
+   BEWÄHRTE 5b-10 APRILTAG-POSE
    ===================================================== */
 
 const basisChange =
@@ -727,12 +830,20 @@ function applyAprilTagPose(
   }
 
 
+  /*
+   * Bewährte Translation.
+   */
+
   root.position.set(
     tx,
     -ty,
     -tz
   );
 
+
+  /*
+   * Bewährte transponierte Rotation.
+   */
 
   const aprilRotation =
     new THREE.Matrix4();
@@ -793,83 +904,230 @@ function applyAprilTagPose(
 
 
 /* =====================================================
-   RELATIVE ROTATION
-
-   qRelative =
-   inverse(qReference) * qTarget
+   HILFSFUNKTION:
+   ROTATIONSDIFFERENZ
    ===================================================== */
 
-function calculateRelativeQuaternion(
-  referenceRoot,
-  targetRoot
+function quaternionAngleDegrees(
+  a,
+  b
 ) {
 
-  const inverseReference =
-    referenceRoot.quaternion
-      .clone()
-      .invert();
-
-
-  const relative =
-    inverseReference.multiply(
-      targetRoot.quaternion
+  let dot =
+    Math.abs(
+      a.dot(b)
     );
 
 
-  relative.normalize();
+  dot =
+    THREE.MathUtils.clamp(
+      dot,
+      -1,
+      1
+    );
 
 
-  /*
-   * q und -q beschreiben dieselbe Rotation.
-   */
+  return THREE.MathUtils.radToDeg(
 
-  if (
-    relative.w < 0
-  ) {
+    2 *
+    Math.acos(dot)
 
-    relative.x *= -1;
-    relative.y *= -1;
-    relative.z *= -1;
-    relative.w *= -1;
-
-  }
-
-
-  return relative;
+  );
 
 }
 
 
 /* =====================================================
-   QUATERNION MITTELN
+   WÜRFELPOSE AUS ALLEN SICHTBAREN TAGS
    ===================================================== */
 
-function averageQuaternions(
-  samples
-) {
+const candidatePositions = [];
+const candidateQuaternions = [];
+const candidateIDs = [];
 
-  if (
-    samples.length === 0
+
+const tempPosition =
+  new THREE.Vector3();
+
+const tempQuaternion =
+  new THREE.Quaternion();
+
+
+const fusedPosition =
+  new THREE.Vector3();
+
+const fusedQuaternion =
+  new THREE.Quaternion();
+
+
+function updateCubePose() {
+
+  candidatePositions.length = 0;
+  candidateQuaternions.length = 0;
+  candidateIDs.length = 0;
+
+
+  /*
+   * Wichtig:
+   * centerObjects sind Kinder der Marker.
+   */
+
+  scene.updateMatrixWorld(true);
+
+
+  for (
+    let id = 0;
+    id <= 5;
+    id++
   ) {
 
-    return null;
+    const root =
+      markerRoots[id];
+
+
+    if (
+      !root.visible
+    ) {
+
+      continue;
+
+    }
+
+
+    /*
+     * POSITION:
+     *
+     * bereits bestätigte Methode:
+     * lokaler Punkt (0,0,-22.5 mm)
+     * wird direkt über die Marker-Matrix
+     * in Weltkoordinaten transformiert.
+     */
+
+    centerObjects[id]
+      .getWorldPosition(
+        tempPosition
+      );
+
+
+    candidatePositions.push(
+      tempPosition.clone()
+    );
+
+
+    /*
+     * ORIENTIERUNG:
+     *
+     * qCube =
+     * qTag *
+     * inverse(qRelativeFrom3)
+     */
+
+    tempQuaternion
+      .copy(
+        root.quaternion
+      )
+      .multiply(
+        correctionTo3[id]
+      )
+      .normalize();
+
+
+    candidateQuaternions.push(
+      tempQuaternion.clone()
+    );
+
+
+    candidateIDs.push(id);
 
   }
 
 
-  const reference =
-    samples[0];
+  lastVisibleIDs =
+    candidateIDs.slice();
 
 
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  let w = 0;
+  /*
+   * Kein Marker sichtbar.
+   *
+   * In dieser Testversion:
+   * Molekül sofort ausblenden.
+   *
+   * Noch KEIN Hold und
+   * KEINE zeitliche Glättung.
+   */
+
+  if (
+    candidatePositions.length === 0
+  ) {
+
+    methane.visible = false;
+
+    lastCenterSpread = null;
+    lastRotationSpread = null;
+
+    return;
+
+  }
+
+
+  /* ===================================================
+     POSITION MITTELN
+     =================================================== */
+
+  fusedPosition.set(
+    0,
+    0,
+    0
+  );
+
+
+  for (
+    const position
+    of candidatePositions
+  ) {
+
+    fusedPosition.add(
+      position
+    );
+
+  }
+
+
+  fusedPosition.multiplyScalar(
+
+    1 /
+    candidatePositions.length
+
+  );
+
+
+  /* ===================================================
+     QUATERNIONEN MITTELN
+
+     Vorzeichen zunächst an den ersten
+     Kandidaten angleichen.
+
+     Anschließend normierte lineare
+     Quaternion-Mittelung.
+
+     Für die kleinen Restabweichungen
+     unserer Marker ist das hier
+     ausreichend und symmetrisch.
+     =================================================== */
+
+  const referenceQuaternion =
+    candidateQuaternions[0];
+
+
+  let qx = 0;
+  let qy = 0;
+  let qz = 0;
+  let qw = 0;
 
 
   for (
     const original
-    of samples
+    of candidateQuaternions
   ) {
 
     const q =
@@ -877,7 +1135,7 @@ function averageQuaternions(
 
 
     if (
-      reference.dot(q) < 0
+      referenceQuaternion.dot(q) < 0
     ) {
 
       q.x *= -1;
@@ -888,288 +1146,110 @@ function averageQuaternions(
     }
 
 
-    x += q.x;
-    y += q.y;
-    z += q.z;
-    w += q.w;
+    qx += q.x;
+    qy += q.y;
+    qz += q.z;
+    qw += q.w;
 
   }
 
 
-  const result =
-    new THREE.Quaternion(
-      x,
-      y,
-      z,
-      w
-    );
-
-
-  result.normalize();
-
-  return result;
-
-}
-
-
-/* =====================================================
-   QUATERNION -> ACHSE/WINKEL
-   ===================================================== */
-
-function quaternionToAxisAngle(
-  quaternion
-) {
-
-  const q =
-    quaternion
-      .clone()
-      .normalize();
-
-
-  if (
-    q.w < 0
-  ) {
-
-    q.x *= -1;
-    q.y *= -1;
-    q.z *= -1;
-    q.w *= -1;
-
-  }
-
-
-  const w =
-    THREE.MathUtils.clamp(
-      q.w,
-      -1,
-      1
-    );
-
-
-  const angle =
-    2 *
-    Math.acos(w);
-
-
-  const sinHalf =
-    Math.sqrt(
-      Math.max(
-        0,
-        1 - w * w
-      )
-    );
-
-
-  const axis =
-    new THREE.Vector3();
-
-
-  if (
-    sinHalf <
-    0.000001
-  ) {
-
-    axis.set(
-      1,
-      0,
-      0
-    );
-
-  }
-
-  else {
-
-    axis.set(
-      q.x / sinHalf,
-      q.y / sinHalf,
-      q.z / sinHalf
-    );
-
-  }
-
-
-  return {
-
-    axis,
-
-    angleDeg:
-      THREE.MathUtils.radToDeg(
-        angle
-      )
-
-  };
-
-}
-
-
-/* =====================================================
-   EINE KALIBRIERUNG
-   ===================================================== */
-
-function updateOneCalibration(
-  calibration,
-  referenceRoot,
-  targetRoot
-) {
-
-  if (
-    calibration.finished
-  ) {
-
-    return;
-
-  }
-
-
-  if (
-    !referenceRoot.visible ||
-    !targetRoot.visible
-  ) {
-
-    return;
-
-  }
-
-
-  const relative =
-    calculateRelativeQuaternion(
-      referenceRoot,
-      targetRoot
-    );
-
-
-  calibration.samples.push(
-    relative
+  fusedQuaternion.set(
+    qx,
+    qy,
+    qz,
+    qw
   );
 
 
-  if (
-    calibration.samples.length >=
-    CALIBRATION_FRAMES
+  fusedQuaternion.normalize();
+
+
+  /* ===================================================
+     DIAGNOSE:
+     maximale Abweichung der Kandidaten
+     von der gemeinsamen Pose.
+     =================================================== */
+
+  let maxPositionDifference = 0;
+
+
+  for (
+    const position
+    of candidatePositions
   ) {
 
-    calibration.quaternion =
-      averageQuaternions(
-        calibration.samples
+    const difference =
+      position.distanceTo(
+        fusedPosition
       );
 
 
-    const axisAngle =
-      quaternionToAxisAngle(
-        calibration.quaternion
+    if (
+      difference >
+      maxPositionDifference
+    ) {
+
+      maxPositionDifference =
+        difference;
+
+    }
+
+  }
+
+
+  lastCenterSpread =
+    maxPositionDifference;
+
+
+  let maxRotationDifference = 0;
+
+
+  for (
+    const quaternion
+    of candidateQuaternions
+  ) {
+
+    const difference =
+      quaternionAngleDegrees(
+        quaternion,
+        fusedQuaternion
       );
 
 
-    calibration.axis.copy(
-      axisAngle.axis
-    );
+    if (
+      difference >
+      maxRotationDifference
+    ) {
 
+      maxRotationDifference =
+        difference;
 
-    calibration.angleDeg =
-      axisAngle.angleDeg;
-
-
-    calibration.finished =
-      true;
-
-
-    console.log(
-      "=== " +
-      calibration.label +
-      " ==="
-    );
-
-    console.log(
-      "Quaternion:",
-      calibration.quaternion
-    );
-
-    console.log(
-      "Achse:",
-      calibration.axis
-    );
-
-    console.log(
-      "Winkel:",
-      calibration.angleDeg
-    );
-
-  }
-
-}
-
-
-/* =====================================================
-   BEIDE KALIBRIERUNGEN
-
-   A: ID 2 -> ID 0
-   B: ID 4 -> ID 5
-   ===================================================== */
-
-function updateCalibrations() {
-
-  updateOneCalibration(
-    calibrationA,
-    marker2Root,
-    marker0Root
-  );
-
-
-  updateOneCalibration(
-    calibrationB,
-    marker4Root,
-    marker5Root
-  );
-
-}
-
-
-/* =====================================================
-   ABSTÄNDE DER WÜRFELZENTREN
-   ===================================================== */
-
-const tempCenterA =
-  new THREE.Vector3();
-
-const tempCenterB =
-  new THREE.Vector3();
-
-
-function getCenterDistance(
-  rootA,
-  centerA,
-  rootB,
-  centerB
-) {
-
-  if (
-    !rootA.visible ||
-    !rootB.visible
-  ) {
-
-    return null;
+    }
 
   }
 
 
-  scene.updateMatrixWorld(
-    true
+  lastRotationSpread =
+    maxRotationDifference;
+
+
+  /* ===================================================
+     METHAN AUF DIE GEMEINSAME
+     WÜRFELPOSE SETZEN
+     =================================================== */
+
+  methane.position.copy(
+    fusedPosition
   );
 
 
-  centerA.getWorldPosition(
-    tempCenterA
+  methane.quaternion.copy(
+    fusedQuaternion
   );
 
 
-  centerB.getWorldPosition(
-    tempCenterB
-  );
-
-
-  return tempCenterA.distanceTo(
-    tempCenterB
-  );
+  methane.visible = true;
 
 }
 
@@ -1210,7 +1290,9 @@ async function initializeAprilTag() {
     performance.now();
 
 
-  while (!detectorReady) {
+  while (
+    !detectorReady
+  ) {
 
     await new Promise(
       resolve =>
@@ -1244,25 +1326,23 @@ async function initializeAprilTag() {
   );
 
 
-  await apriltag.set_tag_size(
-    0,
-    TAG_SIZE
-  );
+  /*
+   * Alle sechs Tags besitzen
+   * dieselbe physische Größe.
+   */
 
-  await apriltag.set_tag_size(
-    2,
-    TAG_SIZE
-  );
+  for (
+    let id = 0;
+    id <= 5;
+    id++
+  ) {
 
-  await apriltag.set_tag_size(
-    4,
-    TAG_SIZE
-  );
+    await apriltag.set_tag_size(
+      id,
+      TAG_SIZE
+    );
 
-  await apriltag.set_tag_size(
-    5,
-    TAG_SIZE
-  );
+  }
 
 
   await apriltag.set_return_pose(
@@ -1458,11 +1538,25 @@ async function detectFrame() {
         : [];
 
 
-    marker0Root.visible = false;
-    marker2Root.visible = false;
-    marker4Root.visible = false;
-    marker5Root.visible = false;
+    /*
+     * Alle zunächst unsichtbar.
+     */
 
+    for (
+      let id = 0;
+      id <= 5;
+      id++
+    ) {
+
+      markerRoots[id].visible =
+        false;
+
+    }
+
+
+    /*
+     * Erkannte Marker aktualisieren.
+     */
 
     for (
       const detection
@@ -1475,15 +1569,14 @@ async function detectFrame() {
         );
 
 
-      const root =
-        markerRoots[id];
-
-
-      if (root) {
+      if (
+        id >= 0 &&
+        id <= 5
+      ) {
 
         applyAprilTagPose(
           detection,
-          root
+          markerRoots[id]
         );
 
       }
@@ -1491,7 +1584,11 @@ async function detectFrame() {
     }
 
 
-    updateCalibrations();
+    /*
+     * Gemeinsame Würfelpose.
+     */
+
+    updateCubePose();
 
 
     detectionCounter++;
@@ -1529,10 +1626,21 @@ async function detectFrame() {
 
   catch(error) {
 
-    marker0Root.visible = false;
-    marker2Root.visible = false;
-    marker4Root.visible = false;
-    marker5Root.visible = false;
+    for (
+      let id = 0;
+      id <= 5;
+      id++
+    ) {
+
+      markerRoots[id].visible =
+        false;
+
+    }
+
+
+    methane.visible =
+      false;
+
 
     showError(error);
 
@@ -1540,7 +1648,8 @@ async function detectFrame() {
 
   finally {
 
-    detectionRunning = false;
+    detectionRunning =
+      false;
 
   }
 
@@ -1558,7 +1667,9 @@ function getPoint(point) {
   }
 
 
-  if (Array.isArray(point)) {
+  if (
+    Array.isArray(point)
+  ) {
 
     const x =
       Number(point[0]);
@@ -1608,8 +1719,7 @@ function getPoint(point) {
 
 
 function drawDetection(
-  detection,
-  color
+  detection
 ) {
 
   if (
@@ -1667,10 +1777,10 @@ function drawDetection(
 
   overlayCtx.closePath();
 
-  overlayCtx.lineWidth = 3;
+  overlayCtx.lineWidth = 2;
 
   overlayCtx.strokeStyle =
-    color;
+    "#00ff66";
 
   overlayCtx.stroke();
 
@@ -1684,7 +1794,7 @@ function drawDetection(
   if (center) {
 
     overlayCtx.font =
-      "bold 18px Arial";
+      "bold 16px Arial";
 
     overlayCtx.textAlign =
       "center";
@@ -1693,7 +1803,7 @@ function drawDetection(
       "middle";
 
     overlayCtx.fillStyle =
-      color;
+      "#00ff66";
 
 
     overlayCtx.fillText(
@@ -1729,37 +1839,13 @@ function drawOverlay() {
       );
 
 
-    let color =
-      "#ffffff";
-
-
-    if (id === 0) {
-      color = "#ffff00";
-    }
-
-    if (id === 2) {
-      color = "#ff4040";
-    }
-
-    if (id === 4) {
-      color = "#00ffff";
-    }
-
-    if (id === 5) {
-      color = "#ff40ff";
-    }
-
-
     if (
-      id === 0 ||
-      id === 2 ||
-      id === 4 ||
-      id === 5
+      id >= 0 &&
+      id <= 5
     ) {
 
       drawDetection(
-        detection,
-        color
+        detection
       );
 
     }
@@ -1868,206 +1954,58 @@ resize();
 
 
 /* =====================================================
-   FORMATIERUNG
-   ===================================================== */
-
-function f(value) {
-
-  return Number(value)
-    .toFixed(5);
-
-}
-
-
-function formatCalibration(
-  calibration
-) {
-
-  if (
-    !calibration.finished ||
-    !calibration.quaternion
-  ) {
-
-    return (
-      calibration.label +
-      ": " +
-      calibration.samples.length +
-      " / " +
-      CALIBRATION_FRAMES
-    );
-
-  }
-
-
-  const q =
-    calibration.quaternion;
-
-
-  return (
-
-    calibration.label +
-    "  FERTIG ✓" +
-
-    "\nQuaternion:" +
-
-    "\nx = " + f(q.x) +
-
-    "\ny = " + f(q.y) +
-
-    "\nz = " + f(q.z) +
-
-    "\nw = " + f(q.w) +
-
-    "\nAchse:" +
-
-    "\nx = " +
-    f(calibration.axis.x) +
-
-    "\ny = " +
-    f(calibration.axis.y) +
-
-    "\nz = " +
-    f(calibration.axis.z) +
-
-    "\nWinkel = " +
-    calibration.angleDeg.toFixed(2) +
-    "°"
-
-  );
-
-}
-
-
-/* =====================================================
    STATUS
    ===================================================== */
 
 function updateStatus() {
 
-  const distance20 =
-    getCenterDistance(
-      marker2Root,
-      centerFrom2,
-      marker0Root,
-      centerFrom0
-    );
+  const ids =
+    lastVisibleIDs.length > 0
+      ? lastVisibleIDs.join(", ")
+      : "–";
 
 
-  const distance45 =
-    getCenterDistance(
-      marker4Root,
-      centerFrom4,
-      marker5Root,
-      centerFrom5
-    );
-
-
-  const distance20Text =
-    distance20 === null
-      ? "–"
-      : (
-          distance20 *
+  const centerSpreadText =
+    lastCenterSpread !== null
+      ? (
+          lastCenterSpread *
           1000
         ).toFixed(1) +
-        " mm";
+        " mm"
+      : "–";
 
 
-  const distance45Text =
-    distance45 === null
-      ? "–"
-      : (
-          distance45 *
-          1000
-        ).toFixed(1) +
-        " mm";
-
-
-  let instruction;
-
-
-  if (
-    !calibrationA.finished
-  ) {
-
-    instruction =
-      "Jetzt Kante ID 2 / ID 0 zeigen.";
-
-  }
-
-  else if (
-    !calibrationB.finished
-  ) {
-
-    instruction =
-      "ID2→0 fertig. Jetzt Kante ID 4 / ID 5 zeigen.";
-
-  }
-
-  else {
-
-    instruction =
-      "BEIDE KALIBRIERUNGEN FERTIG ✓";
-
-  }
+  const rotationSpreadText =
+    lastRotationSpread !== null
+      ? lastRotationSpread
+          .toFixed(2) +
+        "°"
+      : "–";
 
 
   status.textContent =
 
     "GeoChemAR " +
     VERSION +
-    " – Doppelkalibrierung" +
+
+    "\nSichtbare IDs: " +
+    ids +
+
+    "\nMarker: " +
+    lastVisibleIDs.length +
 
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    "\n\n" +
-    instruction +
+    "\n\nPositionsabweichung: " +
+    centerSpreadText +
 
-    "\n\nID 2: " +
-    (
-      marker2Root.visible
-        ? "JA"
-        : "NEIN"
-    ) +
+    "\nRotationsabweichung: " +
+    rotationSpreadText +
 
-    "   ID 0: " +
-    (
-      marker0Root.visible
-        ? "JA"
-        : "NEIN"
-    ) +
+    "\n\n6-Seiten-Tracking" +
 
-    "\nZentrumsabstand 2/0: " +
-    distance20Text +
-
-    "\n\n" +
-    formatCalibration(
-      calibrationA
-    ) +
-
-    "\n\n------------------------" +
-
-    "\n\nID 4: " +
-    (
-      marker4Root.visible
-        ? "JA"
-        : "NEIN"
-    ) +
-
-    "   ID 5: " +
-    (
-      marker5Root.visible
-        ? "JA"
-        : "NEIN"
-    ) +
-
-    "\nZentrumsabstand 4/5: " +
-    distance45Text +
-
-    "\n\n" +
-    formatCalibration(
-      calibrationB
-    );
+    "\nGlättung: AUS";
 
 }
 
