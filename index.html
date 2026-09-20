@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – 5c-11 Predicted ROI Tracking</title>
+<title>GeoChemAR – 5c-12 Stable Recovery Tracking</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
@@ -24,10 +24,11 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 import * as THREE from "./libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-const VERSION="5c-11";
+const VERSION="5c-12";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
-const MAX_PREDICTION_TIME_MS=180, VELOCITY_BLEND=0.35, MAX_LINEAR_SPEED=1.5, MAX_ANGULAR_SPEED=12.0;
+const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
+const VELOCITY_BLEND=0.35, MAX_LINEAR_SPEED=1.5, MAX_ANGULAR_SPEED=12.0;
 const CONTINUITY_MAX_AGE_MS=260;
 const POSITION_SCORE_SCALE=0.025;
 const ROTATION_SCORE_SCALE=THREE.MathUtils.degToRad(25);
@@ -43,13 +44,29 @@ const JOINT_TRANSLATION_SCALE=0.001;
 const JOINT_ROTATION_SCALE=THREE.MathUtils.degToRad(1);
 const JOINT_FD_STEP=0.02, JOINT_DAMPING=0.001;
 
-/* 5c-11: predicted ROI tracking */
-const ROI_TRACK_MAX_AGE_MS=280;
-const ROI_MAX_DIM=420;
-const ROI_MAX_UPSCALE=3.0;
-const ROI_PADDING_FACTOR=0.60;
-const ROI_MIN_PADDING_PX=28;
-const ROI_MIN_SIZE_PX=72;
+/* 5c-12: Recovery only – stable full-frame tracking remains primary */
+const ROI_RECOVERY_MAX_AGE_MS=420;
+const ROI_MAX_DIM=480;
+const ROI_MAX_UPSCALE=3.2;
+const ROI_PADDING_FACTOR=0.35;
+const ROI_MIN_PADDING_PX=22;
+const ROI_MIN_SIZE_PX=64;
+const ROI_MAX_FACES=3;
+const RECOVERY_FULL_EVERY_N=2;
+
+/* 5c-12: very light speed-adaptive display filter
+   Low speed = jitter suppression, high speed = almost direct response. */
+const POS_MIN_CUTOFF=5.5;
+const POS_BETA=55.0;
+const ROT_MIN_CUTOFF=4.5;
+const ROT_BETA=7.5;
+const FILTER_RESET_DT=0.18;
+
+/* Reacquisition bridge: only active after a real short dropout. */
+const REACQUIRE_BRIDGE_TRIGGER_MS=65;
+const REACQUIRE_BRIDGE_DURATION_MS=90;
+const REACQUIRE_BRIDGE_MAX_POSITION=0.035;
+const REACQUIRE_BRIDGE_MAX_ROTATION=THREE.MathUtils.degToRad(35);
 
 /* camera model, unchanged */
 const horizontalFovRad=THREE.MathUtils.degToRad(60);
@@ -73,6 +90,7 @@ let lastDetectionLatencyMs=0,lastMainTimeMs=0,lastRoiTimeMs=0,lastFrameAgeAtResu
 let lastVisibleIDs=[],lastCenterSpread=null,lastRotationSpread=null,lastAltSelections=0,totalAltSelections=0,lastSolutionScore=null,trackingMode="KEINE POSE";
 let lastJointUsed=false,lastJointTags=0,lastReprojectionBefore=null,lastReprojectionAfter=null,lastJointTimeMs=0;
 let detectorSource="–",roiAttempts=0,roiHits=0,fullFallbacks=0,lastRoiText="–";
+let fullAttempts=0,fullHits=0,recoveryMode=false,recoveryFrames=0,consecutiveMisses=0;
 let cameraModeText="Standard";
 
 const scene=new THREE.Scene();
@@ -201,6 +219,11 @@ function registerGoodPose(position,quaternion,frameTime){
       if(angularVelocity>1e-5){if(angularVelocityAxis.dot(axis)<0){axis.multiplyScalar(-1);av*=-1;}angularVelocityAxis.lerp(axis,VELOCITY_BLEND).normalize();angularVelocity=THREE.MathUtils.lerp(angularVelocity,av,VELOCITY_BLEND);}
       else{angularVelocityAxis.copy(axis);angularVelocity=av;}
     } else angularVelocity=THREE.MathUtils.lerp(angularVelocity,0,VELOCITY_BLEND);
+  } else if(dt>=.15){
+    /* Never carry stale pre-dropout velocity into a newly reacquired pose.
+       The next good frame re-learns motion within ~33 ms. */
+    linearVelocity.set(0,0,0);
+    angularVelocity=0;
   }
   lastGoodPosition.copy(position);lastGoodQuaternion.copy(quaternion);lastGoodPoseTime=frameTime;
 }
@@ -284,7 +307,24 @@ function processDetections(detections,frameTime){
   let finalPosition=chosen.fused.position,finalQuaternion=chosen.fused.quaternion;lastJointTags=chosen.combo.length;
   if(chosen.combo.length>=JOINT_MIN_TAGS){const refined=refineJointCubePose(finalPosition,finalQuaternion,chosen.combo);lastReprojectionBefore=refined.before;lastReprojectionAfter=refined.after;lastJointTimeMs=refined.timeMs;if(refined.accepted){finalPosition=refined.position;finalQuaternion=refined.quaternion;lastJointUsed=true;}else lastJointUsed=false;}
   else{lastJointUsed=false;lastReprojectionBefore=null;lastReprojectionAfter=null;lastJointTimeMs=0;}
-  registerGoodPose(finalPosition,finalQuaternion,frameTime);return true;
+  /* If tracking returns after a short gap, remember what the
+     viewer was seeing just before the new absolute measurement arrives.
+     A short bridge will remove the remaining small reacquisition snap. */
+  const gapBefore=lastGoodPoseTime===null?0:Math.max(0,frameTime-lastGoodPoseTime);
+  const bridgeNow=performance.now();
+  const previousDisplayedPrediction=
+    gapBefore>=REACQUIRE_BRIDGE_TRIGGER_MS
+      ? predictedPoseAt(bridgeNow,MAX_PREDICTION_TIME_MS)
+      : null;
+
+  registerGoodPose(finalPosition,finalQuaternion,frameTime);
+
+  if(previousDisplayedPrediction){
+    const newPrediction=predictedPoseAt(bridgeNow,MAX_PREDICTION_TIME_MS);
+    if(newPrediction)armReacquireBridge(previousDisplayedPrediction,newPrediction,bridgeNow);
+  }
+
+  return true;
 }
 
 async function initializeAprilTag(){
@@ -330,35 +370,108 @@ function getFrameTimestamp(callbackNow,metadata){
   if(lastFrameTimestamp!==null&&selected<=lastFrameTimestamp){selected=Math.max(callbackNow,lastFrameTimestamp+.1);frameTimeSource+="+monoton";}lastFrameTimestamp=selected;return selected;
 }
 
-function predictedCubeROI(frameTime){
-  const pred=predictedPoseAt(frameTime,ROI_TRACK_MAX_AGE_MS);if(!pred)return null;
-  const pts=[];for(const v of cubeVertices){const p=projectCubePoint(v,pred.position,pred.quaternion);if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y))pts.push(p);}if(pts.length<4)return null;
-  let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
-  let w=maxX-minX,h=maxY-minY;if(w<=0||h<=0)return null;
-  const pad=Math.max(ROI_MIN_PADDING_PX,Math.max(w,h)*ROI_PADDING_FACTOR);minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
-  let cxr=(minX+maxX)/2,cyr=(minY+maxY)/2;w=maxX-minX;h=maxY-minY;
-  if(w<ROI_MIN_SIZE_PX)w=ROI_MIN_SIZE_PX;if(h<ROI_MIN_SIZE_PX)h=ROI_MIN_SIZE_PX;
+function polygonArea(points){
+  let a=0;
+  for(let i=0;i<points.length;i++){
+    const p=points[i],q=points[(i+1)%points.length];
+    a+=p.x*q.y-q.x*p.y;
+  }
+  return Math.abs(a)/2;
+}
+
+/* Predict the 2–3 cube faces that should be most visible next.
+   This is tighter than a whole-cube box and therefore enlarges
+   edge/corner tags more strongly during recovery. */
+function predictedFaceRecoveryROI(frameTime){
+  const pred=predictedPoseAt(frameTime,ROI_RECOVERY_MAX_AGE_MS);
+  if(!pred)return null;
+
+  const faces=[];
+  for(let id=0;id<=5;id++){
+    const worldCorners=[];
+    let valid=true;
+    for(const localPoint of cubeTagCorners[id]){
+      const projected=projectCubePoint(localPoint,pred.position,pred.quaternion);
+      if(!projected||!Number.isFinite(projected.x)||!Number.isFinite(projected.y)){valid=false;break;}
+      worldCorners.push(projected);
+    }
+    if(!valid)continue;
+
+    const localNormal=new THREE.Vector3(0,0,1).applyQuaternion(relativeFrom3[id]);
+    const worldNormal=localNormal.clone().applyQuaternion(pred.quaternion).normalize();
+    const localCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(relativeFrom3[id]);
+    const worldCenter=localCenter.clone().applyQuaternion(pred.quaternion).add(pred.position);
+    const toCamera=worldCenter.clone().multiplyScalar(-1);
+    let frontality=-1;
+    if(toCamera.lengthSq()>1e-12){toCamera.normalize();frontality=worldNormal.dot(toCamera);}
+
+    const area=Math.max(1,polygonArea(worldCorners));
+    /* Slightly negative frontality is intentionally allowed:
+       that is often the face that is just appearing around an edge. */
+    const visibility=Math.max(0.04,frontality+0.12);
+    faces.push({id,corners:worldCorners,frontality,area,score:visibility*Math.sqrt(area)});
+  }
+
+  if(!faces.length)return null;
+  faces.sort((a,b)=>b.score-a.score);
+  const selected=faces.slice(0,ROI_MAX_FACES);
+  const pts=selected.flatMap(f=>f.corners);
+
+  let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x));
+  let minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
+  let w=maxX-minX,h=maxY-minY;
+  if(w<=0||h<=0)return null;
+
+  const age=Math.max(0,frameTime-lastGoodPoseTime);
+  const motionFraction=Math.min(
+    1,
+    0.45*Math.min(1,Math.abs(angularVelocity)/MAX_ANGULAR_SPEED)+
+    0.30*Math.min(1,linearVelocity.length()/MAX_LINEAR_SPEED)+
+    0.25*Math.min(1,age/ROI_RECOVERY_MAX_AGE_MS)
+  );
+  const paddingFactor=ROI_PADDING_FACTOR+0.55*motionFraction;
+  const pad=Math.max(ROI_MIN_PADDING_PX,Math.max(w,h)*paddingFactor);
+
+  minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
+  let cxr=(minX+maxX)/2,cyr=(minY+maxY)/2;
+  w=maxX-minX;h=maxY-minY;
+  if(w<ROI_MIN_SIZE_PX)w=ROI_MIN_SIZE_PX;
+  if(h<ROI_MIN_SIZE_PX)h=ROI_MIN_SIZE_PX;
+
   let x0=cxr-w/2,y0=cyr-h/2,x1=cxr+w/2,y1=cyr+h/2;
   x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(WIDTH,x1);y1=Math.min(HEIGHT,y1);
-  w=x1-x0;h=y1-y0;if(w<40||h<40)return null;
-  return {x:x0,y:y0,width:w,height:h};
+  w=x1-x0;h=y1-y0;
+  if(w<40||h<40)return null;
+
+  return {x:x0,y:y0,width:w,height:h,ids:selected.map(f=>f.id)};
 }
+
 function remapRecoveryDetection(d,roi,sx,sy){
   const map=p=>{const q=getPoint(p);return q?{x:roi.x+q.x/sx,y:roi.y+q.y/sy}:p;};
   return {...d,corners:Array.isArray(d.corners)?d.corners.map(map):d.corners,center:d.center?map(d.center):d.center};
 }
-async function detectPredictedROI(frameTime){
-  const roi=predictedCubeROI(frameTime);if(!roi)return [];
+
+async function detectRecoveryROI(frameTime){
+  const roi=predictedFaceRecoveryROI(frameTime);
+  if(!roi)return [];
+
   roiAttempts++;
   const scale=Math.min(ROI_MAX_UPSCALE,ROI_MAX_DIM/Math.max(roi.width,roi.height));
-  const rw=Math.max(80,Math.round(roi.width*scale)),rh=Math.max(80,Math.round(roi.height*scale));
-  recoveryCanvas.width=rw;recoveryCanvas.height=rh;
+  const rw=Math.max(80,Math.round(roi.width*scale));
+  const rh=Math.max(80,Math.round(roi.height*scale));
+
+  recoveryCanvas.width=rw;
+  recoveryCanvas.height=rh;
   recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
-  const rgba=recoveryCtx.getImageData(0,0,rw,rh).data,g=new Uint8Array(rw*rh);
+
+  const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
+  const g=new Uint8Array(rw*rh);
   for(let i=0,j=0;i<rgba.length;i+=4,j++)g[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+
   const sx=rw/roi.width,sy=rh/roi.height;
   const rfx=fx*sx,rfy=fy*sy,rcx=(cx-roi.x)*sx,rcy=(cy-roi.y)*sy;
   const t0=performance.now();
+
   try{
     await apriltag.set_camera_info(rfx,rfy,rcx,rcy);
     const result=await apriltag.detect(g,rw,rh);
@@ -366,39 +479,108 @@ async function detectPredictedROI(frameTime){
     const arr=Array.isArray(result)?result:[];
     const relevant=arr.filter(isRelevantDetection).map(d=>remapRecoveryDetection(d,roi,sx,sy));
     if(relevant.length)roiHits++;
-    lastRoiText=`${Math.round(roi.width)}×${Math.round(roi.height)} → ${rw}×${rh}`;
+    lastRoiText=`Seiten ${roi.ids.join(",")} | ${Math.round(roi.width)}×${Math.round(roi.height)} → ${rw}×${rh}`;
     return relevant;
   } finally {
     await apriltag.set_camera_info(fx,fy,cx,cy);
   }
 }
 
+async function detectFullFrame(fullGray){
+  fullAttempts++;
+  const t0=performance.now();
+  const result=await apriltag.detect(fullGray,WIDTH,HEIGHT);
+  lastMainTimeMs=performance.now()-t0;
+  const relevant=(Array.isArray(result)?result:[]).filter(isRelevantDetection);
+  if(relevant.length)fullHits++;
+  return relevant;
+}
+
 async function detectCurrentVideoFrame(frameTime){
   detectionRunning=true;
   const pipelineStart=performance.now();
+
   try{
+    /* Always capture the native 640×480 frame once.
+       Stable tracking uses this native full-frame pose, exactly like 5c-10.
+       ROI is recovery-only and therefore cannot continuously inject crop jitter. */
     const fullGray=createFullGrayscale();
     let detections=[];
-    const canTrackROI=hasGoodPose&&lastGoodPoseTime!==null&&frameTime-lastGoodPoseTime>=0&&frameTime-lastGoodPoseTime<=ROI_TRACK_MAX_AGE_MS;
 
-    if(canTrackROI){
-      detections=await detectPredictedROI(frameTime);
-      if(detections.length){detectorSource="TRACK-ROI";lastMainTimeMs=0;}
-      else{
-        fullFallbacks++;const t0=performance.now();
-        const result=await apriltag.detect(fullGray,WIDTH,HEIGHT);lastMainTimeMs=performance.now()-t0;
-        detections=(Array.isArray(result)?result:[]).filter(isRelevantDetection);detectorSource=detections.length?"FULL-FALLBACK":"NICHTS";
+    const canRecover=
+      hasGoodPose&&
+      lastGoodPoseTime!==null&&
+      frameTime-lastGoodPoseTime>=0&&
+      frameTime-lastGoodPoseTime<=ROI_RECOVERY_MAX_AGE_MS;
+
+    if(!recoveryMode){
+      /* Normal operation: preserve the smooth 5c-10 measurement source. */
+      detections=await detectFullFrame(fullGray);
+
+      if(detections.length){
+        detectorSource="FULL-STABIL";
+        lastRoiTimeMs=0;
+      } else if(canRecover){
+        /* One failed full-frame detection: rescue the SAME camera frame
+           using a magnified, face-aware predicted ROI. */
+        fullFallbacks++;
+        detections=await detectRecoveryROI(frameTime);
+        detectorSource=detections.length?"FACE-ROI-RESCUE":"NICHTS";
+        if(!detections.length){
+          recoveryMode=true;
+          recoveryFrames=0;
+        }
+      } else {
+        detectorSource="NICHTS";
+        lastRoiTimeMs=0;
       }
     } else {
-      const t0=performance.now();const result=await apriltag.detect(fullGray,WIDTH,HEIGHT);lastMainTimeMs=performance.now()-t0;
-      detections=(Array.isArray(result)?result:[]).filter(isRelevantDetection);detectorSource=detections.length?"FULL":"NICHTS";lastRoiTimeMs=0;
+      /* During a short dropout, do not spend every frame on
+         full + ROI. Search the predicted next faces first. */
+      recoveryFrames++;
+
+      if(canRecover){
+        detections=await detectRecoveryROI(frameTime);
+      }
+
+      if(detections.length){
+        detectorSource="FACE-ROI-RECOVERY";
+      } else if(!canRecover || recoveryFrames%RECOVERY_FULL_EVERY_N===0){
+        detections=await detectFullFrame(fullGray);
+        detectorSource=detections.length?"FULL-REACQUIRE":"NICHTS";
+      } else {
+        detectorSource="ROI-SUCHE";
+        lastMainTimeMs=0;
+      }
     }
 
-    processDetections(detections,frameTime);
-    const end=performance.now();lastDetectionLatencyMs=end-pipelineStart;lastFrameAgeAtResultMs=Math.max(0,end-frameTime);
-    detectionCounter++;const now=performance.now();
-    if(now-detectionFpsStart>=1000){detectionFPS=detectionCounter/((now-detectionFpsStart)/1000);detectionCounter=0;detectionFpsStart=now;}
-  }catch(e){console.error(e);}finally{detectionRunning=false;}
+    const found=processDetections(detections,frameTime);
+
+    if(found){
+      consecutiveMisses=0;
+      recoveryMode=false;
+      recoveryFrames=0;
+    } else {
+      consecutiveMisses++;
+      if(canRecover)recoveryMode=true;
+    }
+
+    const end=performance.now();
+    lastDetectionLatencyMs=end-pipelineStart;
+    lastFrameAgeAtResultMs=Math.max(0,end-frameTime);
+
+    detectionCounter++;
+    const now=performance.now();
+    if(now-detectionFpsStart>=1000){
+      detectionFPS=detectionCounter/((now-detectionFpsStart)/1000);
+      detectionCounter=0;
+      detectionFpsStart=now;
+    }
+  }catch(e){
+    console.error(e);
+  }finally{
+    detectionRunning=false;
+  }
 }
 
 function onVideoFrame(callbackNow,metadata){
@@ -412,12 +594,167 @@ let fallbackLastVideoTime=-1;
 function fallbackVideoFrameLoop(){requestAnimationFrame(fallbackVideoFrameLoop);if(!cameraReady||!detectorReady||detectionRunning)return;if(video.currentTime===fallbackLastVideoTime)return;fallbackLastVideoTime=video.currentTime;frameTimeSource="Fallback";detectCurrentVideoFrame(performance.now());}
 function startVideoProcessing(){if(typeof video.requestVideoFrameCallback==="function")video.requestVideoFrameCallback(onVideoFrame);else requestAnimationFrame(fallbackVideoFrameLoop);}
 
+/* =====================================================
+   5c-12 DISPLAY STABILIZATION
+
+   This is deliberately NOT a slow pose filter:
+   the cutoff rises strongly with motion speed.
+   It mainly acts while the cube is nearly still.
+   ===================================================== */
+
+let filteredPoseReady=false,filterLastTime=null;
+const filteredPosition=new THREE.Vector3();
+const filteredQuaternion=new THREE.Quaternion();
+
+let bridgeActive=false,bridgeStartTime=0;
+const bridgePositionOffset=new THREE.Vector3();
+const bridgeRotationCorrection=new THREE.Quaternion();
+const identityQuaternion=new THREE.Quaternion();
+
+function lowPassAlpha(cutoff,dt){
+  const tau=1/(2*Math.PI*Math.max(0.001,cutoff));
+  return 1/(1+tau/Math.max(1e-4,dt));
+}
+
+function resetDisplayFilter(position,quaternion,now){
+  filteredPosition.copy(position);
+  filteredQuaternion.copy(quaternion);
+  filterLastTime=now;
+  filteredPoseReady=true;
+}
+
+function filterDisplayPose(position,quaternion,now){
+  if(!filteredPoseReady||filterLastTime===null){
+    resetDisplayFilter(position,quaternion,now);
+    return {position:filteredPosition,quaternion:filteredQuaternion};
+  }
+
+  const dt=(now-filterLastTime)/1000;
+  filterLastTime=now;
+
+  if(dt<=0||dt>FILTER_RESET_DT){
+    resetDisplayFilter(position,quaternion,now);
+    return {position:filteredPosition,quaternion:filteredQuaternion};
+  }
+
+  const linearSpeed=position.distanceTo(filteredPosition)/dt;
+  const positionCutoff=POS_MIN_CUTOFF+POS_BETA*linearSpeed;
+  const positionAlpha=lowPassAlpha(positionCutoff,dt);
+  filteredPosition.lerp(position,positionAlpha);
+
+  const targetQuaternion=quaternion.clone();
+  if(filteredQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  const angularSpeedNow=quaternionAngle(filteredQuaternion,targetQuaternion)/dt;
+  const rotationCutoff=ROT_MIN_CUTOFF+ROT_BETA*angularSpeedNow;
+  const rotationAlpha=lowPassAlpha(rotationCutoff,dt);
+  filteredQuaternion.slerp(targetQuaternion,rotationAlpha).normalize();
+
+  return {position:filteredPosition,quaternion:filteredQuaternion};
+}
+
+function armReacquireBridge(oldPose,newPose,now){
+  const positionDifference=oldPose.position.distanceTo(newPose.position);
+  const rotationDifference=quaternionAngle(oldPose.quaternion,newPose.quaternion);
+
+  if(
+    positionDifference>REACQUIRE_BRIDGE_MAX_POSITION||
+    rotationDifference>REACQUIRE_BRIDGE_MAX_ROTATION
+  ){
+    bridgeActive=false;
+    return;
+  }
+
+  bridgePositionOffset
+    .copy(oldPose.position)
+    .sub(newPose.position);
+
+  bridgeRotationCorrection
+    .copy(oldPose.quaternion)
+    .multiply(newPose.quaternion.clone().invert())
+    .normalize();
+
+  bridgeStartTime=now;
+  bridgeActive=true;
+}
+
+function applyReacquireBridge(position,quaternion,now){
+  if(!bridgeActive)return {position,quaternion};
+
+  const t=(now-bridgeStartTime)/REACQUIRE_BRIDGE_DURATION_MS;
+  if(t>=1){
+    bridgeActive=false;
+    return {position,quaternion};
+  }
+
+  const x=THREE.MathUtils.clamp(t,0,1);
+  /* smoothstep decay 1 -> 0 */
+  const weight=1-(x*x*(3-2*x));
+
+  const bridgedPosition=
+    position.clone().addScaledVector(bridgePositionOffset,weight);
+
+  const correction=
+    identityQuaternion.clone().slerp(bridgeRotationCorrection,weight);
+
+  const bridgedQuaternion=
+    correction.multiply(quaternion.clone()).normalize();
+
+  return {position:bridgedPosition,quaternion:bridgedQuaternion};
+}
+
 function updateRenderedPose(now){
-  if(!hasGoodPose||lastGoodPoseTime===null){methane.visible=false;trackingMode="KEINE POSE";return;}
-  const age=Math.max(0,now-lastGoodPoseTime);if(age>MAX_PREDICTION_TIME_MS){methane.visible=false;trackingMode="VERLOREN";return;}
-  const p=predictedPoseAt(now,MAX_PREDICTION_TIME_MS);if(!p){methane.visible=false;return;}
-  methane.position.copy(p.position);methane.quaternion.copy(p.quaternion);methane.visible=true;
-  if(age<=Math.max(55,lastFrameAgeAtResultMs+10))trackingMode=lastJointUsed?"JOINT + ZEITKOMP.":"APRILTAG + ZEITKOMP.";else trackingMode="PROGNOSE";
+  if(!hasGoodPose||lastGoodPoseTime===null){
+    methane.visible=false;
+    trackingMode="KEINE POSE";
+    filteredPoseReady=false;
+    return;
+  }
+
+  const age=Math.max(0,now-lastGoodPoseTime);
+
+  /* Normal prediction window: keep following the cube. */
+  if(age<=MAX_PREDICTION_TIME_MS){
+    const p=predictedPoseAt(now,MAX_PREDICTION_TIME_MS);
+    if(!p){methane.visible=false;return;}
+
+    const bridged=applyReacquireBridge(p.position,p.quaternion,now);
+    const filtered=filterDisplayPose(bridged.position,bridged.quaternion,now);
+
+    methane.position.copy(filtered.position);
+    methane.quaternion.copy(filtered.quaternion);
+    methane.visible=true;
+
+    if(age<=Math.max(55,lastFrameAgeAtResultMs+10)){
+      trackingMode=lastJointUsed?"JOINT + STABIL":"APRILTAG + STABIL";
+    }else{
+      trackingMode=recoveryMode?"RECOVERY + PROGNOSE":"PROGNOSE";
+    }
+    return;
+  }
+
+  /* Medium dropout: do not blink. Hold the last plausible predicted
+     pose while the face-aware detector is trying to reacquire. */
+  if(age<=MAX_HOLD_TIME_MS){
+    const p=predictedPoseAt(lastGoodPoseTime+MAX_PREDICTION_TIME_MS,MAX_PREDICTION_TIME_MS);
+    if(!p){methane.visible=false;return;}
+
+    const bridged=applyReacquireBridge(p.position,p.quaternion,now);
+    const filtered=filterDisplayPose(bridged.position,bridged.quaternion,now);
+
+    methane.position.copy(filtered.position);
+    methane.quaternion.copy(filtered.quaternion);
+    methane.visible=true;
+    trackingMode="RECOVERY + HALTEN";
+    return;
+  }
+
+  methane.visible=false;
+  trackingMode="VERLOREN";
+  filteredPoseReady=false;
+  bridgeActive=false;
 }
 function resize(){
   const sw=innerWidth,sh=innerHeight,va=WIDTH/HEIGHT,sa=sw/sh;let w,h;if(sa>va){h=sh;w=h*va;}else{w=sw;h=w/va;}const l=(sw-w)/2,t=(sh-h)/2;
@@ -425,11 +762,46 @@ function resize(){
 }
 addEventListener("resize",resize);resize();
 function updateStatus(now){
-  const ids=lastVisibleIDs.length?lastVisibleIDs.join(", "):"–",age=lastGoodPoseTime===null?0:Math.max(0,now-lastGoodPoseTime);
-  const ps=lastCenterSpread===null?"–":(lastCenterSpread*1000).toFixed(1)+" mm",rs=lastRotationSpread===null?"–":lastRotationSpread.toFixed(2)+"°",score=lastSolutionScore===null?"–":lastSolutionScore.toFixed(2);
-  const repro=lastReprojectionBefore===null||lastReprojectionAfter===null?"–":`${lastReprojectionBefore.toFixed(2)} → ${lastReprojectionAfter.toFixed(2)} px`;
-  const hitRate=roiAttempts?100*roiHits/roiAttempts:0;
-  status.textContent=`GeoChemAR ${VERSION}\nSichtbare IDs: ${ids}\nKamera: ${cameraModeText}\nKamera-Frames/s: ${videoFPS.toFixed(1)}\nErkennungen/s: ${detectionFPS.toFixed(1)}\n\nTracking: ${trackingMode}\nDetektorquelle: ${detectorSource}\nMessalter: ${age.toFixed(0)} ms\nPipeline: ${lastDetectionLatencyMs.toFixed(0)} ms\nROI-Zeit: ${lastRoiTimeMs.toFixed(0)} ms\nFull-Zeit: ${lastMainTimeMs.toFixed(0)} ms\nFramealter: ${lastFrameAgeAtResultMs.toFixed(0)} ms\n\nROI: ${lastRoiText}\nROI-Treffer: ${roiHits}/${roiAttempts} (${hitRate.toFixed(0)} %)\nFull-Fallbacks: ${fullFallbacks}\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}\nJoint-Tags: ${lastJointTags}\nReprojektion: ${repro}\nJoint-Zeit: ${lastJointTimeMs.toFixed(2)} ms\n\nAlt-Pose aktuell: ${lastAltSelections}\nLösungsscore: ${score}\nPositionsabw.: ${ps}\nRotationsabw.: ${rs}\nBusy übersprungen: ${skippedBecauseBusy}\nVideo-Frames verpasst: ${skippedPresentedFrames}`;
+  const ids=lastVisibleIDs.length?lastVisibleIDs.join(", "):"–";
+  const age=lastGoodPoseTime===null?0:Math.max(0,now-lastGoodPoseTime);
+  const ps=lastCenterSpread===null?"–":(lastCenterSpread*1000).toFixed(1)+" mm";
+  const rs=lastRotationSpread===null?"–":lastRotationSpread.toFixed(2)+"°";
+  const score=lastSolutionScore===null?"–":lastSolutionScore.toFixed(2);
+  const repro=lastReprojectionBefore===null||lastReprojectionAfter===null
+    ?"–"
+    :`${lastReprojectionBefore.toFixed(2)} → ${lastReprojectionAfter.toFixed(2)} px`;
+  const roiHitRate=roiAttempts?100*roiHits/roiAttempts:0;
+  const fullHitRate=fullAttempts?100*fullHits/fullAttempts:0;
+
+  status.textContent=
+    `GeoChemAR ${VERSION}`+
+    `\nSichtbare IDs: ${ids}`+
+    `\nKamera: ${cameraModeText}`+
+    `\nKamera-Frames/s: ${videoFPS.toFixed(1)}`+
+    `\nErkennungen/s: ${detectionFPS.toFixed(1)}`+
+    `\n\nTracking: ${trackingMode}`+
+    `\nDetektorquelle: ${detectorSource}`+
+    `\nRecovery-Modus: ${recoveryMode?"JA":"NEIN"}`+
+    `\nFehlframes in Folge: ${consecutiveMisses}`+
+    `\nMessalter: ${age.toFixed(0)} ms`+
+    `\nPipeline: ${lastDetectionLatencyMs.toFixed(0)} ms`+
+    `\nROI-Zeit: ${lastRoiTimeMs.toFixed(0)} ms`+
+    `\nFull-Zeit: ${lastMainTimeMs.toFixed(0)} ms`+
+    `\nFramealter: ${lastFrameAgeAtResultMs.toFixed(0)} ms`+
+    `\n\nFull-Treffer: ${fullHits}/${fullAttempts} (${fullHitRate.toFixed(0)} %)`+
+    `\nRecovery-ROI: ${lastRoiText}`+
+    `\nROI-Treffer: ${roiHits}/${roiAttempts} (${roiHitRate.toFixed(0)} %)`+
+    `\nFull→ROI-Rettungen: ${fullFallbacks}`+
+    `\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}`+
+    `\nJoint-Tags: ${lastJointTags}`+
+    `\nReprojektion: ${repro}`+
+    `\nJoint-Zeit: ${lastJointTimeMs.toFixed(2)} ms`+
+    `\n\nAlt-Pose aktuell: ${lastAltSelections}`+
+    `\nLösungsscore: ${score}`+
+    `\nPositionsabw.: ${ps}`+
+    `\nRotationsabw.: ${rs}`+
+    `\nBusy übersprungen: ${skippedBecauseBusy}`+
+    `\nVideo-Frames verpasst: ${skippedPresentedFrames}`;
 }
 function animate(now){requestAnimationFrame(animate);updateRenderedPose(now);updateStatus(now);renderer.render(scene,camera);}
 function showError(e){console.error(e);errorBox.style.display="block";errorBox.textContent="FEHLER:\n"+(e?.stack||String(e));}
