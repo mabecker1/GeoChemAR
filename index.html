@@ -8,7 +8,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>GeoChemAR – MultiMarker API-Test</title>
+  <title>GeoChemAR – Kalibrierung Marker 1/2</title>
 
   <style>
     html, body {
@@ -26,6 +26,7 @@
       top: 10px;
       left: 10px;
       z-index: 9999;
+      max-width: 520px;
       padding: 10px 14px;
       border-radius: 8px;
       background: rgba(0,0,0,0.78);
@@ -70,7 +71,7 @@
 
 <body>
 
-<div id="status">1 – HTML geladen</div>
+<div id="status">Initialisierung …</div>
 <div id="error"></div>
 
 
@@ -126,6 +127,7 @@ function setStatus(text) {
 
 
 function showError(error) {
+
   console.error(error);
 
   errorBox.style.display = "block";
@@ -137,32 +139,22 @@ function showError(error) {
         ? error.stack
         : String(error)
     );
+
 }
 
 
 try {
 
   /* =====================================================
-     1. MODULE
+     MODULE
      ===================================================== */
-
-  setStatus(
-    "2 – Three.js wird geladen …"
-  );
 
   const THREE =
     await import("three");
 
-  setStatus(
-    "3 – Three.js geladen"
-  );
 
   const THREEX =
     await import("threex");
-
-  setStatus(
-    "4 – AR.js geladen"
-  );
 
 
   const {
@@ -174,7 +166,7 @@ try {
 
 
   /* =====================================================
-     2. THREE.JS
+     THREE.JS
      ===================================================== */
 
   const scene =
@@ -183,6 +175,7 @@ try {
 
   const camera =
     new THREE.Camera();
+
 
   scene.add(camera);
 
@@ -206,19 +199,6 @@ try {
   );
 
 
-  renderer.domElement.style.position =
-    "fixed";
-
-  renderer.domElement.style.top =
-    "0px";
-
-  renderer.domElement.style.left =
-    "0px";
-
-  renderer.domElement.style.zIndex =
-    "2";
-
-
   document.body.appendChild(
     renderer.domElement
   );
@@ -226,259 +206,38 @@ try {
 
 
   /* =====================================================
-     3. MARKER ROOT
+     ZWEI MARKERROOTS
      ===================================================== */
 
-  const markerRoot =
+  const marker1Root =
     new THREE.Group();
 
-  markerRoot.visible =
+
+  const marker2Root =
+    new THREE.Group();
+
+
+  marker1Root.visible =
     false;
 
+
+  marker2Root.visible =
+    false;
+
+
   scene.add(
-    markerRoot
+    marker1Root
+  );
+
+
+  scene.add(
+    marker2Root
   );
 
 
 
   /* =====================================================
-     4. METHAN
-     ===================================================== */
-
-  const methane =
-    new THREE.Group();
-
-
-  const carbonRadius =
-    0.22;
-
-  const hydrogenRadius =
-    0.14;
-
-  const hydrogenDistance =
-    0.72;
-
-  const bondRadius =
-    0.040;
-
-
-  const carbonMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0x202020
-    });
-
-
-  const hydrogenMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0xffffff
-    });
-
-
-  const bondMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0xb8bec7
-    });
-
-
-
-  /* Kohlenstoff */
-
-  const carbon =
-    new THREE.Mesh(
-
-      new THREE.SphereGeometry(
-        carbonRadius,
-        48,
-        32
-      ),
-
-      carbonMaterial
-
-    );
-
-
-  methane.add(
-    carbon
-  );
-
-
-
-  /* Exakte Tetraederrichtungen */
-
-  const directions = [
-
-    new THREE.Vector3(
-      1,
-      1,
-      1
-    ).normalize(),
-
-    new THREE.Vector3(
-      1,
-      -1,
-      -1
-    ).normalize(),
-
-    new THREE.Vector3(
-      -1,
-      1,
-      -1
-    ).normalize(),
-
-    new THREE.Vector3(
-      -1,
-      -1,
-      1
-    ).normalize()
-
-  ];
-
-
-
-  directions.forEach(
-    function(direction) {
-
-      /* Wasserstoff */
-
-      const hydrogen =
-        new THREE.Mesh(
-
-          new THREE.SphereGeometry(
-            hydrogenRadius,
-            40,
-            28
-          ),
-
-          hydrogenMaterial
-
-        );
-
-
-      hydrogen.position.copy(
-
-        direction
-          .clone()
-          .multiplyScalar(
-            hydrogenDistance
-          )
-
-      );
-
-
-      methane.add(
-        hydrogen
-      );
-
-
-
-      /* Bindung */
-
-      const startDistance =
-        carbonRadius;
-
-
-      const endDistance =
-        hydrogenDistance -
-        hydrogenRadius;
-
-
-      const startPoint =
-        direction
-          .clone()
-          .multiplyScalar(
-            startDistance
-          );
-
-
-      const endPoint =
-        direction
-          .clone()
-          .multiplyScalar(
-            endDistance
-          );
-
-
-      const bondVector =
-        endPoint
-          .clone()
-          .sub(
-            startPoint
-          );
-
-
-      const bondLength =
-        bondVector.length();
-
-
-      const bondGeometry =
-        new THREE.CylinderGeometry(
-          bondRadius,
-          bondRadius,
-          bondLength,
-          32,
-          1,
-          false
-        );
-
-
-      const bond =
-        new THREE.Mesh(
-          bondGeometry,
-          bondMaterial
-        );
-
-
-      bond.position.copy(
-
-        startPoint
-          .clone()
-          .add(
-            endPoint
-          )
-          .multiplyScalar(
-            0.5
-          )
-
-      );
-
-
-      bond.quaternion.setFromUnitVectors(
-
-        new THREE.Vector3(
-          0,
-          1,
-          0
-        ),
-
-        direction
-
-      );
-
-
-      methane.add(
-        bond
-      );
-
-    }
-  );
-
-
-
-  methane.position.set(
-    0,
-    0.75,
-    0
-  );
-
-
-  markerRoot.add(
-    methane
-  );
-
-
-
-  /* =====================================================
-     5. KAMERA
+     AR SOURCE
      ===================================================== */
 
   const arToolkitSource =
@@ -503,7 +262,7 @@ try {
 
 
   setStatus(
-    "5 – Kamera wird angefordert …"
+    "Kamera wird gestartet …"
   );
 
 
@@ -529,6 +288,10 @@ try {
 
 
 
+  /* =====================================================
+     VIDEO
+     ===================================================== */
+
   const video =
     arToolkitSource.domElement;
 
@@ -536,7 +299,7 @@ try {
   if (!video) {
 
     throw new Error(
-      "AR.js hat kein Videoelement erzeugt."
+      "Kein Videoelement vorhanden."
     );
 
   }
@@ -546,6 +309,7 @@ try {
     "playsinline",
     ""
   );
+
 
   video.muted =
     true;
@@ -572,18 +336,13 @@ try {
 
 
   /* =====================================================
-     6. AUF ECHTES VIDEOBILD WARTEN
+     AUF VIDEO WARTEN
      ===================================================== */
 
   if (
     video.readyState < 2 ||
     video.videoWidth === 0
   ) {
-
-    setStatus(
-      "6 – Kamera geöffnet, warte auf Videobild …"
-    );
-
 
     await new Promise(
       (resolve, reject) => {
@@ -594,7 +353,7 @@ try {
 
               reject(
                 new Error(
-                  "Die Kamera liefert nach 10 Sekunden noch kein Videobild."
+                  "Kein Kamerabild nach 10 Sekunden."
                 )
               );
 
@@ -603,7 +362,7 @@ try {
           );
 
 
-        function videoReady() {
+        function ready() {
 
           if (
             video.videoWidth > 0 &&
@@ -617,13 +376,13 @@ try {
 
             video.removeEventListener(
               "canplay",
-              videoReady
+              ready
             );
 
 
             video.removeEventListener(
               "loadedmetadata",
-              videoReady
+              ready
             );
 
 
@@ -636,17 +395,17 @@ try {
 
         video.addEventListener(
           "canplay",
-          videoReady
+          ready
         );
 
 
         video.addEventListener(
           "loadedmetadata",
-          videoReady
+          ready
         );
 
 
-        videoReady();
+        ready();
 
       }
     );
@@ -656,7 +415,7 @@ try {
 
 
   /* =====================================================
-     7. BEWÄHRTE 640×480 / 30 FPS
+     BEWÄHRTE KAMERA-CONSTRAINTS
      ===================================================== */
 
   try {
@@ -712,13 +471,8 @@ try {
 
 
   /* =====================================================
-     8. ARTOOLKIT
+     ARTOOLKIT
      ===================================================== */
-
-  setStatus(
-    "7 – ARToolKit wird initialisiert …"
-  );
-
 
   const arToolkitContext =
     new ArToolkitContext({
@@ -786,79 +540,15 @@ try {
 
 
   /* =====================================================
-     9. MULTIMARKER-API DIAGNOSE
+     MARKER 1
      ===================================================== */
 
-  const controller =
-    arToolkitContext.arController;
-
-
-  if (!controller) {
-
-    throw new Error(
-      "arToolkitContext.arController ist nicht vorhanden."
-    );
-
-  }
-
-
-  const hasLoadMultiMarker =
-    typeof controller.loadMultiMarker ===
-    "function";
-
-
-  const hasGetMultiMarkerCount =
-    typeof controller.getMultiMarkerCount ===
-    "function";
-
-
-  const hasGetMultiMarkerPatternCount =
-    typeof controller.getMultiMarkerPatternCount ===
-    "function";
-
-
-  const apiText =
-
-    "MultiMarker-API:\n" +
-
-    "loadMultiMarker: " +
-    (
-      hasLoadMultiMarker
-        ? "JA"
-        : "NEIN"
-    ) +
-
-    "\ngetMultiMarkerCount: " +
-    (
-      hasGetMultiMarkerCount
-        ? "JA"
-        : "NEIN"
-    ) +
-
-    "\ngetMultiMarkerPatternCount: " +
-    (
-      hasGetMultiMarkerPatternCount
-        ? "JA"
-        : "NEIN"
-    );
-
-
-  console.log(
-    apiText
-  );
-
-
-
-  /* =====================================================
-     10. MARKER 1 – UNVERÄNDERT
-     ===================================================== */
-
-  const markerControls =
+  const marker1Controls =
     new ArMarkerControls(
 
       arToolkitContext,
 
-      markerRoot,
+      marker1Root,
 
       {
 
@@ -881,7 +571,38 @@ try {
 
 
   /* =====================================================
-     11. RESIZE
+     MARKER 2
+     ===================================================== */
+
+  const marker2Controls =
+    new ArMarkerControls(
+
+      arToolkitContext,
+
+      marker2Root,
+
+      {
+
+        type:
+          "barcode",
+
+        barcodeValue:
+          2,
+
+        size:
+          1,
+
+        changeMatrixMode:
+          "modelViewMatrix"
+
+      }
+
+    );
+
+
+
+  /* =====================================================
+     RESIZE
      ===================================================== */
 
   function onResize() {
@@ -925,30 +646,196 @@ try {
   video.style.zIndex =
     "1";
 
+
   renderer.domElement.style.zIndex =
     "2";
 
 
 
   /* =====================================================
-     12. STATUS
+     RELATIVE TRANSFORMATION
+
+     M12 = inverse(W1) * W2
+
+     Damit beschreiben wir Marker 2
+     im Koordinatensystem von Marker 1.
      ===================================================== */
 
-  setStatus(
-    "API-Test abgeschlossen\n\n" +
-    apiText +
-    "\n\nMarker 1 zeigen"
-  );
+  const inverse1 =
+    new THREE.Matrix4();
+
+
+  const relative12 =
+    new THREE.Matrix4();
+
+
+  const relativePosition =
+    new THREE.Vector3();
+
+
+  const relativeQuaternion =
+    new THREE.Quaternion();
+
+
+  const relativeScale =
+    new THREE.Vector3();
 
 
 
   /* =====================================================
-     13. RENDER LOOP
+     STABILE MESSUNG
+
+     Wir sammeln nur Frames, in denen
+     BEIDE Marker gleichzeitig erkannt werden.
      ===================================================== */
 
-  let previousVisible =
+  const samples =
+    [];
+
+
+  const REQUIRED_SAMPLES =
+    30;
+
+
+  let finished =
     false;
 
+
+
+  function quaternionToText(q) {
+
+    return (
+      q.x.toFixed(5) + ", " +
+      q.y.toFixed(5) + ", " +
+      q.z.toFixed(5) + ", " +
+      q.w.toFixed(5)
+    );
+
+  }
+
+
+
+  function positionToText(p) {
+
+    return (
+      p.x.toFixed(4) + ", " +
+      p.y.toFixed(4) + ", " +
+      p.z.toFixed(4)
+    );
+
+  }
+
+
+
+  function calculateAverage() {
+
+    if (
+      samples.length === 0
+    ) {
+      return null;
+    }
+
+
+    /* -------------------------
+       Position mitteln
+       ------------------------- */
+
+    const avgPosition =
+      new THREE.Vector3();
+
+
+    samples.forEach(
+      function(sample) {
+
+        avgPosition.add(
+          sample.position
+        );
+
+      }
+    );
+
+
+    avgPosition.multiplyScalar(
+      1 / samples.length
+    );
+
+
+
+    /* -------------------------
+       Quaternion mitteln
+
+       Alle Quaternions zunächst
+       auf dieselbe Hemisphäre
+       bringen.
+       ------------------------- */
+
+    const reference =
+      samples[0].quaternion;
+
+
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let w = 0;
+
+
+    samples.forEach(
+      function(sample) {
+
+        const q =
+          sample.quaternion.clone();
+
+
+        if (
+          reference.dot(q) < 0
+        ) {
+
+          q.x *= -1;
+          q.y *= -1;
+          q.z *= -1;
+          q.w *= -1;
+
+        }
+
+
+        x += q.x;
+        y += q.y;
+        z += q.z;
+        w += q.w;
+
+      }
+    );
+
+
+    const avgQuaternion =
+      new THREE.Quaternion(
+        x,
+        y,
+        z,
+        w
+      );
+
+
+    avgQuaternion.normalize();
+
+
+    return {
+
+      position:
+        avgPosition,
+
+      quaternion:
+        avgQuaternion
+
+    };
+
+  }
+
+
+
+  /* =====================================================
+     RENDER LOOP
+     ===================================================== */
 
   function animate() {
 
@@ -968,31 +855,171 @@ try {
     }
 
 
-    if (
-      markerRoot.visible !==
-      previousVisible
-    ) {
 
-      previousVisible =
-        markerRoot.visible;
-
+    if (!finished) {
 
       if (
-        markerRoot.visible
+        marker1Root.visible &&
+        marker2Root.visible
       ) {
 
-        setStatus(
-          "Marker 1 erkannt – Methan\n\n" +
-          apiText
+        /*
+         * MatrixWorld aktualisieren
+         */
+
+        marker1Root.updateMatrixWorld(
+          true
         );
+
+
+        marker2Root.updateMatrixWorld(
+          true
+        );
+
+
+        /*
+         * inverse(W1)
+         */
+
+        inverse1
+          .copy(
+            marker1Root.matrixWorld
+          )
+          .invert();
+
+
+        /*
+         * relative12 =
+         * inverse(W1) * W2
+         */
+
+        relative12.multiplyMatrices(
+
+          inverse1,
+
+          marker2Root.matrixWorld
+
+        );
+
+
+        relative12.decompose(
+
+          relativePosition,
+
+          relativeQuaternion,
+
+          relativeScale
+
+        );
+
+
+        samples.push({
+
+          position:
+            relativePosition.clone(),
+
+          quaternion:
+            relativeQuaternion.clone()
+
+        });
+
+
+
+        setStatus(
+
+          "Marker 1 + 2 erkannt\n\n" +
+
+          "Messung: " +
+          samples.length +
+          " / " +
+          REQUIRED_SAMPLES +
+
+          "\n\nWürfel möglichst ruhig halten."
+
+        );
+
+
+
+        if (
+          samples.length >=
+          REQUIRED_SAMPLES
+        ) {
+
+          finished =
+            true;
+
+
+          const result =
+            calculateAverage();
+
+
+          setStatus(
+
+            "MESSUNG FERTIG\n\n" +
+
+            "1 → 2\n\n" +
+
+            "Position:\n" +
+            positionToText(
+              result.position
+            ) +
+
+            "\n\nQuaternion x,y,z,w:\n" +
+            quaternionToText(
+              result.quaternion
+            ) +
+
+            "\n\nDiese Werte bitte an mich schicken."
+
+          );
+
+        }
 
       }
 
       else {
 
+        let visibleText =
+          "Keiner";
+
+
+        if (
+          marker1Root.visible &&
+          !marker2Root.visible
+        ) {
+
+          visibleText =
+            "nur Marker 1";
+
+        }
+
+
+        if (
+          !marker1Root.visible &&
+          marker2Root.visible
+        ) {
+
+          visibleText =
+            "nur Marker 2";
+
+        }
+
+
         setStatus(
-          "Marker 1 nicht sichtbar\n\n" +
-          apiText
+
+          "Kalibrierung Marker 1 ↔ 2\n\n" +
+
+          "Sichtbar: " +
+          visibleText +
+
+          "\n\nBitte Würfel so halten,\n" +
+          "dass Marker 1 UND 2 sichtbar sind." +
+
+          "\n\nMessung: " +
+          samples.length +
+          " / " +
+          REQUIRED_SAMPLES
+
         );
 
       }
