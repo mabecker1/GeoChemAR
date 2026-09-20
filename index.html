@@ -8,7 +8,7 @@
   content="width=device-width, initial-scale=1.0"
 >
 
-<title>GeoChemAR – MultiMarker Diagnose</title>
+<title>GeoChemAR – Native MultiMarker 1+2</title>
 
 <style>
 html, body {
@@ -35,9 +35,8 @@ html, body {
 
   font-size: 14px;
   line-height: 1.45;
-
-  pointer-events: none;
   white-space: pre-line;
+  pointer-events: none;
 }
 
 #error {
@@ -174,14 +173,13 @@ try {
 
   const {
     ArToolkitSource,
-    ArToolkitContext,
-    ArMarkerControls
+    ArToolkitContext
   } = THREEX;
 
 
 
   /* =====================================================
-     THREE
+     THREE.JS
      ===================================================== */
 
   const scene =
@@ -223,41 +221,30 @@ try {
 
 
   /* =====================================================
-     NORMALER MARKER 1
-
-     Genau dieser steuert das Methan.
+     GEMEINSAMER MULTIMARKER-ROOT
      ===================================================== */
 
-  const marker1Root =
+  const cubeRoot =
     new THREE.Group();
 
 
-  marker1Root.visible =
+  /*
+   * Die Matrix kommt vollständig von
+   * JSARToolKit. Three.js darf sie daher
+   * nicht selbst aus Position/Rotation
+   * neu berechnen.
+   */
+
+  cubeRoot.matrixAutoUpdate =
+    false;
+
+
+  cubeRoot.visible =
     false;
 
 
   scene.add(
-    marker1Root
-  );
-
-
-
-  /* =====================================================
-     MARKER 2
-
-     Nur zur Diagnose.
-     ===================================================== */
-
-  const marker2Root =
-    new THREE.Group();
-
-
-  marker2Root.visible =
-    false;
-
-
-  scene.add(
-    marker2Root
+    cubeRoot
   );
 
 
@@ -324,7 +311,7 @@ try {
 
 
 
-  /* Tetraederrichtungen */
+  /* Exakte Tetraederrichtungen */
 
   const directions = [
 
@@ -486,18 +473,33 @@ try {
 
 
   /*
-   * Genau wie in unserer funktionierenden
-   * Einzelmarker-Version.
+   * MultiMarker arbeitet mit unseren
+   * realen Millimetermaßen.
+   *
+   * Das bisherige Methan war auf eine
+   * Markerbreite von 1 normiert.
+   *
+   * Markerbreite = 40 mm.
+   */
+
+  methane.scale.setScalar(
+    40
+  );
+
+
+  /*
+   * cube-12.dat definiert den Ursprung
+   * im Würfelzentrum.
    */
 
   methane.position.set(
     0,
-    0.75,
+    0,
     0
   );
 
 
-  marker1Root.add(
+  cubeRoot.add(
     methane
   );
 
@@ -526,7 +528,6 @@ try {
         480
 
     });
-
 
 
   status.textContent =
@@ -682,7 +683,7 @@ try {
 
 
   /* =====================================================
-     KAMERA-CONSTRAINTS
+     BEWÄHRTE KAMERAEINSTELLUNGEN
      ===================================================== */
 
   try {
@@ -827,68 +828,11 @@ try {
 
 
   /* =====================================================
-     NORMALE MARKER 1 + 2
-     ===================================================== */
-
-  const marker1Controls =
-    new ArMarkerControls(
-
-      arToolkitContext,
-
-      marker1Root,
-
-      {
-
-        type:
-          "barcode",
-
-        barcodeValue:
-          1,
-
-        size:
-          1,
-
-        changeMatrixMode:
-          "modelViewMatrix"
-
-      }
-
-    );
-
-
-  const marker2Controls =
-    new ArMarkerControls(
-
-      arToolkitContext,
-
-      marker2Root,
-
-      {
-
-        type:
-          "barcode",
-
-        barcodeValue:
-          2,
-
-        size:
-          1,
-
-        changeMatrixMode:
-          "modelViewMatrix"
-
-      }
-
-    );
-
-
-
-  /* =====================================================
      MULTIMARKER LADEN
      ===================================================== */
 
-  let multiLoaded =
-    false;
+  status.textContent =
+    "cube-12.dat wird geladen …";
 
 
   let multiMarkerId =
@@ -897,22 +841,6 @@ try {
 
   let loadedMarkerCount =
     null;
-
-
-  let multiEventCount =
-    0;
-
-
-  let lastMultiEventTime =
-    0;
-
-
-  let lastMultiKeys =
-    "—";
-
-
-  status.textContent =
-    "cube-12.dat wird geladen …";
 
 
   await new Promise(
@@ -935,10 +863,6 @@ try {
 
             loadedMarkerCount =
               markerNum;
-
-
-            multiLoaded =
-              true;
 
 
             resolve();
@@ -972,10 +896,21 @@ try {
 
 
   /* =====================================================
-     GETMULTIMARKER NUR BEOBACHTEN
-
-     KEINE Pose wird übernommen.
+     NATIVER MULTIMARKER
      ===================================================== */
+
+  let multiEventCount =
+    0;
+
+
+  let lastSeenTime =
+    0;
+
+
+  let receivedMatrix =
+    false;
+
+
 
   controller.addEventListener(
 
@@ -983,41 +918,68 @@ try {
 
     function(event) {
 
-      multiEventCount++;
+      if (
+        !event ||
+        !event.data
+      ) {
+
+        return;
+
+      }
 
 
-      lastMultiEventTime =
-        performance.now();
+      if (
+        event.data.multiMarkerId !==
+        multiMarkerId
+      ) {
+
+        return;
+
+      }
 
 
       /*
-       * Damit sehen wir zusätzlich,
-       * welche Felder unser konkreter
-       * Build tatsächlich liefert.
+       * ENTSCHEIDENDE ÄNDERUNG GEGENÜBER 4f-2:
+       *
+       * NICHT event.data.matrix,
+       * sondern matrixGL_RH.
+       *
+       * Diese Matrix ist bereits für das
+       * rechtshändige OpenGL/Three.js-
+       * Koordinatensystem umgerechnet.
        */
 
-      try {
+      if (
+        !event.data.matrixGL_RH
+      ) {
 
-        if (
-          event &&
-          event.data
-        ) {
-
-          lastMultiKeys =
-            Object.keys(
-              event.data
-            ).join(", ");
-
-        }
+        return;
 
       }
 
-      catch(error) {
 
-        lastMultiKeys =
-          "nicht lesbar";
+      cubeRoot.matrix.fromArray(
+        event.data.matrixGL_RH
+      );
 
-      }
+
+      cubeRoot.matrixWorldNeedsUpdate =
+        true;
+
+
+      cubeRoot.visible =
+        true;
+
+
+      multiEventCount++;
+
+
+      lastSeenTime =
+        performance.now();
+
+
+      receivedMatrix =
+        true;
 
     }
 
@@ -1077,81 +1039,7 @@ try {
 
 
   /* =====================================================
-     DIAGNOSEANZEIGE
-     ===================================================== */
-
-  function yesNo(value) {
-
-    return value
-      ? "JA"
-      : "NEIN";
-
-  }
-
-
-
-  function updateStatus() {
-
-    const multiRecentlySeen =
-
-      performance.now() -
-      lastMultiEventTime
-
-      <
-
-      500;
-
-
-    status.textContent =
-
-      "MULTIMARKER-DIAGNOSE\n\n" +
-
-      "cube-12.dat geladen: " +
-      yesNo(
-        multiLoaded
-      ) +
-
-      "\nMultiMarker-ID: " +
-      (
-        multiMarkerId === null
-          ? "—"
-          : multiMarkerId
-      ) +
-
-      "\nMarkeranzahl laut Datei: " +
-      (
-        loadedMarkerCount === null
-          ? "—"
-          : loadedMarkerCount
-      ) +
-
-      "\n\nMarker 1 erkannt: " +
-      yesNo(
-        marker1Root.visible
-      ) +
-
-      "\nMarker 2 erkannt: " +
-      yesNo(
-        marker2Root.visible
-      ) +
-
-      "\n\ngetMultiMarker aktuell: " +
-      yesNo(
-        multiRecentlySeen
-      ) +
-
-      "\ngetMultiMarker gesamt: " +
-      multiEventCount +
-
-      "\nEvent-Felder:\n" +
-      lastMultiKeys;
-
-  }
-
-
-
-  /* =====================================================
-     LOOP
+     RENDER LOOP
      ===================================================== */
 
   function animate() {
@@ -1172,7 +1060,62 @@ try {
     }
 
 
-    updateStatus();
+
+    /*
+     * Nur kurzer Sichtbarkeitshold.
+     * Keine Positions- oder Rotationsglättung.
+     */
+
+    if (
+      performance.now() -
+      lastSeenTime >
+      150
+    ) {
+
+      cubeRoot.visible =
+        false;
+
+    }
+
+
+
+    status.textContent =
+
+      "NATIVER MULTIMARKER 1+2\n\n" +
+
+      "MultiMarker-ID: " +
+      multiMarkerId +
+
+      "\nMarkeranzahl: " +
+      loadedMarkerCount +
+
+      "\n\nmatrixGL_RH empfangen: " +
+      (
+        receivedMatrix
+          ? "JA"
+          : "NEIN"
+      ) +
+
+      "\ngetMultiMarker gesamt: " +
+      multiEventCount +
+
+      "\nMethan sichtbar: " +
+      (
+        cubeRoot.visible
+          ? "JA"
+          : "NEIN"
+      ) +
+
+      "\n\n" +
+
+      (
+        cubeRoot.visible
+
+          ? "Jetzt langsam von Seite 1\nüber die Kante zu Seite 2 drehen."
+
+          : "Marker 1 und/oder 2 zeigen."
+      );
+
 
 
     renderer.render(
