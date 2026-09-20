@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – 5c-16 Mobile Stable Recovery</title>
+<title>GeoChemAR – 5c-17 Mobile Robust Motion + Sticky Stabilization</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
@@ -24,7 +24,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 import * as THREE from "./libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-const VERSION="5c-16";
+const VERSION="5c-17";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -105,44 +105,39 @@ const MOBILE_CAPTURE_HEIGHT=960;
 const MOBILE_EXPOSURE_COMPENSATION=-0.5;
 const MOBILE_ROI_MAX_DIM=520;
 const MOBILE_FACE_ROI_MAX_DIM=384;
-const MOBILE_RECOVERY_CYCLE=4; // preferred face / combined ROI / face / full frame
+const MOBILE_RECOVERY_CYCLE=4; // combined ROI, face 0, face 1, full frame
 
-/* 5c-16: mobile-only anti-jitter tuning.
-   Desktop keeps the proven 5c-14/15 stabilizer unchanged.
-   On phones the remaining detector noise is larger, especially at 50–60 fps.
-   We therefore suppress a larger micro-jitter band, but cap the visible
-   lag to well below 1 mm / 0.5° so movement still feels direct. */
-const MOBILE_MICRO_ALPHA_STILL=0.045;
-const MOBILE_MICRO_POS_START=0.00030;       // 0.30 mm
-const MOBILE_MICRO_POS_DIRECT=0.00220;      // >= 2.20 mm -> direct
-const MOBILE_MICRO_ROT_START=THREE.MathUtils.degToRad(0.20);
-const MOBILE_MICRO_ROT_DIRECT=THREE.MathUtils.degToRad(1.45);
-const MOBILE_MICRO_MAX_LAG_POS=0.00055;     // max 0.55 mm visible lag
-const MOBILE_MICRO_MAX_LAG_ROT=THREE.MathUtils.degToRad(0.38);
+/* 5c-17: mobile jitter is attacked at its source instead of by adding
+   another slow pose filter. The rendered pose stays direct, while only
+   the short-latency prediction velocity is estimated robustly from several
+   accepted stable full-frame poses. */
+const MOBILE_MOTION_HISTORY_MS=150;
+const MOBILE_MOTION_HISTORY_MAX=6;
+const MOBILE_MOTION_MIN_SEGMENT_MS=12;
+const MOBILE_MOTION_MAX_SEGMENT_MS=90;
+const MOBILE_MOTION_BLEND=0.58;
 
-/* Mobile capture can amplify velocity noise because the same pose noise is
-   differentiated over shorter frame intervals. Keep direct pose updates,
-   but be more conservative when turning pose differences into prediction
-   velocity. */
-const MOBILE_VELOCITY_BLEND=0.24;
-const MOBILE_VELOCITY_NOISE_POS=0.00045;
-const MOBILE_VELOCITY_NOISE_ROT=THREE.MathUtils.degToRad(0.32);
-const MOBILE_VELOCITY_NOISE_DECAY=0.28;
+/* 5c-17: speed-adaptive spatial deadband. This is NOT a temporal low-pass.
+   When the cube is nearly still, sub-mm / sub-degree noise remains inside a
+   small "sticky" sphere. As soon as real motion starts, that sphere shrinks
+   almost to zero. Therefore the maximum error is spatially bounded instead
+   of accumulating as visible trailing. */
+const MOBILE_STICKY_POS_STILL=0.00070;      // 0.70 mm
+const MOBILE_STICKY_POS_MOVING=0.00010;     // 0.10 mm
+const MOBILE_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.50);
+const MOBILE_STICKY_ROT_MOVING=THREE.MathUtils.degToRad(0.08);
+const MOBILE_STICKY_LINEAR_FULL=0.10;       // m/s => essentially direct
+const MOBILE_STICKY_ANGULAR_FULL=1.8;       // rad/s => essentially direct
+const MOBILE_STICKY_FORCE_DIRECT_POS=0.0018;
+const MOBILE_STICKY_FORCE_DIRECT_ROT=THREE.MathUtils.degToRad(1.35);
 
-/* Mobile recovery measurements previously bypassed the 5c-13 jump guard
-   because they use MOBILE-* source names. 5c-16 explicitly guards them. */
-const MOBILE_RECOVERY_GUARD_BASE_POSITION=0.012;
-const MOBILE_RECOVERY_GUARD_MAX_POSITION=0.045;
-const MOBILE_RECOVERY_GUARD_BASE_ROTATION=THREE.MathUtils.degToRad(15);
-const MOBILE_RECOVERY_GUARD_MAX_ROTATION=THREE.MathUtils.degToRad(50);
-const MOBILE_RECOVERY_CONFIRM_POSITION=0.012;
-const MOBILE_RECOVERY_CONFIRM_ROTATION=THREE.MathUtils.degToRad(12);
-
-/* A successful proactive mobile face search is now only a probe. It does
-   not replace the normal full-frame pose and therefore cannot inject an
-   ROI-vs-full pose discontinuity. The discovered face is remembered and
-   becomes the first recovery target if the next full-frame detection fails. */
-const MOBILE_PREFERRED_FACE_TTL_MS=360;
+/* A proactive high-resolution face measurement comes from a different crop
+   and is often strongly oblique. It may help prevent a dropout, but on a
+   phone it is only allowed to move the object when it agrees with the
+   predicted rigid-cube pose. This removes source-switch twitches without
+   discarding the useful next-face search. */
+const MOBILE_ASSIST_MAX_POSITION_ERROR=0.006;
+const MOBILE_ASSIST_MAX_ROTATION_ERROR=THREE.MathUtils.degToRad(8);
 
 /* 5c-13: recovery jump guard.
    Recovery detection remains exactly as in 5c-12, but a single
@@ -185,8 +180,9 @@ let cameraModeText="Standard";
 let mobileFastCapture=false,mobileNativeRoi=false,mobileExposureComp=null;
 let mobileFreshRecoveryDeferrals=0,mobileSinglePassRecovery=0;
 let pendingMobileAssist=false,pendingMobileAssistExcludeIds=[];
-let mobilePreferredRecoveryId=null,mobilePreferredRecoveryUntil=0;
-let mobileProbeOnlyHits=0;
+let mobileAssistPoseRejected=0;
+let mobileRobustSegments=0;
+let mobileStickyRadiusPos=0,mobileStickyRadiusRot=0;
 let sourceVideoText="–";
 
 const scene=new THREE.Scene();
@@ -296,6 +292,104 @@ function makeCandidateSet(d){
 let hasGoodPose=false,lastGoodPoseTime=null;
 const lastGoodPosition=new THREE.Vector3(),lastGoodQuaternion=new THREE.Quaternion(),linearVelocity=new THREE.Vector3(),angularVelocityAxis=new THREE.Vector3(1,0,0);
 let angularVelocity=0;
+
+/* Stable mobile measurements used only to estimate prediction velocity.
+   The absolute pose itself is still accepted directly, so this history
+   cannot create display lag. */
+const mobileMotionHistory=[];
+
+function medianNumber(values){
+  if(!values.length)return 0;
+  const a=values.slice().sort((x,y)=>x-y);
+  const m=Math.floor(a.length/2);
+  return a.length%2?a[m]:(a[m-1]+a[m])/2;
+}
+
+function isStableMobileMotionSource(source){
+  return source==="FULL-STABIL"||source==="FULL+FACE-ASSIST";
+}
+
+function clearMobileMotionHistory(){
+  mobileMotionHistory.length=0;
+  mobileRobustSegments=0;
+}
+
+function pushMobileMotionSample(position,quaternion,timeMs){
+  mobileMotionHistory.push({
+    position:position.clone(),
+    quaternion:quaternion.clone(),
+    time:timeMs
+  });
+
+  while(
+    mobileMotionHistory.length>MOBILE_MOTION_HISTORY_MAX||
+    (mobileMotionHistory.length>1&&timeMs-mobileMotionHistory[0].time>MOBILE_MOTION_HISTORY_MS)
+  ){
+    mobileMotionHistory.shift();
+  }
+
+  const linearSegments=[];
+  const angularSegments=[];
+
+  for(let i=1;i<mobileMotionHistory.length;i++){
+    const a=mobileMotionHistory[i-1],b=mobileMotionHistory[i];
+    const dtMs=b.time-a.time;
+    if(dtMs<MOBILE_MOTION_MIN_SEGMENT_MS||dtMs>MOBILE_MOTION_MAX_SEGMENT_MS)continue;
+    const dt=dtMs/1000;
+
+    const lv=b.position.clone().sub(a.position).divideScalar(dt);
+    const sp=lv.length();
+    if(sp>MAX_LINEAR_SPEED)lv.multiplyScalar(MAX_LINEAR_SPEED/sp);
+    linearSegments.push(lv);
+
+    const dq=a.quaternion.clone().invert().multiply(b.quaternion).normalize();
+    if(dq.w<0){dq.x*=-1;dq.y*=-1;dq.z*=-1;dq.w*=-1;}
+    const w=THREE.MathUtils.clamp(dq.w,-1,1);
+    const angle=2*Math.acos(w);
+    const sinHalf=Math.sqrt(Math.max(0,1-w*w));
+    if(sinHalf>1e-6&&angle>1e-6){
+      const axis=new THREE.Vector3(dq.x/sinHalf,dq.y/sinHalf,dq.z/sinHalf);
+      const speed=Math.min(angle/dt,MAX_ANGULAR_SPEED);
+      angularSegments.push(axis.multiplyScalar(speed));
+    }else{
+      angularSegments.push(new THREE.Vector3());
+    }
+  }
+
+  mobileRobustSegments=linearSegments.length;
+  if(!linearSegments.length)return;
+
+  const robustLinear=new THREE.Vector3(
+    medianNumber(linearSegments.map(v=>v.x)),
+    medianNumber(linearSegments.map(v=>v.y)),
+    medianNumber(linearSegments.map(v=>v.z))
+  );
+  const robustLinearSpeed=robustLinear.length();
+  if(robustLinearSpeed>MAX_LINEAR_SPEED)robustLinear.multiplyScalar(MAX_LINEAR_SPEED/robustLinearSpeed);
+  linearVelocity.lerp(robustLinear,MOBILE_MOTION_BLEND);
+
+  if(angularSegments.length){
+    const robustAngularVector=new THREE.Vector3(
+      medianNumber(angularSegments.map(v=>v.x)),
+      medianNumber(angularSegments.map(v=>v.y)),
+      medianNumber(angularSegments.map(v=>v.z))
+    );
+    const previousAngularVector=angularVelocityAxis.clone().multiplyScalar(angularVelocity);
+    previousAngularVector.lerp(robustAngularVector,MOBILE_MOTION_BLEND);
+    const av=previousAngularVector.length();
+    if(av<0.03){
+      angularVelocity=0;
+    }else{
+      angularVelocityAxis.copy(previousAngularVector).multiplyScalar(1/av);
+      angularVelocity=Math.min(av,MAX_ANGULAR_SPEED);
+    }
+  }
+
+  /* Residual tiny speeds are measurement noise, not intentional motion. */
+  if(linearVelocity.length()<0.006)linearVelocity.set(0,0,0);
+  if(Math.abs(angularVelocity)<0.08)angularVelocity=0;
+}
+
 function predictedPoseAt(timeMs,maxAgeMs=MAX_PREDICTION_TIME_MS){
   if(!hasGoodPose||lastGoodPoseTime===null)return null;
   let age=timeMs-lastGoodPoseTime;if(!Number.isFinite(age))return null;age=Math.max(0,Math.min(age,maxAgeMs));const dt=age/1000;
@@ -303,7 +397,8 @@ function predictedPoseAt(timeMs,maxAgeMs=MAX_PREDICTION_TIME_MS){
   const angle=angularVelocity*dt;if(Math.abs(angle)>1e-5)quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
   return {position,quaternion,ageMs:age};
 }
-function registerGoodPose(position,quaternion,frameTime){
+
+function registerGoodPose(position,quaternion,frameTime,source=detectorSource){
   if(!hasGoodPose){
     lastGoodPosition.copy(position);
     lastGoodQuaternion.copy(quaternion);
@@ -311,33 +406,42 @@ function registerGoodPose(position,quaternion,frameTime){
     linearVelocity.set(0,0,0);
     angularVelocity=0;
     hasGoodPose=true;
+    if(IS_MOBILE_DEVICE&&isStableMobileMotionSource(source))pushMobileMotionSample(position,quaternion,frameTime);
     return;
   }
 
   const dt=(frameTime-lastGoodPoseTime)/1000;
-  if(dt>.005&&dt<.15){
+
+  if(IS_MOBILE_DEVICE){
+    /* On the phone, do NOT differentiate two adjacent noisy poses. The
+       derivative is exactly where sub-pixel corner noise became visible
+       jitter after 30–40 ms of latency compensation. Only stable full-frame
+       measurements feed a short robust median history. Recovery/ROI poses
+       update the absolute pose but never inject a velocity spike. */
+    if(dt>=.15){
+      linearVelocity.set(0,0,0);
+      angularVelocity=0;
+      clearMobileMotionHistory();
+    }
+    if(isStableMobileMotionSource(source)){
+      pushMobileMotionSample(position,quaternion,frameTime);
+    }
+  }else if(dt>.005&&dt<.15){
+    /* Desktop stays exactly on the successful 5c-15 velocity path. */
     const rawPosDelta=position.distanceTo(lastGoodPosition);
     const rawRotDelta=quaternionAngle(lastGoodQuaternion,quaternion);
-    const noisePos=IS_MOBILE_DEVICE?MOBILE_VELOCITY_NOISE_POS:VELOCITY_NOISE_POS;
-    const noiseRot=IS_MOBILE_DEVICE?MOBILE_VELOCITY_NOISE_ROT:VELOCITY_NOISE_ROT;
-    const noiseDecay=IS_MOBILE_DEVICE?MOBILE_VELOCITY_NOISE_DECAY:VELOCITY_NOISE_DECAY;
-    const velocityBlend=IS_MOBILE_DEVICE?MOBILE_VELOCITY_BLEND:VELOCITY_BLEND;
-    const looksLikeNoise=rawPosDelta<noisePos&&rawRotDelta<noiseRot;
+    const looksLikeNoise=rawPosDelta<VELOCITY_NOISE_POS&&rawRotDelta<VELOCITY_NOISE_ROT;
 
     if(looksLikeNoise){
-      /* A stationary cube must not acquire alternating prediction velocity
-         from sub-pixel AprilTag noise. The larger mobile deadband is
-         deliberate: high-FPS phone capture otherwise differentiates tiny
-         pose noise into a visible oscillating prediction velocity. */
-      linearVelocity.multiplyScalar(noiseDecay);
-      angularVelocity*=noiseDecay;
+      linearVelocity.multiplyScalar(VELOCITY_NOISE_DECAY);
+      angularVelocity*=VELOCITY_NOISE_DECAY;
       if(linearVelocity.length()<0.001)linearVelocity.set(0,0,0);
       if(Math.abs(angularVelocity)<THREE.MathUtils.degToRad(0.5))angularVelocity=0;
     }else{
       const mv=position.clone().sub(lastGoodPosition).divideScalar(dt);
       const sp=mv.length();
       if(sp>MAX_LINEAR_SPEED)mv.multiplyScalar(MAX_LINEAR_SPEED/sp);
-      linearVelocity.lerp(mv,velocityBlend);
+      linearVelocity.lerp(mv,VELOCITY_BLEND);
 
       const dq=lastGoodQuaternion.clone().invert().multiply(quaternion).normalize();
       if(dq.w<0){dq.x*=-1;dq.y*=-1;dq.z*=-1;dq.w*=-1;}
@@ -358,7 +462,6 @@ function registerGoodPose(position,quaternion,frameTime){
       }
     }
   }else if(dt>=.15){
-    /* Never carry stale pre-dropout velocity into a newly reacquired pose. */
     linearVelocity.set(0,0,0);
     angularVelocity=0;
   }
@@ -449,19 +552,15 @@ function clearRecoveryGuard(){
 }
 
 function guardRecoveryMeasurement(position,quaternion,frameTime,gapBefore,source,jointUsed,tagCount){
-  const isMobileRecoverySource=
-    source==="MOBILE-NATIVE-ROI"||
-    source==="MOBILE-PREFERRED-FACE"||
-    source==="MOBILE-FACE-0"||
-    source==="MOBILE-FACE-1"||
-    source==="MOBILE-FULL-REACQUIRE";
-
   const isRecoverySource=
     source==="FACE-ROI-RESCUE"||
     source==="FACE-ROI-RECOVERY"||
     source==="FACE-ROI-HIGH-SENS"||
     source==="FULL-REACQUIRE"||
-    isMobileRecoverySource;
+    source==="MOBILE-NATIVE-ROI"||
+    source==="MOBILE-FACE-0"||
+    source==="MOBILE-FACE-1"||
+    source==="MOBILE-FULL-REACQUIRE";
 
   /* Stable native full-frame measurements stay completely direct.
      Multi-tag joint poses are also already strongly constrained. */
@@ -485,14 +584,8 @@ function guardRecoveryMeasurement(position,quaternion,frameTime,gapBefore,source
     0,1
   );
   const freedom=Math.max(ageFraction,motionFraction);
-  const basePos=isMobileRecoverySource?MOBILE_RECOVERY_GUARD_BASE_POSITION:RECOVERY_GUARD_BASE_POSITION;
-  const maxPos=isMobileRecoverySource?MOBILE_RECOVERY_GUARD_MAX_POSITION:RECOVERY_GUARD_MAX_POSITION;
-  const baseRot=isMobileRecoverySource?MOBILE_RECOVERY_GUARD_BASE_ROTATION:RECOVERY_GUARD_BASE_ROTATION;
-  const maxRot=isMobileRecoverySource?MOBILE_RECOVERY_GUARD_MAX_ROTATION:RECOVERY_GUARD_MAX_ROTATION;
-  const confirmPos=isMobileRecoverySource?MOBILE_RECOVERY_CONFIRM_POSITION:RECOVERY_CONFIRM_POSITION;
-  const confirmRot=isMobileRecoverySource?MOBILE_RECOVERY_CONFIRM_ROTATION:RECOVERY_CONFIRM_ROTATION;
-  const posLimit=THREE.MathUtils.lerp(basePos,maxPos,freedom);
-  const rotLimit=THREE.MathUtils.lerp(baseRot,maxRot,freedom);
+  const posLimit=THREE.MathUtils.lerp(RECOVERY_GUARD_BASE_POSITION,RECOVERY_GUARD_MAX_POSITION,freedom);
+  const rotLimit=THREE.MathUtils.lerp(RECOVERY_GUARD_BASE_ROTATION,RECOVERY_GUARD_MAX_ROTATION,freedom);
 
   if(posError<=posLimit&&rotError<=rotLimit){
     clearRecoveryGuard();
@@ -503,7 +596,7 @@ function guardRecoveryMeasurement(position,quaternion,frameTime,gapBefore,source
   if(recoveryGuardPending){
     const pendingPosError=position.distanceTo(recoveryGuardPosition);
     const pendingRotError=quaternionAngle(quaternion,recoveryGuardQuaternion);
-    if(pendingPosError<=confirmPos&&pendingRotError<=confirmRot){
+    if(pendingPosError<=RECOVERY_CONFIRM_POSITION&&pendingRotError<=RECOVERY_CONFIRM_ROTATION){
       recoveryGuardPendingCount++;
       recoveryGuardPosition.copy(position);
       recoveryGuardQuaternion.copy(quaternion);
@@ -543,6 +636,24 @@ function processDetections(detections,frameTime){
   else{lastJointUsed=false;lastReprojectionBefore=null;lastReprojectionAfter=null;lastJointTimeMs=0;}
 
   const gapBefore=lastGoodPoseTime===null?0:Math.max(0,frameTime-lastGoodPoseTime);
+
+  /* 5c-17: the proactive mobile ROI comes from a different crop and a
+     strongly oblique face. Keep its anti-dropout benefit, but never allow
+     that source switch to twitch the molecule away from the rigid-motion
+     prediction. An inconsistent assist is simply ignored for pose; the
+     next fresh frame returns to normal full-frame tracking. */
+  if(IS_MOBILE_DEVICE&&detectorSource==="MOBILE-FRESH-FACE-ASSIST"){
+    const predicted=predictedPoseAt(frameTime,CONTINUITY_MAX_AGE_MS);
+    if(predicted){
+      const pd=finalPosition.distanceTo(predicted.position);
+      const rd=quaternionAngle(finalQuaternion,predicted.quaternion);
+      if(pd>MOBILE_ASSIST_MAX_POSITION_ERROR||rd>MOBILE_ASSIST_MAX_ROTATION_ERROR){
+        mobileAssistPoseRejected++;
+        return false;
+      }
+    }
+  }
+
   const guarded=guardRecoveryMeasurement(
     finalPosition,finalQuaternion,frameTime,gapBefore,detectorSource,lastJointUsed,chosen.combo.length
   );
@@ -553,9 +664,10 @@ function processDetections(detections,frameTime){
   if(guarded.confirmed){
     linearVelocity.set(0,0,0);
     angularVelocity=0;
+    if(IS_MOBILE_DEVICE)clearMobileMotionHistory();
   }
 
-  registerGoodPose(finalPosition,finalQuaternion,frameTime);
+  registerGoodPose(finalPosition,finalQuaternion,frameTime,detectorSource);
   return true;
 }
 
@@ -772,17 +884,13 @@ function predictedFaceRecoveryROI(frameTime){
   return {x:x0,y:y0,width:w,height:h,ids:selected.map(f=>f.id)};
 }
 
-function predictedSingleFaceROI(frameTime,excludeIds=[],rankOffset=0,preferredId=null){
+function predictedSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
   const excluded=new Set(excludeIds.map(Number));
   const faces=predictedFaces(frameTime).filter(f=>!excluded.has(f.id));
   if(!faces.length)return null;
 
   const usable=faces.slice(0,FACE_ROI_CANDIDATES);
-  let face=null;
-  if(preferredId!==null&&preferredId!==undefined){
-    face=usable.find(f=>f.id===Number(preferredId))||null;
-  }
-  if(!face)face=usable[Math.abs(rankOffset)%usable.length];
+  const face=usable[Math.abs(rankOffset)%usable.length];
   const pts=face.corners;
 
   let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x));
@@ -880,8 +988,8 @@ async function detectRecoveryROI(frameTime){
   }
 }
 
-async function detectSingleFaceROI(frameTime,excludeIds=[],rankOffset=0,preferredId=null){
-  const roi=predictedSingleFaceROI(frameTime,excludeIds,rankOffset,preferredId);
+async function detectSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
+  const roi=predictedSingleFaceROI(frameTime,excludeIds,rankOffset);
   if(!roi)return [];
 
   faceRoiAttempts++;
@@ -985,7 +1093,7 @@ async function detectCurrentVideoFrame(frameTime){
         pendingMobileAssistExcludeIds=[];
         if(detections.length){
           proactiveHits++;
-          detectorSource="MOBILE-FACE-PROBE";
+          detectorSource="MOBILE-FRESH-FACE-ASSIST";
         }else{
           detectorSource="MOBILE-ASSIST-MISS";
         }
@@ -1055,26 +1163,16 @@ async function detectCurrentVideoFrame(frameTime){
           detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
         }else{
           const phase=(recoveryFrames-1)%MOBILE_RECOVERY_CYCLE;
-          const preferredFresh=
-            mobilePreferredRecoveryId!==null&&
-            frameTime<=mobilePreferredRecoveryUntil;
 
-          if(phase===0&&preferredFresh){
-            detections=await detectSingleFaceROI(frameTime,[],0,mobilePreferredRecoveryId);
-            detectorSource=detections.length?"MOBILE-PREFERRED-FACE":"MOBILE-PREFERRED-MISS";
-            if(detections.length){
-              mobilePreferredRecoveryId=null;
-              mobilePreferredRecoveryUntil=0;
-            }
-          }else if(phase===0){
+          if(phase===0){
             detections=await detectRecoveryROI(frameTime);
             detectorSource=detections.length?"MOBILE-NATIVE-ROI":"MOBILE-ROI-MISS";
           }else if(phase===1){
-            detections=await detectRecoveryROI(frameTime);
-            detectorSource=detections.length?"MOBILE-NATIVE-ROI":"MOBILE-ROI-MISS";
-          }else if(phase===2){
-            detections=await detectSingleFaceROI(frameTime,[],0,preferredFresh?mobilePreferredRecoveryId:null);
+            detections=await detectSingleFaceROI(frameTime,[],0);
             detectorSource=detections.length?"MOBILE-FACE-0":"MOBILE-FACE-0-MISS";
+          }else if(phase===2){
+            detections=await detectSingleFaceROI(frameTime,[],1);
+            detectorSource=detections.length?"MOBILE-FACE-1":"MOBILE-FACE-1-MISS";
           }else{
             detections=await detectFullFrame(getFullGray());
             detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
@@ -1099,24 +1197,7 @@ async function detectCurrentVideoFrame(frameTime){
       }
     }
 
-    let found=false;
-
-    if(intentionalAssistOnly){
-      /* 5c-16: proactive mobile search is a probe only.
-         A tight ROI pose is intentionally NOT registered while normal
-         tracking is healthy, because alternating FULL and ROI pose sources
-         was a likely source of the residual phone jitter. We only remember
-         which face was successfully seen and prioritize it if the next
-         full-frame detection drops out. */
-      if(detections.length){
-        mobilePreferredRecoveryId=Number(detections[0].id);
-        mobilePreferredRecoveryUntil=frameTime+MOBILE_PREFERRED_FACE_TTL_MS;
-        mobileProbeOnlyHits++;
-        detectorSource=`MOBILE-PROBE-SEITE-${mobilePreferredRecoveryId}`;
-      }
-    }else{
-      found=processDetections(detections,frameTime);
-    }
+    const found=processDetections(detections,frameTime);
 
     if(found){
       consecutiveMisses=0;
@@ -1124,12 +1205,10 @@ async function detectCurrentVideoFrame(frameTime){
       recoveryFrames=0;
       pendingMobileAssist=false;
       pendingMobileAssistExcludeIds=[];
-      mobilePreferredRecoveryId=null;
-      mobilePreferredRecoveryUntil=0;
     }else if(intentionalAssistOnly){
       /* This frame was intentionally used only to look for an emerging
-         next face. It never counts as a tracking miss; the renderer simply
-         uses the normal short prediction until full detection resumes. */
+         next face. Missing it is NOT a tracking loss; prediction bridges
+         this one camera frame and normal full detection resumes next. */
       consecutiveMisses=0;
       recoveryMode=false;
       recoveryFrames=0;
@@ -1191,7 +1270,65 @@ function resetMicroStabilizer(position,quaternion,now){
   stabilizedPoseReady=true;
 }
 
+function stabilizeMobileStickyPose(position,quaternion,now){
+  if(!stabilizedPoseReady||stabilizerLastTime===null){
+    resetMicroStabilizer(position,quaternion,now);
+    mobileStickyRadiusPos=0;
+    mobileStickyRadiusRot=0;
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const dt=(now-stabilizerLastTime)/1000;
+  stabilizerLastTime=now;
+  if(dt<=0||dt>MICRO_RESET_DT){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const posError=stabilizedPosition.distanceTo(position);
+  const targetQuaternion=quaternion.clone();
+  if(stabilizedQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  const rotError=quaternionAngle(stabilizedQuaternion,targetQuaternion);
+
+  /* Robust prediction velocity decides how "sticky" the pose may be.
+     A large actual displacement forces direct mode immediately even if the
+     velocity history has not caught up yet. */
+  let motionT=Math.max(
+    THREE.MathUtils.clamp(linearVelocity.length()/MOBILE_STICKY_LINEAR_FULL,0,1),
+    THREE.MathUtils.clamp(Math.abs(angularVelocity)/MOBILE_STICKY_ANGULAR_FULL,0,1)
+  );
+  if(posError>=MOBILE_STICKY_FORCE_DIRECT_POS||rotError>=MOBILE_STICKY_FORCE_DIRECT_ROT)motionT=1;
+  motionT=smoothstep01(motionT);
+
+  const posRadius=THREE.MathUtils.lerp(MOBILE_STICKY_POS_STILL,MOBILE_STICKY_POS_MOVING,motionT);
+  const rotRadius=THREE.MathUtils.lerp(MOBILE_STICKY_ROT_STILL,MOBILE_STICKY_ROT_MOVING,motionT);
+  mobileStickyRadiusPos=posRadius;
+  mobileStickyRadiusRot=rotRadius;
+
+  /* "Sticky sphere": if the noisy target remains inside the radius, do
+     nothing. If it leaves, move only enough to sit exactly on the sphere's
+     boundary. This is continuous at the threshold and can never build up
+     temporal lag. */
+  if(posError>posRadius&&posError>1e-12){
+    const correction=position.clone().sub(stabilizedPosition);
+    correction.multiplyScalar((posError-posRadius)/posError);
+    stabilizedPosition.add(correction);
+  }
+
+  if(rotError>rotRadius&&rotError>1e-12){
+    const catchup=(rotError-rotRadius)/rotError;
+    stabilizedQuaternion.slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1)).normalize();
+  }
+
+  return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1-motionT};
+}
+
 function stabilizeMicroJitter(position,quaternion,now){
+  if(IS_MOBILE_DEVICE)return stabilizeMobileStickyPose(position,quaternion,now);
+
   if(!stabilizedPoseReady||stabilizerLastTime===null){
     resetMicroStabilizer(position,quaternion,now);
     return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
@@ -1206,28 +1343,19 @@ function stabilizeMicroJitter(position,quaternion,now){
 
   const posError=stabilizedPosition.distanceTo(position);
   const rotError=quaternionAngle(stabilizedQuaternion,quaternion);
-
-  const alphaStill=IS_MOBILE_DEVICE?MOBILE_MICRO_ALPHA_STILL:MICRO_ALPHA_STILL;
-  const posStart=IS_MOBILE_DEVICE?MOBILE_MICRO_POS_START:MICRO_POS_START;
-  const posDirect=IS_MOBILE_DEVICE?MOBILE_MICRO_POS_DIRECT:MICRO_POS_DIRECT;
-  const rotStart=IS_MOBILE_DEVICE?MOBILE_MICRO_ROT_START:MICRO_ROT_START;
-  const rotDirect=IS_MOBILE_DEVICE?MOBILE_MICRO_ROT_DIRECT:MICRO_ROT_DIRECT;
-  const maxLagPos=IS_MOBILE_DEVICE?MOBILE_MICRO_MAX_LAG_POS:MICRO_MAX_LAG_POS;
-  const maxLagRot=IS_MOBILE_DEVICE?MOBILE_MICRO_MAX_LAG_ROT:MICRO_MAX_LAG_ROT;
-
-  const posT=smoothstep01((posError-posStart)/Math.max(1e-9,posDirect-posStart));
-  const rotT=smoothstep01((rotError-rotStart)/Math.max(1e-9,rotDirect-rotStart));
+  const posT=smoothstep01((posError-MICRO_POS_START)/Math.max(1e-9,MICRO_POS_DIRECT-MICRO_POS_START));
+  const rotT=smoothstep01((rotError-MICRO_ROT_START)/Math.max(1e-9,MICRO_ROT_DIRECT-MICRO_ROT_START));
   const motionT=Math.max(posT,rotT);
-  const alpha=THREE.MathUtils.lerp(alphaStill,1,motionT);
+  const alpha=THREE.MathUtils.lerp(MICRO_ALPHA_STILL,1,motionT);
 
   stabilizedPosition.lerp(position,alpha);
 
-  /* Spatial lag cap: even the stronger mobile stillness filter can never
-     trail by more than a fraction of a millimetre. */
+  /* Spatial lag cap: strong stillness filtering can never create visible
+     trailing when the cube starts moving slowly. */
   const remainingPos=stabilizedPosition.distanceTo(position);
-  if(remainingPos>maxLagPos){
+  if(remainingPos>MICRO_MAX_LAG_POS){
     const correction=position.clone().sub(stabilizedPosition);
-    correction.multiplyScalar((remainingPos-maxLagPos)/remainingPos);
+    correction.multiplyScalar((remainingPos-MICRO_MAX_LAG_POS)/remainingPos);
     stabilizedPosition.add(correction);
   }
 
@@ -1239,8 +1367,8 @@ function stabilizeMicroJitter(position,quaternion,now){
   stabilizedQuaternion.slerp(targetQuaternion,alpha).normalize();
 
   const remainingRot=quaternionAngle(stabilizedQuaternion,targetQuaternion);
-  if(remainingRot>maxLagRot){
-    const catchup=1-maxLagRot/remainingRot;
+  if(remainingRot>MICRO_MAX_LAG_ROT){
+    const catchup=1-MICRO_MAX_LAG_ROT/remainingRot;
     stabilizedQuaternion.slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1)).normalize();
   }
 
@@ -1335,8 +1463,9 @@ function updateStatus(now){
     `\nMobile Native-ROI: ${mobileNativeRoi?"JA":"NEIN"}`+
     `\nMobile Fresh-Recovery: ${mobileFreshRecoveryDeferrals}`+
     `\nMobile Single-Pass: ${mobileSinglePassRecovery}`+
-    `\nMobile Probe-only Treffer: ${mobileProbeOnlyHits}`+
-    `\nBevorzugte Recovery-Seite: ${mobilePreferredRecoveryId===null?"–":mobilePreferredRecoveryId}`+
+    `\nMobile robuste V-Segmente: ${mobileRobustSegments}`+
+    `\nMobile Sticky-Radius: ${(mobileStickyRadiusPos*1000).toFixed(2)} mm / ${THREE.MathUtils.radToDeg(mobileStickyRadiusRot).toFixed(2)}°`+
+    `\nAssist-Pose verworfen: ${mobileAssistPoseRejected}`+
     `\nRecovery-Guard: ${recoveryGuardText}`+
     `\nGuard verworfen/bestätigt: ${recoveryGuardRejected}/${recoveryGuardConfirmed}`+
     `\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}`+
