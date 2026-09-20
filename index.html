@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 2D/3D Vergleich</title>
+<title>GeoChemAR – Kameramodell-Test</title>
 
 <style>
 
@@ -29,14 +29,10 @@ body {
 #video {
   position: fixed;
   inset: 0;
-
   width: 100%;
   height: 100%;
-
   object-fit: contain;
-
   background: black;
-
   z-index: 1;
 }
 
@@ -58,23 +54,18 @@ body {
 
 #status {
   position: fixed;
-
   top: 10px;
   left: 10px;
-
   z-index: 10;
 
   padding: 10px 14px;
-
   border-radius: 8px;
 
   background: rgba(0,0,0,0.82);
-
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
-
   white-space: pre-line;
 
   pointer-events: none;
@@ -82,23 +73,18 @@ body {
 
 #error {
   position: fixed;
-
   left: 10px;
   right: 10px;
   bottom: 10px;
-
   z-index: 20;
 
   padding: 10px;
-
   border-radius: 8px;
 
   background: rgba(160,0,0,0.92);
-
   color: white;
 
   font-size: 13px;
-
   white-space: pre-wrap;
 
   display: none;
@@ -216,10 +202,18 @@ function showError(error) {
 
 
 /* =====================================================
-   VORLÄUFIGE INTRINSICS
+   GEMEINSAMES KAMERAMODELL
 
-   Noch unverändert:
-   angenommener horizontaler FOV = 60°
+   Wir behalten vorerst die Annahme:
+
+   horizontaler Bildwinkel = 60°
+
+   Daraus bestimmen wir fx.
+
+   WICHTIG:
+   Three.js bekommt NICHT ebenfalls 60°,
+   sondern den aus fy berechneten
+   VERTIKALEN Bildwinkel.
    ===================================================== */
 
 const cx =
@@ -228,19 +222,57 @@ const cx =
 const cy =
   HEIGHT / 2;
 
-const horizontalFov =
-  THREE.MathUtils.degToRad(60);
+
+const horizontalFovDeg =
+  60;
+
+
+const horizontalFovRad =
+  THREE.MathUtils.degToRad(
+    horizontalFovDeg
+  );
+
 
 const fx =
   (WIDTH / 2) /
-  Math.tan(horizontalFov / 2);
+  Math.tan(
+    horizontalFovRad / 2
+  );
+
+
+/*
+ * Für unseren vorläufigen Kameratest
+ * setzen wir fy = fx.
+ */
 
 const fy =
   fx;
 
 
+/*
+ * Aus fy berechnen wir jetzt den
+ * VERTIKALEN Bildwinkel für Three.js.
+ */
+
+const verticalFovRad =
+  2 *
+  Math.atan(
+    HEIGHT /
+    (2 * fy)
+  );
+
+
+const verticalFovDeg =
+  THREE.MathUtils.radToDeg(
+    verticalFovRad
+  );
+
+
 /* =====================================================
    THREE.JS
+
+   Jetzt exakt dasselbe Lochkameramodell
+   wie bei AprilTag.
    ===================================================== */
 
 const scene =
@@ -249,8 +281,8 @@ const scene =
 
 const camera =
   new THREE.PerspectiveCamera(
-    60,
-    4 / 3,
+    verticalFovDeg,
+    WIDTH / HEIGHT,
     0.01,
     10
   );
@@ -302,8 +334,6 @@ document.body.appendChild(
 
 /* =====================================================
    ROTE 3D-KUGEL
-
-   Position kommt aus pose.t
    ===================================================== */
 
 const sphere =
@@ -322,32 +352,54 @@ const sphere =
   );
 
 
-sphere.visible = false;
+sphere.visible =
+  false;
 
-scene.add(sphere);
+
+scene.add(
+  sphere
+);
 
 
 /* =====================================================
    APRILTAG
    ===================================================== */
 
-let apriltag = null;
+let apriltag =
+  null;
 
-let detectorReady = false;
-let cameraReady = false;
-let detectionRunning = false;
+let detectorReady =
+  false;
 
-let latestDetection = null;
+let cameraReady =
+  false;
 
-let tagDetected = false;
-let poseReceived = false;
+let detectionRunning =
+  false;
 
-let lastTx = 0;
-let lastTy = 0;
-let lastTz = 0;
+let latestDetection =
+  null;
 
-let detectionCounter = 0;
-let detectionFPS = 0;
+let tagDetected =
+  false;
+
+let poseReceived =
+  false;
+
+let lastTx =
+  0;
+
+let lastTy =
+  0;
+
+let lastTz =
+  0;
+
+let detectionCounter =
+  0;
+
+let detectionFPS =
+  0;
 
 let fpsStart =
   performance.now();
@@ -371,7 +423,8 @@ async function initializeAprilTag() {
       Comlink.proxy(
         function() {
 
-          detectorReady = true;
+          detectorReady =
+            true;
 
         }
       )
@@ -405,6 +458,12 @@ async function initializeAprilTag() {
   }
 
 
+  /*
+   * EXAKT dieselben Intrinsics,
+   * aus denen auch die Three.js-Kamera
+   * abgeleitet wurde.
+   */
+
   await apriltag.set_camera_info(
     fx,
     fy,
@@ -437,7 +496,7 @@ async function initializeAprilTag() {
 
 
 /* =====================================================
-   KAMERA
+   WEBCAM
    ===================================================== */
 
 async function startCamera() {
@@ -510,7 +569,8 @@ async function startCamera() {
 
   await video.play();
 
-  cameraReady = true;
+  cameraReady =
+    true;
 
 }
 
@@ -578,9 +638,12 @@ function createGrayscaleImage() {
 
 function applyTranslation(pose) {
 
-  poseReceived = false;
+  poseReceived =
+    false;
 
-  sphere.visible = false;
+
+  sphere.visible =
+    false;
 
 
   if (
@@ -615,10 +678,29 @@ function applyTranslation(pose) {
   }
 
 
-  lastTx = tx;
-  lastTy = ty;
-  lastTz = tz;
+  lastTx =
+    tx;
 
+  lastTy =
+    ty;
+
+  lastTz =
+    tz;
+
+
+  /*
+   * AprilTag:
+   *
+   * +X rechts
+   * +Y unten
+   * +Z vor Kamera
+   *
+   * Three.js:
+   *
+   * +X rechts
+   * +Y oben
+   * -Z vor Kamera
+   */
 
   sphere.position.set(
     tx,
@@ -627,9 +709,12 @@ function applyTranslation(pose) {
   );
 
 
-  sphere.visible = true;
+  sphere.visible =
+    true;
 
-  poseReceived = true;
+
+  poseReceived =
+    true;
 
 }
 
@@ -651,7 +736,8 @@ async function detectFrame() {
   }
 
 
-  detectionRunning = true;
+  detectionRunning =
+    true;
 
 
   try {
@@ -685,7 +771,8 @@ async function detectFrame() {
 
     if (detection) {
 
-      tagDetected = true;
+      tagDetected =
+        true;
 
 
       applyTranslation(
@@ -696,10 +783,14 @@ async function detectFrame() {
 
     else {
 
-      tagDetected = false;
-      poseReceived = false;
+      tagDetected =
+        false;
 
-      sphere.visible = false;
+      poseReceived =
+        false;
+
+      sphere.visible =
+        false;
 
     }
 
@@ -712,7 +803,8 @@ async function detectFrame() {
 
 
     if (
-      now - fpsStart >= 1000
+      now - fpsStart >=
+      1000
     ) {
 
       const seconds =
@@ -724,9 +816,12 @@ async function detectFrame() {
         seconds;
 
 
-      detectionCounter = 0;
+      detectionCounter =
+        0;
 
-      fpsStart = now;
+
+      fpsStart =
+        now;
 
     }
 
@@ -740,7 +835,8 @@ async function detectFrame() {
 
   finally {
 
-    detectionRunning = false;
+    detectionRunning =
+      false;
 
   }
 
@@ -749,13 +845,6 @@ async function detectFrame() {
 
 /* =====================================================
    GRÜNER 2D-PUNKT
-
-   detection.center kommt direkt aus
-   der Bildanalyse des AprilTags.
-
-   Keine Pose.
-   Keine Brennweite.
-   Keine 3D-Projektion.
    ===================================================== */
 
 function drawOverlay() {
@@ -778,16 +867,50 @@ function drawOverlay() {
   }
 
 
-  const x =
-    Number(
-      latestDetection.center.x
-    );
+  /*
+   * Wrapper können center entweder als
+   * {x,y} oder als [x,y] liefern.
+   *
+   * Unsere bisherige Version funktionierte;
+   * wir unterstützen hier sicherheitshalber
+   * beide Formen.
+   */
+
+  let x;
+  let y;
 
 
-  const y =
-    Number(
-      latestDetection.center.y
-    );
+  if (
+    Array.isArray(
+      latestDetection.center
+    )
+  ) {
+
+    x =
+      Number(
+        latestDetection.center[0]
+      );
+
+    y =
+      Number(
+        latestDetection.center[1]
+      );
+
+  }
+
+  else {
+
+    x =
+      Number(
+        latestDetection.center.x
+      );
+
+    y =
+      Number(
+        latestDetection.center.y
+      );
+
+  }
 
 
   if (
@@ -800,12 +923,8 @@ function drawOverlay() {
   }
 
 
-  /*
-   * Großer grüner Ring:
-   * Tagzentrum aus 2D-Detektion
-   */
-
   overlayCtx.beginPath();
+
 
   overlayCtx.arc(
     x,
@@ -827,31 +946,32 @@ function drawOverlay() {
   overlayCtx.stroke();
 
 
-  /*
-   * Kleines grünes Kreuz
-   */
-
   overlayCtx.beginPath();
+
 
   overlayCtx.moveTo(
     x - 18,
     y
   );
 
+
   overlayCtx.lineTo(
     x + 18,
     y
   );
+
 
   overlayCtx.moveTo(
     x,
     y - 18
   );
 
+
   overlayCtx.lineTo(
     x,
     y + 18
   );
+
 
   overlayCtx.lineWidth =
     3;
@@ -867,7 +987,7 @@ function drawOverlay() {
 
 
 /* =====================================================
-   VIDEO / CANVASES SYNCHRON
+   VIDEO / CANVASES
    ===================================================== */
 
 function resize() {
@@ -964,9 +1084,15 @@ function resize() {
     top + "px";
 
 
+  /*
+   * Das Bild bleibt 4:3.
+   *
+   * Wir ändern hier deshalb NICHT mehr
+   * eigenständig den FOV.
+   */
+
   camera.aspect =
-    displayWidth /
-    displayHeight;
+    WIDTH / HEIGHT;
 
 
   camera.updateProjectionMatrix();
@@ -1012,11 +1138,11 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-5\n\n" +
+    "APRILTAG 5b-6\n\n" +
 
-    "GRÜN = direktes 2D-Tagzentrum\n" +
+    "GRÜN = 2D-Zentrum\n" +
 
-    "ROT = 3D-Pose\n\n" +
+    "ROT = 3D-Translation\n\n" +
 
     "Tag 0: " +
     (
@@ -1033,7 +1159,17 @@ function animate() {
     ) +
 
     "\nErkennungen/s: " +
-    detectionFPS.toFixed(1);
+    detectionFPS.toFixed(1) +
+
+    "\n\nfx = " +
+    fx.toFixed(1) +
+
+    "\nfy = " +
+    fy.toFixed(1) +
+
+    "\nThree.js FOV vertikal = " +
+    verticalFovDeg.toFixed(2) +
+    "°";
 
 }
 
