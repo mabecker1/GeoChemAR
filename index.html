@@ -8,12 +8,10 @@
   content="width=device-width, initial-scale=1.0"
 >
 
-<title>GeoChemAR – Native MultiMarker 1+2</title>
+<title>GeoChemAR – MultiMarker Diagnose</title>
 
 <style>
-
-html,
-body {
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -32,11 +30,11 @@ body {
   padding: 10px 14px;
   border-radius: 8px;
 
-  background: rgba(0,0,0,0.78);
+  background: rgba(0,0,0,0.80);
   color: white;
 
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.45;
 
   pointer-events: none;
   white-space: pre-line;
@@ -72,25 +70,19 @@ video {
   top: 0 !important;
   left: 0 !important;
   z-index: 1 !important;
-
   visibility: visible !important;
   opacity: 1 !important;
 }
-
 </style>
 </head>
 
 <body>
 
-<div id="status">
-Initialisierung …
-</div>
-
+<div id="status">Initialisierung …</div>
 <div id="error"></div>
 
 
 <script>
-
 window.addEventListener(
   "error",
   function(event) {
@@ -108,7 +100,6 @@ window.addEventListener(
       event.filename +
       "\nZeile " +
       event.lineno;
-
   }
 );
 
@@ -126,10 +117,8 @@ window.addEventListener(
     box.textContent =
       "Promise-Fehler:\n" +
       String(event.reason);
-
   }
 );
-
 </script>
 
 
@@ -152,11 +141,6 @@ const errorBox =
   document.getElementById("error");
 
 
-function setStatus(text) {
-  status.textContent = text;
-}
-
-
 function showError(error) {
 
   console.error(error);
@@ -171,7 +155,6 @@ function showError(error) {
         ? error.stack
         : String(error)
     );
-
 }
 
 
@@ -191,13 +174,14 @@ try {
 
   const {
     ArToolkitSource,
-    ArToolkitContext
+    ArToolkitContext,
+    ArMarkerControls
   } = THREEX;
 
 
 
   /* =====================================================
-     THREE.JS
+     THREE
      ===================================================== */
 
   const scene =
@@ -208,7 +192,9 @@ try {
     new THREE.Camera();
 
 
-  scene.add(camera);
+  scene.add(
+    camera
+  );
 
 
   const renderer =
@@ -237,27 +223,41 @@ try {
 
 
   /* =====================================================
-     MULTIMARKER ROOT
+     NORMALER MARKER 1
 
-     Dieser Root bekommt direkt die Pose,
-     die ARToolKit für den gesamten
-     MultiMarker berechnet.
+     Genau dieser steuert das Methan.
      ===================================================== */
 
-  const cubeRoot =
+  const marker1Root =
     new THREE.Group();
 
 
-  cubeRoot.matrixAutoUpdate =
-    false;
-
-
-  cubeRoot.visible =
+  marker1Root.visible =
     false;
 
 
   scene.add(
-    cubeRoot
+    marker1Root
+  );
+
+
+
+  /* =====================================================
+     MARKER 2
+
+     Nur zur Diagnose.
+     ===================================================== */
+
+  const marker2Root =
+    new THREE.Group();
+
+
+  marker2Root.visible =
+    false;
+
+
+  scene.add(
+    marker2Root
   );
 
 
@@ -281,7 +281,6 @@ try {
 
   const bondRadius =
     0.040;
-
 
 
   const carbonMaterial =
@@ -487,43 +486,25 @@ try {
 
 
   /*
-   * Die .dat-Datei arbeitet in Millimetern.
-   *
-   * Unsere bisherige Molekülgeometrie ist
-   * auf Markerbreite 1 skaliert.
-   *
-   * Deshalb skalieren wir:
-   *
-   * 1 Three.js-Einheit = 40 mm
-   */
-
-  methane.scale.setScalar(
-    40
-  );
-
-
-  /*
-   * Der Ursprung der .dat-Datei liegt
-   * im Würfelzentrum.
-   *
-   * Das Methan sitzt daher direkt dort.
+   * Genau wie in unserer funktionierenden
+   * Einzelmarker-Version.
    */
 
   methane.position.set(
     0,
-    0,
+    0.75,
     0
   );
 
 
-  cubeRoot.add(
+  marker1Root.add(
     methane
   );
 
 
 
   /* =====================================================
-     KAMERA
+     AR SOURCE
      ===================================================== */
 
   const arToolkitSource =
@@ -547,9 +528,9 @@ try {
     });
 
 
-  setStatus(
-    "Kamera wird gestartet …"
-  );
+
+  status.textContent =
+    "Kamera wird gestartet …";
 
 
   await new Promise(
@@ -573,6 +554,10 @@ try {
   );
 
 
+
+  /* =====================================================
+     VIDEO
+     ===================================================== */
 
   const video =
     arToolkitSource.domElement;
@@ -697,7 +682,7 @@ try {
 
 
   /* =====================================================
-     BEWÄHRTE KAMERAEINSTELLUNGEN
+     KAMERA-CONSTRAINTS
      ===================================================== */
 
   try {
@@ -712,7 +697,9 @@ try {
         stream.getVideoTracks();
 
 
-      if (tracks.length > 0) {
+      if (
+        tracks.length > 0
+      ) {
 
         await tracks[0].applyConstraints({
 
@@ -756,9 +743,8 @@ try {
      ARTOOLKIT
      ===================================================== */
 
-  setStatus(
-    "ARToolKit wird initialisiert …"
-  );
+  status.textContent =
+    "ARToolKit wird initialisiert …";
 
 
   const arToolkitContext =
@@ -841,17 +827,98 @@ try {
 
 
   /* =====================================================
+     NORMALE MARKER 1 + 2
+     ===================================================== */
+
+  const marker1Controls =
+    new ArMarkerControls(
+
+      arToolkitContext,
+
+      marker1Root,
+
+      {
+
+        type:
+          "barcode",
+
+        barcodeValue:
+          1,
+
+        size:
+          1,
+
+        changeMatrixMode:
+          "modelViewMatrix"
+
+      }
+
+    );
+
+
+  const marker2Controls =
+    new ArMarkerControls(
+
+      arToolkitContext,
+
+      marker2Root,
+
+      {
+
+        type:
+          "barcode",
+
+        barcodeValue:
+          2,
+
+        size:
+          1,
+
+        changeMatrixMode:
+          "modelViewMatrix"
+
+      }
+
+    );
+
+
+
+  /* =====================================================
      MULTIMARKER LADEN
      ===================================================== */
 
-  setStatus(
-    "MultiMarker 1+2 wird geladen …"
-  );
+  let multiLoaded =
+    false;
 
 
-  const multiMarkerId =
-    await new Promise(
-      (resolve, reject) => {
+  let multiMarkerId =
+    null;
+
+
+  let loadedMarkerCount =
+    null;
+
+
+  let multiEventCount =
+    0;
+
+
+  let lastMultiEventTime =
+    0;
+
+
+  let lastMultiKeys =
+    "—";
+
+
+  status.textContent =
+    "cube-12.dat wird geladen …";
+
+
+  await new Promise(
+    (resolve, reject) => {
+
+      try {
 
         controller.loadMultiMarker(
 
@@ -862,33 +929,19 @@ try {
             markerNum
           ) {
 
-            console.log(
-              "MultiMarker geladen:",
-              markerId,
-              markerNum
-            );
+            multiMarkerId =
+              markerId;
 
 
-            if (
-              markerNum !== 2
-            ) {
-
-              reject(
-                new Error(
-                  "cube-12.dat wurde geladen, enthält laut ARToolKit aber " +
-                  markerNum +
-                  " Marker statt 2."
-                )
-              );
-
-              return;
-
-            }
+            loadedMarkerCount =
+              markerNum;
 
 
-            resolve(
-              markerId
-            );
+            multiLoaded =
+              true;
+
+
+            resolve();
 
           },
 
@@ -906,24 +959,23 @@ try {
         );
 
       }
-    );
+
+      catch(error) {
+
+        reject(error);
+
+      }
+
+    }
+  );
 
 
 
   /* =====================================================
-     MULTIMARKER EVENT
+     GETMULTIMARKER NUR BEOBACHTEN
 
-     ARToolKit liefert hier bereits die robuste
-     gemeinsame Pose des gesamten Marker-Sets.
+     KEINE Pose wird übernommen.
      ===================================================== */
-
-  let multiSeenThisFrame =
-    false;
-
-
-  let lastSeenTime =
-    0;
-
 
   controller.addEventListener(
 
@@ -931,40 +983,41 @@ try {
 
     function(event) {
 
-      if (
-        event.data.multiMarkerId !==
-        multiMarkerId
-      ) {
+      multiEventCount++;
 
-        return;
 
-      }
+      lastMultiEventTime =
+        performance.now();
 
 
       /*
-       * event.data.matrix ist bereits eine
-       * WebGL-kompatible 4×4-Matrix.
+       * Damit sehen wir zusätzlich,
+       * welche Felder unser konkreter
+       * Build tatsächlich liefert.
        */
 
-      cubeRoot.matrix.fromArray(
-        event.data.matrix
-      );
+      try {
 
+        if (
+          event &&
+          event.data
+        ) {
 
-      cubeRoot.matrixWorldNeedsUpdate =
-        true;
+          lastMultiKeys =
+            Object.keys(
+              event.data
+            ).join(", ");
 
+        }
 
-      cubeRoot.visible =
-        true;
+      }
 
+      catch(error) {
 
-      multiSeenThisFrame =
-        true;
+        lastMultiKeys =
+          "nicht lesbar";
 
-
-      lastSeenTime =
-        performance.now();
+      }
 
     }
 
@@ -1022,15 +1075,83 @@ try {
     "2";
 
 
-  setStatus(
-    "Native MultiMarker 1+2 bereit\n\n" +
-    "Marker 1 oder 2 zeigen."
-  );
+
+  /* =====================================================
+     DIAGNOSEANZEIGE
+     ===================================================== */
+
+  function yesNo(value) {
+
+    return value
+      ? "JA"
+      : "NEIN";
+
+  }
+
+
+
+  function updateStatus() {
+
+    const multiRecentlySeen =
+
+      performance.now() -
+      lastMultiEventTime
+
+      <
+
+      500;
+
+
+    status.textContent =
+
+      "MULTIMARKER-DIAGNOSE\n\n" +
+
+      "cube-12.dat geladen: " +
+      yesNo(
+        multiLoaded
+      ) +
+
+      "\nMultiMarker-ID: " +
+      (
+        multiMarkerId === null
+          ? "—"
+          : multiMarkerId
+      ) +
+
+      "\nMarkeranzahl laut Datei: " +
+      (
+        loadedMarkerCount === null
+          ? "—"
+          : loadedMarkerCount
+      ) +
+
+      "\n\nMarker 1 erkannt: " +
+      yesNo(
+        marker1Root.visible
+      ) +
+
+      "\nMarker 2 erkannt: " +
+      yesNo(
+        marker2Root.visible
+      ) +
+
+      "\n\ngetMultiMarker aktuell: " +
+      yesNo(
+        multiRecentlySeen
+      ) +
+
+      "\ngetMultiMarker gesamt: " +
+      multiEventCount +
+
+      "\nEvent-Felder:\n" +
+      lastMultiKeys;
+
+  }
 
 
 
   /* =====================================================
-     RENDER LOOP
+     LOOP
      ===================================================== */
 
   function animate() {
@@ -1038,10 +1159,6 @@ try {
     requestAnimationFrame(
       animate
     );
-
-
-    multiSeenThisFrame =
-      false;
 
 
     if (
@@ -1055,48 +1172,7 @@ try {
     }
 
 
-
-    /*
-     * Ein sehr kurzer Hold verhindert nur,
-     * dass das Objekt zwischen zwei
-     * einzelnen Videoframes flackert.
-     *
-     * KEINE Poseglättung.
-     */
-
-    if (
-      performance.now() -
-      lastSeenTime >
-      150
-    ) {
-
-      cubeRoot.visible =
-        false;
-
-    }
-
-
-
-    if (
-      cubeRoot.visible
-    ) {
-
-      setStatus(
-        "MultiMarker erkannt\n\n" +
-        "Jetzt langsam von Seite 1 über die Kante zu Seite 2 drehen."
-      );
-
-    }
-
-    else {
-
-      setStatus(
-        "MultiMarker 1+2 bereit\n\n" +
-        "Marker 1 oder 2 zeigen."
-      );
-
-    }
-
+    updateStatus();
 
 
     renderer.render(
