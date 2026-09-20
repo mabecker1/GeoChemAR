@@ -5,8 +5,10 @@
 
 <meta
   name="viewport"
-  content="width=device-width, initial-scale=1.0,
-           maximum-scale=1.0, user-scalable=no"
+  content="width=device-width,
+           initial-scale=1.0,
+           maximum-scale=1.0,
+           user-scalable=no"
 >
 
 <title>GeoChemAR – AprilTag Test 5a</title>
@@ -29,10 +31,6 @@ body {
 }
 
 
-/* =====================================================
-   KAMERABILD
-   ===================================================== */
-
 #video {
   position: fixed;
 
@@ -50,10 +48,6 @@ body {
 }
 
 
-/* =====================================================
-   OVERLAY FÜR ERKANNTE TAGS
-   ===================================================== */
-
 #overlay {
   position: fixed;
 
@@ -69,9 +63,10 @@ body {
 }
 
 
-/* =====================================================
-   STATUS
-   ===================================================== */
+#analysisCanvas {
+  display: none;
+}
+
 
 #status {
   position: fixed;
@@ -85,7 +80,7 @@ body {
 
   border-radius: 8px;
 
-  background: rgba(0, 0, 0, 0.78);
+  background: rgba(0,0,0,0.80);
 
   color: white;
 
@@ -97,10 +92,6 @@ body {
   pointer-events: none;
 }
 
-
-/* =====================================================
-   FEHLER
-   ===================================================== */
 
 #error {
   position: fixed;
@@ -115,7 +106,7 @@ body {
 
   border-radius: 8px;
 
-  background: rgba(160, 0, 0, 0.9);
+  background: rgba(160,0,0,0.90);
 
   color: white;
 
@@ -123,18 +114,6 @@ body {
 
   white-space: pre-wrap;
 
-  display: none;
-}
-
-
-/* =====================================================
-   UNSICHTBARES ANALYSE-CANVAS
-
-   Hier hinein wird das Kamerabild mit 640 × 480
-   gezeichnet und anschließend an AprilTag übergeben.
-   ===================================================== */
-
-#analysisCanvas {
   display: none;
 }
 
@@ -171,35 +150,47 @@ AprilTag wird initialisiert …
 
 
 
-<!--
-  WASM-JavaScript-Wrapper.
-  Die zugehörige apriltag_wasm.wasm muss
-  im selben Ordner liegen.
--->
-<script src="./libs/apriltag_wasm.js"></script>
+<script type="module">
+
+/*
+ * =====================================================
+ * COMLINK
+ *
+ * Genau wie in der Originaldemo.
+ * =====================================================
+ */
+
+import * as Comlink
+  from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
 
-
-<script>
 
 /* =====================================================
    ELEMENTE
    ===================================================== */
 
 const video =
-  document.getElementById("video");
+  document.getElementById(
+    "video"
+  );
 
 
 const overlay =
-  document.getElementById("overlay");
+  document.getElementById(
+    "overlay"
+  );
 
 
 const overlayCtx =
-  overlay.getContext("2d");
+  overlay.getContext(
+    "2d"
+  );
 
 
 const analysisCanvas =
-  document.getElementById("analysisCanvas");
+  document.getElementById(
+    "analysisCanvas"
+  );
 
 
 const analysisCtx =
@@ -212,11 +203,15 @@ const analysisCtx =
 
 
 const status =
-  document.getElementById("status");
+  document.getElementById(
+    "status"
+  );
 
 
 const errorBox =
-  document.getElementById("error");
+  document.getElementById(
+    "error"
+  );
 
 
 
@@ -230,18 +225,6 @@ const ANALYSIS_WIDTH =
 
 const ANALYSIS_HEIGHT =
   480;
-
-
-/*
- * Wir brauchen für 5a keine 30 Detektionen pro
- * Sekunde.
- *
- * 20 fps reichen für den ersten Tracking-Test
- * und belasten das Smartphone weniger.
- */
-
-const DETECTION_INTERVAL =
-  50;
 
 
 
@@ -267,10 +250,6 @@ let detectionRunning =
 
 let detections =
   [];
-
-
-let lastDetectionTime =
-  0;
 
 
 let detectionCounter =
@@ -304,8 +283,11 @@ function showError(error) {
     "FEHLER:\n" +
 
     (
-      error && error.stack
+      error &&
+      error.stack
+
         ? error.stack
+
         : String(error)
     );
 
@@ -314,21 +296,28 @@ function showError(error) {
 
 
 window.addEventListener(
+
   "error",
+
   function(event) {
 
     showError(
+
       event.error ||
       event.message
+
     );
 
   }
+
 );
 
 
 
 window.addEventListener(
+
   "unhandledrejection",
+
   function(event) {
 
     showError(
@@ -336,87 +325,127 @@ window.addEventListener(
     );
 
   }
+
 );
 
 
 
 /* =====================================================
-   APRILTAG INITIALISIEREN
+   APRILTAG-WORKER INITIALISIEREN
    ===================================================== */
 
-function initializeAprilTag() {
+async function initializeAprilTag() {
 
-  return new Promise(
-    function(resolve, reject) {
+  status.textContent =
+    "AprilTag-Worker wird gestartet …";
 
-      try {
 
-        if (
-          typeof Apriltag !==
-          "function"
-        ) {
+  /*
+   * WICHTIG:
+   *
+   * apriltag.js läuft als Web Worker.
+   *
+   * Darin wird anschließend
+   * apriltag_wasm.js geladen.
+   */
 
-          reject(
-            new Error(
-              "Apriltag-Klasse nicht gefunden. " +
-              "Prüfe libs/apriltag_wasm.js."
-            )
-          );
+  const worker =
+    new Worker(
+      "./libs/apriltag.js"
+    );
 
-          return;
+
+  /*
+   * Comlink macht die Apriltag-Klasse
+   * aus dem Worker hier verfügbar.
+   */
+
+  const Apriltag =
+    Comlink.wrap(
+      worker
+    );
+
+
+  /*
+   * Der Konstruktor erwartet einen
+   * Callback, sobald WASM bereit ist.
+   */
+
+  apriltag =
+    await new Apriltag(
+
+      Comlink.proxy(
+        function() {
+
+          detectorReady =
+            true;
 
         }
+      )
+
+    );
 
 
-        apriltag =
-          Apriltag(
-            function() {
+  /*
+   * Warten, bis der Callback wirklich
+   * ausgeführt wurde.
+   */
 
-              detectorReady =
-                true;
-
-
-              /*
-               * Für 5a wollen wir nur die Erkennung
-               * und die Ecken.
-               *
-               * Keine Poseberechnung.
-               */
-
-              apriltag.set_return_pose(
-                0
-              );
+  const startTime =
+    performance.now();
 
 
-              apriltag.set_return_solutions(
-                0
-              );
+  while (
+    !detectorReady
+  ) {
 
+    await new Promise(
+      function(resolve) {
 
-              /*
-               * Wir interessieren uns zunächst nur
-               * für wenige Tags gleichzeitig.
-               */
-
-              apriltag.set_max_detections(
-                6
-              );
-
-
-              resolve();
-
-            }
-          );
+        setTimeout(
+          resolve,
+          20
+        );
 
       }
+    );
 
-      catch(error) {
 
-        reject(error);
+    if (
+      performance.now() -
+      startTime >
+      15000
+    ) {
 
-      }
+      throw new Error(
+        "AprilTag-WASM wurde nach 15 Sekunden nicht bereit."
+      );
 
     }
+
+  }
+
+
+
+  /*
+   * Für 5a brauchen wir ausschließlich
+   * Tag-ID und Ecken.
+   *
+   * Keine Poseberechnung.
+   */
+
+  await apriltag.set_return_pose(
+    0
+  );
+
+
+  await apriltag.set_return_solutions(
+    0
+  );
+
+
+  await apriltag.set_max_detections(
+    6
   );
 
 }
@@ -424,10 +453,14 @@ function initializeAprilTag() {
 
 
 /* =====================================================
-   KAMERA STARTEN
+   KAMERA
    ===================================================== */
 
 async function startCamera() {
+
+  status.textContent =
+    "Kamera wird gestartet …";
+
 
   if (
     !navigator.mediaDevices ||
@@ -435,7 +468,7 @@ async function startCamera() {
   ) {
 
     throw new Error(
-      "getUserMedia wird von diesem Browser nicht unterstützt."
+      "Dieser Browser unterstützt keine Kameranutzung."
     );
 
   }
@@ -479,6 +512,7 @@ async function startCamera() {
     stream;
 
 
+
   await new Promise(
     function(resolve) {
 
@@ -495,11 +529,15 @@ async function startCamera() {
 
 
       video.addEventListener(
+
         "loadedmetadata",
+
         resolve,
+
         {
           once: true
         }
+
       );
 
     }
@@ -520,7 +558,7 @@ async function startCamera() {
 
 
 /* =====================================================
-   OVERLAY AN BILDSCHIRM ANPASSEN
+   OVERLAY
    ===================================================== */
 
 function resizeOverlay() {
@@ -574,15 +612,10 @@ window.addEventListener(
 
 
 /* =====================================================
-   KAMERABILD → ANALYSE-CANVAS
-
-   Wir verwenden contain statt cover.
-
-   Deshalb wird das komplette Kamerabild angezeigt
-   und nichts abgeschnitten.
+   GRAUSTUFENBILD ERZEUGEN
    ===================================================== */
 
-function drawCameraToAnalysisCanvas() {
+function createGrayscaleImage() {
 
   analysisCtx.drawImage(
 
@@ -596,18 +629,6 @@ function drawCameraToAnalysisCanvas() {
 
   );
 
-}
-
-
-
-/* =====================================================
-   RGB → GRAUSTUFEN
-
-   AprilTag erwartet ein Uint8Array mit genau einem
-   Helligkeitswert pro Pixel.
-   ===================================================== */
-
-function createGrayscaleImage() {
 
   const imageData =
     analysisCtx.getImageData(
@@ -635,31 +656,28 @@ function createGrayscaleImage() {
 
 
   /*
-   * Gewichtete Umwandlung in Graustufen.
+   * Die Originaldemo verwendet den
+   * Mittelwert aus R, G und B.
    */
 
   for (
     let i = 0, j = 0;
+
     i < rgba.length;
+
     i += 4, j++
   ) {
 
     grayscale[j] =
-
       Math.round(
 
-        0.299 *
-        rgba[i]
+        (
+          rgba[i] +
+          rgba[i + 1] +
+          rgba[i + 2]
+        )
 
-        +
-
-        0.587 *
-        rgba[i + 1]
-
-        +
-
-        0.114 *
-        rgba[i + 2]
+        / 3
 
       );
 
@@ -673,10 +691,10 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   APRILTAG-ERKENNUNG
+   ERKENNUNG
    ===================================================== */
 
-async function runDetection() {
+async function detectFrame() {
 
   if (
     !detectorReady ||
@@ -695,12 +713,19 @@ async function runDetection() {
 
   try {
 
-    drawCameraToAnalysisCanvas();
-
-
     const grayscale =
       createGrayscaleImage();
 
+
+    /*
+     * Das entspricht der Originaldemo:
+     *
+     * apriltag.detect(
+     *   grayscale,
+     *   width,
+     *   height
+     * )
+     */
 
     const result =
       await apriltag.detect(
@@ -714,21 +739,10 @@ async function runDetection() {
       );
 
 
-    if (
+    detections =
       Array.isArray(result)
-    ) {
-
-      detections =
-        result;
-
-    }
-
-    else {
-
-      detections =
-        [];
-
-    }
+        ? result
+        : [];
 
 
     detectionCounter++;
@@ -744,8 +758,20 @@ async function runDetection() {
       1000
     ) {
 
+      const seconds =
+
+        (
+          now -
+          fpsStart
+        )
+
+        / 1000;
+
+
       detectionFPS =
-        detectionCounter;
+
+        detectionCounter /
+        seconds;
 
 
       detectionCounter =
@@ -777,12 +803,7 @@ async function runDetection() {
 
 
 /* =====================================================
-   KOORDINATEN ANALYSEBILD → SICHTBARES VIDEO
-
-   video nutzt object-fit: contain.
-
-   Daher können links/rechts oder oben/unten
-   schwarze Balken entstehen.
+   ANALYSEKOORDINATEN → BILDSCHIRM
    ===================================================== */
 
 function analysisToScreen(
@@ -810,8 +831,10 @@ function analysisToScreen(
 
   let displayWidth;
   let displayHeight;
+
   let offsetX;
   let offsetY;
+
 
 
   if (
@@ -832,7 +855,9 @@ function analysisToScreen(
       (
         screenWidth -
         displayWidth
-      ) / 2;
+      )
+
+      / 2;
 
 
     offsetY =
@@ -859,28 +884,38 @@ function analysisToScreen(
       (
         screenHeight -
         displayHeight
-      ) / 2;
+      )
+
+      / 2;
 
   }
+
 
 
   return {
 
     x:
+
       offsetX +
+
       (
         x /
         ANALYSIS_WIDTH
-      ) *
-      displayWidth,
+      )
+
+      * displayWidth,
+
 
     y:
+
       offsetY +
+
       (
         y /
         ANALYSIS_HEIGHT
-      ) *
-      displayHeight
+      )
+
+      * displayHeight
 
   };
 
@@ -889,7 +924,7 @@ function analysisToScreen(
 
 
 /* =====================================================
-   ERKANNTE TAGS ZEICHNEN
+   DETEKTION ZEICHNEN
    ===================================================== */
 
 function drawDetections() {
@@ -903,6 +938,7 @@ function drawDetections() {
     window.innerHeight
 
   );
+
 
 
   for (
@@ -923,8 +959,10 @@ function drawDetections() {
     }
 
 
+
     const points =
       detection.corners.map(
+
         function(corner) {
 
           return analysisToScreen(
@@ -935,31 +973,37 @@ function drawDetections() {
           );
 
         }
+
       );
 
 
-    /*
-     * Außenlinie
-     */
+
+    /* -----------------------------
+       Rahmen
+       ----------------------------- */
 
     overlayCtx.beginPath();
 
 
     overlayCtx.moveTo(
+
       points[0].x,
       points[0].y
+
     );
 
 
     for (
       let i = 1;
-      i < points.length;
+      i < 4;
       i++
     ) {
 
       overlayCtx.lineTo(
+
         points[i].x,
         points[i].y
+
       );
 
     }
@@ -980,27 +1024,23 @@ function drawDetections() {
 
 
 
-    /*
-     * Vier Ecken
-     */
+    /* -----------------------------
+       Ecken
+       ----------------------------- */
 
     for (
       let i = 0;
-      i < points.length;
+      i < 4;
       i++
     ) {
-
-      const point =
-        points[i];
-
 
       overlayCtx.beginPath();
 
 
       overlayCtx.arc(
 
-        point.x,
-        point.y,
+        points[i].x,
+        points[i].y,
 
         7,
 
@@ -1010,9 +1050,17 @@ function drawDetections() {
       );
 
 
+      /*
+       * Ecke 0 rot,
+       * restliche grün.
+       */
+
       overlayCtx.fillStyle =
+
         i === 0
+
           ? "#ff3b30"
+
           : "#00ff66";
 
 
@@ -1022,9 +1070,9 @@ function drawDetections() {
 
 
 
-    /*
-     * ID am Mittelpunkt
-     */
+    /* -----------------------------
+       Mittelpunkt / ID
+       ----------------------------- */
 
     let center;
 
@@ -1055,6 +1103,7 @@ function drawDetections() {
             points[3].x
           ) / 4,
 
+
         y:
           (
             points[0].y +
@@ -1066,6 +1115,7 @@ function drawDetections() {
       };
 
     }
+
 
 
     overlayCtx.font =
@@ -1125,7 +1175,7 @@ function drawDetections() {
 
 function updateStatus() {
 
-  let tagText =
+  let ids =
     "keiner";
 
 
@@ -1133,16 +1183,21 @@ function updateStatus() {
     detections.length > 0
   ) {
 
-    tagText =
+    ids =
       detections
+
         .map(
           function(detection) {
+
             return detection.id;
+
           }
         )
+
         .join(", ");
 
   }
+
 
 
   status.textContent =
@@ -1150,6 +1205,7 @@ function updateStatus() {
     "APRILTAG TEST 5a\n\n" +
 
     "Detector: " +
+
     (
       detectorReady
         ? "BEREIT"
@@ -1157,6 +1213,7 @@ function updateStatus() {
     ) +
 
     "\nKamera: " +
+
     (
       cameraReady
         ? "BEREIT"
@@ -1167,10 +1224,10 @@ function updateStatus() {
     detections.length +
 
     "\nIDs: " +
-    tagText +
+    ids +
 
     "\nErkennungen/s: " +
-    detectionFPS;
+    detectionFPS.toFixed(1);
 
 }
 
@@ -1180,9 +1237,7 @@ function updateStatus() {
    HAUPTSCHLEIFE
    ===================================================== */
 
-async function animationLoop(
-  timestamp
-) {
+function animationLoop() {
 
   requestAnimationFrame(
     animationLoop
@@ -1190,23 +1245,20 @@ async function animationLoop(
 
 
   /*
-   * Detection begrenzen.
-
-   * Dadurch kann der Browser zwischen den
-   * Detektionen weiter flüssig zeichnen.
+   * Wichtig:
+   *
+   * Wir starten erst eine neue Erkennung,
+   * wenn die vorherige fertig ist.
+   *
+   * Dadurch stapeln sich keine
+   * WASM-Aufrufe.
    */
 
   if (
-    timestamp -
-    lastDetectionTime >=
-    DETECTION_INTERVAL
+    !detectionRunning
   ) {
 
-    lastDetectionTime =
-      timestamp;
-
-
-    runDetection();
+    detectFrame();
 
   }
 
@@ -1228,22 +1280,23 @@ async function start() {
 
   try {
 
-    status.textContent =
-      "AprilTag-Detector wird geladen …";
-
-
     /*
-     * Detector und Kamera können parallel
-     * initialisiert werden.
+     * Erst den Detector.
+     *
+     * Dadurch bekommen wir bei einem
+     * Worker-/WASM-Problem eine eindeutige
+     * Fehlermeldung, bevor die Kamera
+     * dazwischenkommt.
      */
 
-    await Promise.all([
+    await initializeAprilTag();
 
-      initializeAprilTag(),
 
-      startCamera()
+    status.textContent =
+      "AprilTag bereit.\nKamera wird gestartet …";
 
-    ]);
+
+    await startCamera();
 
 
     status.textContent =
@@ -1263,6 +1316,7 @@ async function start() {
   }
 
 }
+
 
 
 start();
