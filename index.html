@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – AprilTag Pose Test</title>
+<title>GeoChemAR – Rendering-Test</title>
 
 <style>
 
@@ -29,16 +29,22 @@ body {
 #video {
   position: fixed;
   inset: 0;
+
   width: 100%;
   height: 100%;
+
   object-fit: contain;
+
   background: black;
+
   z-index: 1;
 }
 
 #threeCanvas {
   position: fixed;
+
   z-index: 2;
+
   pointer-events: none;
 }
 
@@ -48,18 +54,23 @@ body {
 
 #status {
   position: fixed;
+
   top: 10px;
   left: 10px;
+
   z-index: 10;
 
   padding: 10px 14px;
+
   border-radius: 8px;
 
   background: rgba(0,0,0,0.82);
+
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
+
   white-space: pre-line;
 
   pointer-events: none;
@@ -67,18 +78,23 @@ body {
 
 #error {
   position: fixed;
+
   left: 10px;
   right: 10px;
   bottom: 10px;
+
   z-index: 20;
 
   padding: 10px;
+
   border-radius: 8px;
 
   background: rgba(160,0,0,0.92);
+
   color: white;
 
   font-size: 13px;
+
   white-space: pre-wrap;
 
   display: none;
@@ -138,23 +154,6 @@ const TAG_SIZE = 0.040;
 
 
 /* =====================================================
-   KAMERA-INTRINSICS
-   ===================================================== */
-
-const cx = WIDTH / 2;
-const cy = HEIGHT / 2;
-
-const horizontalFov =
-  60 * Math.PI / 180;
-
-const fx =
-  (WIDTH / 2) /
-  Math.tan(horizontalFov / 2);
-
-const fy = fx;
-
-
-/* =====================================================
    DOM
    ===================================================== */
 
@@ -202,6 +201,14 @@ function showError(error) {
 
 /* =====================================================
    THREE.JS
+
+   WICHTIG:
+
+   Für diesen Test KEINE selbst gebaute
+   Projektionsmatrix.
+
+   Wir verwenden eine ganz normale
+   PerspectiveCamera.
    ===================================================== */
 
 const scene =
@@ -209,10 +216,26 @@ const scene =
 
 
 const camera =
-  new THREE.Camera();
+  new THREE.PerspectiveCamera(
+    60,
+    4 / 3,
+    0.01,
+    10
+  );
 
-camera.matrixAutoUpdate =
-  false;
+
+camera.position.set(
+  0,
+  0,
+  0
+);
+
+
+camera.lookAt(
+  0,
+  0,
+  -1
+);
 
 
 const renderer =
@@ -246,56 +269,24 @@ document.body.appendChild(
 
 
 /* =====================================================
-   PROJEKTIONSMATRIX
+   FESTE TESTKUGEL
+
+   NICHT mit AprilTag verbunden.
+
+   Position:
+   direkt vor der Kamera.
+
+   Radius:
+   5 cm – absichtlich sehr groß.
    ===================================================== */
 
-const near = 0.01;
-const far = 10.0;
-
-
-camera.projectionMatrix.set(
-
-  2 * fx / WIDTH,
-  0,
-  0,
-  0,
-
-  0,
-  2 * fy / HEIGHT,
-  0,
-  0,
-
-  1 - 2 * cx / WIDTH,
-  2 * cy / HEIGHT - 1,
-  -(far + near) / (far - near),
-  -1,
-
-  0,
-  0,
-  -2 * far * near / (far - near),
-  0
-
-);
-
-
-camera.projectionMatrixInverse
-  .copy(camera.projectionMatrix)
-  .invert();
-
-
-/* =====================================================
-   TESTKUGEL
-
-   Radius = 10 mm
-   ===================================================== */
-
-const sphere =
+const testSphere =
   new THREE.Mesh(
 
     new THREE.SphereGeometry(
-      0.010,
-      32,
-      24
+      0.05,
+      40,
+      32
     ),
 
     new THREE.MeshBasicMaterial({
@@ -305,9 +296,47 @@ const sphere =
   );
 
 
-sphere.visible = false;
+testSphere.position.set(
+  0,
+  0,
+  -0.5
+);
 
-scene.add(sphere);
+
+scene.add(
+  testSphere
+);
+
+
+/* =====================================================
+   APRILTAG-INTRINSICS
+
+   Diese sind NUR für den AprilTag-Detector.
+   Sie beeinflussen den Rendering-Test nicht.
+   ===================================================== */
+
+const cx =
+  WIDTH / 2;
+
+const cy =
+  HEIGHT / 2;
+
+
+const horizontalFov =
+  THREE.MathUtils.degToRad(
+    60
+  );
+
+
+const fx =
+  (WIDTH / 2) /
+  Math.tan(
+    horizontalFov / 2
+  );
+
+
+const fy =
+  fx;
 
 
 /* =====================================================
@@ -323,6 +352,10 @@ let detectionRunning = false;
 let tagDetected = false;
 let poseReceived = false;
 
+let lastTx = 0;
+let lastTy = 0;
+let lastTz = 0;
+
 let detectionCounter = 0;
 let detectionFPS = 0;
 
@@ -331,10 +364,6 @@ let fpsStart =
 
 
 async function initializeAprilTag() {
-
-  status.textContent =
-    "AprilTag-Worker wird gestartet …";
-
 
   const worker =
     new Worker(
@@ -554,28 +583,14 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   TRANSLATION
+   POSE NUR AUSLESEN
 
-   WICHTIG:
-
-   Aus unserer Diagnose wissen wir jetzt:
-
-   pose.t = [tx, ty, tz]
-
-   NICHT:
-
-   pose.t = [[tx], [ty], [tz]]
+   KEINE Verbindung mit Three.js.
    ===================================================== */
 
-let lastTx = 0;
-let lastTy = 0;
-let lastTz = 0;
-
-
-function applyTranslation(pose) {
+function readPose(pose) {
 
   poseReceived = false;
-  sphere.visible = false;
 
 
   if (
@@ -588,10 +603,6 @@ function applyTranslation(pose) {
 
   }
 
-
-  /*
-   * EXAKT das tatsächlich beobachtete Format.
-   */
 
   const tx =
     Number(pose.t[0]);
@@ -617,30 +628,6 @@ function applyTranslation(pose) {
   lastTx = tx;
   lastTy = ty;
   lastTz = tz;
-
-
-  /*
-   * AprilTag:
-   *
-   * +X rechts
-   * +Y unten
-   * +Z vor Kamera
-   *
-   * Three.js:
-   *
-   * +X rechts
-   * +Y oben
-   * -Z vor Kamera
-   */
-
-  sphere.position.set(
-    tx,
-    -ty,
-    -tz
-  );
-
-
-  sphere.visible = true;
 
   poseReceived = true;
 
@@ -696,8 +683,7 @@ async function detectFrame() {
 
       tagDetected = true;
 
-
-      applyTranslation(
+      readPose(
         detection.pose
       );
 
@@ -707,8 +693,6 @@ async function detectFrame() {
 
       tagDetected = false;
       poseReceived = false;
-
-      sphere.visible = false;
 
     }
 
@@ -721,8 +705,7 @@ async function detectFrame() {
 
 
     if (
-      now - fpsStart >=
-      1000
+      now - fpsStart >= 1000
     ) {
 
       const seconds =
@@ -758,7 +741,7 @@ async function detectFrame() {
 
 
 /* =====================================================
-   VIDEO / RENDERER SYNCHRON
+   VIDEO / THREE-CANVAS SYNCHRON
    ===================================================== */
 
 function resize() {
@@ -774,7 +757,8 @@ function resize() {
     WIDTH / HEIGHT;
 
   const screenAspect =
-    screenWidth / screenHeight;
+    screenWidth /
+    screenHeight;
 
 
   let displayWidth;
@@ -817,7 +801,6 @@ function resize() {
   renderer.domElement.style.width =
     displayWidth + "px";
 
-
   renderer.domElement.style.height =
     displayHeight + "px";
 
@@ -836,6 +819,18 @@ function resize() {
       displayHeight
     ) / 2 +
     "px";
+
+
+  /*
+   * PerspectiveCamera passend zum
+   * tatsächlich dargestellten 4:3-Bild.
+   */
+
+  camera.aspect =
+    displayWidth /
+    displayHeight;
+
+  camera.updateProjectionMatrix();
 
 }
 
@@ -873,14 +868,16 @@ function animate() {
   );
 
 
-  let positionText = "";
+  let poseText = "";
 
 
   if (poseReceived) {
 
-    positionText =
+    poseText =
 
-      "\n\nx: " +
+      "\n\nTag-Pose:" +
+
+      "\nx: " +
       lastTx.toFixed(4) +
 
       "\ny: " +
@@ -895,7 +892,10 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-2\n\n" +
+    "APRILTAG 5b-3 – RENDERTEST\n\n" +
+
+    "ROTE TESTKUGEL MUSS\n" +
+    "IN DER BILDMITTE SEIN\n\n" +
 
     "Tag 0: " +
     (
@@ -911,17 +911,10 @@ function animate() {
         : "NEIN"
     ) +
 
-    "\nRote Kugel: " +
-    (
-      sphere.visible
-        ? "SICHTBAR"
-        : "AUS"
-    ) +
-
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    positionText;
+    poseText;
 
 }
 
@@ -936,13 +929,10 @@ async function start() {
 
     await initializeAprilTag();
 
-
     status.textContent =
       "Kamera wird gestartet …";
 
-
     await startCamera();
-
 
     requestAnimationFrame(
       animate
