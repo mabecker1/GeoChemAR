@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-2b Pose-Diagnose</title>
+<title>GeoChemAR – 5c-2c Würfelzentrum</title>
 
 <style>
 html,
@@ -139,7 +139,7 @@ import * as Comlink
    ===================================================== */
 
 const VERSION =
-  "5c-2b";
+  "5c-2c";
 
 
 /* =====================================================
@@ -156,9 +156,24 @@ const TAG_SIZE =
   0.0395;
 
 
+/*
+ * Physische Würfelkante:
+ * 45,0 mm
+ *
+ * Abstand Markerfläche -> Würfelzentrum:
+ * 22,5 mm
+ */
+
+const CUBE_SIZE =
+  0.045;
+
+const HALF_CUBE =
+  CUBE_SIZE / 2;
+
+
 /* =====================================================
    KAMERAMODELL
-   Bewährte Geometrie aus 5b-10
+   Unverändert aus 5b-10 / 5c-2b
    ===================================================== */
 
 const horizontalFovDeg =
@@ -342,6 +357,9 @@ renderer.setClearColor(
 
 /* =====================================================
    MARKER-ROOTS
+
+   Diese beiden Roots erhalten weiterhin exakt die
+   bewährte AprilTag-Pose aus 5b-10.
    ===================================================== */
 
 const marker3Root =
@@ -377,13 +395,6 @@ function createDiagnosticAxes() {
 
   const group =
     new THREE.Group();
-
-
-  /*
-   * 15 mm Achsenlänge.
-   * Damit sind die Richtungen gut erkennbar,
-   * ohne wesentlich größer als der Tag zu sein.
-   */
 
   const axisLength =
     0.015;
@@ -440,16 +451,12 @@ function createDiagnosticAxes() {
       );
 
 
-    const halfDirection =
+    cylinder.position.copy(
       direction
         .clone()
         .multiplyScalar(
           axisLength / 2
-        );
-
-
-    cylinder.position.copy(
-      halfDirection
+        )
     );
 
 
@@ -471,11 +478,6 @@ function createDiagnosticAxes() {
       cylinder
     );
 
-
-    /*
-     * Kugel am positiven Ende,
-     * damit die Richtung eindeutig ist.
-     */
 
     const tip =
       new THREE.Mesh(
@@ -552,7 +554,83 @@ marker1Root.add(
 
 
 /* =====================================================
+   NEU IN 5c-2c:
+   WÜRFELZENTREN ALS CHILD DER MARKER-ROOTS
+
+   +Z (blau) zeigt nachweislich aus dem Würfel heraus.
+   Daher liegt das Würfelzentrum bei:
+
+   z = -22,5 mm
+
+   im jeweiligen lokalen Marker-Koordinatensystem.
+   ===================================================== */
+
+
+/*
+ * Zentrum aus ID 3
+ * ROT
+ */
+
+const cubeCenterFrom3 =
+  new THREE.Mesh(
+
+    new THREE.SphereGeometry(
+      0.004,
+      24,
+      16
+    ),
+
+    new THREE.MeshBasicMaterial({
+      color: 0xff3030
+    })
+
+  );
+
+cubeCenterFrom3.position.set(
+  0,
+  0,
+  -HALF_CUBE
+);
+
+marker3Root.add(
+  cubeCenterFrom3
+);
+
+
+/*
+ * Zentrum aus ID 1
+ * GELB
+ */
+
+const cubeCenterFrom1 =
+  new THREE.Mesh(
+
+    new THREE.SphereGeometry(
+      0.003,
+      24,
+      16
+    ),
+
+    new THREE.MeshBasicMaterial({
+      color: 0xffff00
+    })
+
+  );
+
+cubeCenterFrom1.position.set(
+  0,
+  0,
+  -HALF_CUBE
+);
+
+marker1Root.add(
+  cubeCenterFrom1
+);
+
+
+/* =====================================================
    5b-10 POSE-UMRECHNUNG
+   UNVERÄNDERT
    ===================================================== */
 
 const basisChange =
@@ -651,10 +729,7 @@ function applyAprilTagPose(
 
 
   /*
-   * Bewährte Rotation aus 5b-10:
-   *
-   * Die AprilTag-Rotationsmatrix wird
-   * transponiert eingesetzt.
+   * Bewährte Rotation aus 5b-10.
    */
 
   const aprilRotation =
@@ -1106,6 +1181,60 @@ async function detectFrame() {
 
 
 /* =====================================================
+   ABSTAND DER BEIDEN BERECHNETEN ZENTREN
+
+   Nur Diagnose.
+   ===================================================== */
+
+const worldCenter3 =
+  new THREE.Vector3();
+
+const worldCenter1 =
+  new THREE.Vector3();
+
+
+function getCenterDistance() {
+
+  if (
+    !marker3Root.visible ||
+    !marker1Root.visible
+  ) {
+
+    return null;
+
+  }
+
+
+  /*
+   * Sicherstellen, dass die Weltmatrizen aktuell sind.
+   */
+
+  marker3Root.updateMatrixWorld(
+    true
+  );
+
+  marker1Root.updateMatrixWorld(
+    true
+  );
+
+
+  cubeCenterFrom3.getWorldPosition(
+    worldCenter3
+  );
+
+  cubeCenterFrom1.getWorldPosition(
+    worldCenter1
+  );
+
+
+  return worldCenter3.distanceTo(
+    worldCenter1
+  );
+
+}
+
+
+/* =====================================================
    2D OVERLAY
    ===================================================== */
 
@@ -1238,55 +1367,6 @@ function drawDetection(
     color;
 
   overlayCtx.stroke();
-
-
-  /*
-   * Detektor-Ecken zusätzlich nummerieren.
-   */
-
-  for (
-    let i = 0;
-    i < 4;
-    i++
-  ) {
-
-    overlayCtx.beginPath();
-
-    overlayCtx.arc(
-      corners[i].x,
-      corners[i].y,
-      i === 0 ? 6 : 4,
-      0,
-      Math.PI * 2
-    );
-
-    overlayCtx.fillStyle =
-      i === 0
-        ? "#ff00ff"
-        : color;
-
-    overlayCtx.fill();
-
-
-    overlayCtx.font =
-      "bold 14px Arial";
-
-    overlayCtx.textAlign =
-      "center";
-
-    overlayCtx.textBaseline =
-      "middle";
-
-    overlayCtx.fillStyle =
-      "#ffffff";
-
-    overlayCtx.fillText(
-      String(i),
-      corners[i].x,
-      corners[i].y - 13
-    );
-
-  }
 
 
   const center =
@@ -1491,11 +1571,33 @@ function updateStatus() {
     );
 
 
+  const distance =
+    getCenterDistance();
+
+
+  let distanceText =
+    "–";
+
+
+  if (
+    distance !== null
+  ) {
+
+    distanceText =
+      (
+        distance *
+        1000
+      ).toFixed(1) +
+      " mm";
+
+  }
+
+
   status.textContent =
 
     "GeoChemAR " +
     VERSION +
-    " – Pose-Diagnose\n\n" +
+    " – Würfelzentrum\n\n" +
 
     "ID 3: " +
     (
@@ -1514,13 +1616,12 @@ function updateStatus() {
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    "\n\nAchsen:" +
+    "\n\nAbstand Zentren: " +
+    distanceText +
 
-    "\nX = ROT" +
+    "\n\nROT = Zentrum aus ID 3" +
 
-    "\nY = GRÜN" +
-
-    "\nZ = BLAU";
+    "\nGELB = Zentrum aus ID 1";
 
 }
 
