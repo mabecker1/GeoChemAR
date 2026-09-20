@@ -58,6 +58,8 @@ body {
   z-index: 10;
 
   max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
 
   padding: 10px 13px;
   border-radius: 8px;
@@ -160,7 +162,7 @@ const CALIBRATION_FRAMES = 30;
 
 /* =====================================================
    KAMERAMODELL
-   UNVERÄNDERT AUS DEM STABILEN STAND
+   UNVERÄNDERT
    ===================================================== */
 
 const horizontalFovDeg = 60;
@@ -254,15 +256,15 @@ let fpsStart =
 
 
 /* =====================================================
-   KALIBRIERUNGS-DATEN
+   KALIBRIERUNGEN
 
-   A: ID 1 -> ID 0
+   A: ID 2 -> ID 0
    B: ID 4 -> ID 5
    ===================================================== */
 
 const calibrationA = {
 
-  label: "ID1 → ID0",
+  label: "ID2 → ID0",
 
   samples: [],
 
@@ -367,7 +369,7 @@ renderer.setClearColor(
 const marker0Root =
   new THREE.Group();
 
-const marker1Root =
+const marker2Root =
   new THREE.Group();
 
 const marker4Root =
@@ -380,7 +382,7 @@ const marker5Root =
 const markerRoots = {
 
   0: marker0Root,
-  1: marker1Root,
+  2: marker2Root,
   4: marker4Root,
   5: marker5Root
 
@@ -550,7 +552,7 @@ marker0Root.add(
   createDiagnosticAxes()
 );
 
-marker1Root.add(
+marker2Root.add(
   createDiagnosticAxes()
 );
 
@@ -566,8 +568,7 @@ marker5Root.add(
 /* =====================================================
    WÜRFELZENTREN
 
-   Nur zur Kontrolle der Geometrie.
-   +Z zeigt nach außen.
+   +Z des Tags zeigt nach außen.
    Würfelzentrum liegt bei -22,5 mm.
    ===================================================== */
 
@@ -608,7 +609,7 @@ const centerFrom0 =
     0xffff00
   );
 
-const centerFrom1 =
+const centerFrom2 =
   createCenterMarker(
     0xff3030
   );
@@ -628,8 +629,8 @@ marker0Root.add(
   centerFrom0
 );
 
-marker1Root.add(
-  centerFrom1
+marker2Root.add(
+  centerFrom2
 );
 
 marker4Root.add(
@@ -726,21 +727,12 @@ function applyAprilTagPose(
   }
 
 
-  /*
-   * Bewährte Translation.
-   */
-
   root.position.set(
     tx,
     -ty,
     -tz
   );
 
-
-  /*
-   * Bewährte transponierte
-   * AprilTag-Rotation.
-   */
 
   const aprilRotation =
     new THREE.Matrix4();
@@ -829,8 +821,6 @@ function calculateRelativeQuaternion(
 
   /*
    * q und -q beschreiben dieselbe Rotation.
-   * Für die Mittelung einheitliches
-   * Vorzeichen wählen.
    */
 
   if (
@@ -851,7 +841,7 @@ function calculateRelativeQuaternion(
 
 
 /* =====================================================
-   QUATERNION-MITTELUNG
+   QUATERNION MITTELN
    ===================================================== */
 
 function averageQuaternions(
@@ -1013,7 +1003,7 @@ function quaternionToAxisAngle(
 
 
 /* =====================================================
-   EINE KALIBRIERUNG AKTUALISIEREN
+   EINE KALIBRIERUNG
    ===================================================== */
 
 function updateOneCalibration(
@@ -1089,18 +1079,15 @@ function updateOneCalibration(
       " ==="
     );
 
-
     console.log(
       "Quaternion:",
       calibration.quaternion
     );
 
-
     console.log(
       "Achse:",
       calibration.axis
     );
-
 
     console.log(
       "Winkel:",
@@ -1114,26 +1101,19 @@ function updateOneCalibration(
 
 /* =====================================================
    BEIDE KALIBRIERUNGEN
+
+   A: ID 2 -> ID 0
+   B: ID 4 -> ID 5
    ===================================================== */
 
 function updateCalibrations() {
 
-  /*
-   * Kalibrierung A:
-   * ID 1 -> ID 0
-   */
-
   updateOneCalibration(
     calibrationA,
-    marker1Root,
+    marker2Root,
     marker0Root
   );
 
-
-  /*
-   * Kalibrierung B:
-   * ID 4 -> ID 5
-   */
 
   updateOneCalibration(
     calibrationB,
@@ -1264,17 +1244,13 @@ async function initializeAprilTag() {
   );
 
 
-  /*
-   * Alle vier benötigten Tags.
-   */
-
   await apriltag.set_tag_size(
     0,
     TAG_SIZE
   );
 
   await apriltag.set_tag_size(
-    1,
+    2,
     TAG_SIZE
   );
 
@@ -1482,14 +1458,8 @@ async function detectFrame() {
         : [];
 
 
-    /*
-     * Zunächst alle vier Roots unsichtbar.
-     * Danach nur tatsächlich erkannte
-     * Marker wieder aktivieren.
-     */
-
     marker0Root.visible = false;
-    marker1Root.visible = false;
+    marker2Root.visible = false;
     marker4Root.visible = false;
     marker5Root.visible = false;
 
@@ -1560,7 +1530,7 @@ async function detectFrame() {
   catch(error) {
 
     marker0Root.visible = false;
-    marker1Root.visible = false;
+    marker2Root.visible = false;
     marker4Root.visible = false;
     marker5Root.visible = false;
 
@@ -1767,7 +1737,7 @@ function drawOverlay() {
       color = "#ffff00";
     }
 
-    if (id === 1) {
+    if (id === 2) {
       color = "#ff4040";
     }
 
@@ -1782,7 +1752,7 @@ function drawOverlay() {
 
     if (
       id === 0 ||
-      id === 1 ||
+      id === 2 ||
       id === 4 ||
       id === 5
     ) {
@@ -1974,10 +1944,10 @@ function formatCalibration(
 
 function updateStatus() {
 
-  const distance10 =
+  const distance20 =
     getCenterDistance(
-      marker1Root,
-      centerFrom1,
+      marker2Root,
+      centerFrom2,
       marker0Root,
       centerFrom0
     );
@@ -1992,11 +1962,11 @@ function updateStatus() {
     );
 
 
-  const distance10Text =
-    distance10 === null
+  const distance20Text =
+    distance20 === null
       ? "–"
       : (
-          distance10 *
+          distance20 *
           1000
         ).toFixed(1) +
         " mm";
@@ -2020,7 +1990,7 @@ function updateStatus() {
   ) {
 
     instruction =
-      "Jetzt Kante ID 1 / ID 0 zeigen.";
+      "Jetzt Kante ID 2 / ID 0 zeigen.";
 
   }
 
@@ -2029,7 +1999,7 @@ function updateStatus() {
   ) {
 
     instruction =
-      "ID1→0 fertig. Jetzt Kante ID 4 / ID 5 zeigen.";
+      "ID2→0 fertig. Jetzt Kante ID 4 / ID 5 zeigen.";
 
   }
 
@@ -2053,9 +2023,9 @@ function updateStatus() {
     "\n\n" +
     instruction +
 
-    "\n\nID 1: " +
+    "\n\nID 2: " +
     (
-      marker1Root.visible
+      marker2Root.visible
         ? "JA"
         : "NEIN"
     ) +
@@ -2067,8 +2037,8 @@ function updateStatus() {
         : "NEIN"
     ) +
 
-    "\nZentrumsabstand 1/0: " +
-    distance10Text +
+    "\nZentrumsabstand 2/0: " +
+    distance20Text +
 
     "\n\n" +
     formatCalibration(
