@@ -211,7 +211,6 @@ const scene =
 const camera =
   new THREE.Camera();
 
-
 camera.matrixAutoUpdate =
   false;
 
@@ -285,11 +284,9 @@ camera.projectionMatrixInverse
 
 
 /* =====================================================
-   TESTOBJEKT
+   TESTKUGEL
 
-   Bewusst groß und rot.
-
-   Radius = 10 mm.
+   Radius = 10 mm
    ===================================================== */
 
 const sphere =
@@ -309,7 +306,6 @@ const sphere =
 
 
 sphere.visible = false;
-
 
 scene.add(sphere);
 
@@ -355,7 +351,9 @@ async function initializeAprilTag() {
 
       Comlink.proxy(
         function() {
+
           detectorReady = true;
+
         }
       )
 
@@ -388,11 +386,6 @@ async function initializeAprilTag() {
   }
 
 
-  /*
-   * Diese Konfiguration entspricht
-   * unserem funktionierenden Diagnose-Test.
-   */
-
   await apriltag.set_camera_info(
     fx,
     fy,
@@ -411,10 +404,6 @@ async function initializeAprilTag() {
     1
   );
 
-
-  /*
-   * Wie im funktionierenden Diagnosetest.
-   */
 
   await apriltag.set_return_solutions(
     1
@@ -565,18 +554,23 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   POSE
+   TRANSLATION
 
-   Für diesen Test verwenden wir NUR t.
+   WICHTIG:
 
-   KEINE Rotationsmatrix.
-   KEINE Quaternion.
-   KEINE Würfeltransformation.
+   Aus unserer Diagnose wissen wir jetzt:
 
-   Dadurch testen wir ausschließlich:
-   Kann Three.js die von AprilTag gemessene
-   3D-Position korrekt darstellen?
+   pose.t = [tx, ty, tz]
+
+   NICHT:
+
+   pose.t = [[tx], [ty], [tz]]
    ===================================================== */
+
+let lastTx = 0;
+let lastTy = 0;
+let lastTz = 0;
+
 
 function applyTranslation(pose) {
 
@@ -586,7 +580,8 @@ function applyTranslation(pose) {
 
   if (
     !pose ||
-    !pose.t
+    !pose.t ||
+    pose.t.length < 3
   ) {
 
     return;
@@ -594,28 +589,18 @@ function applyTranslation(pose) {
   }
 
 
-  const t = pose.t;
-
-
   /*
-   * Das ist exakt die von dir beobachtete
-   * Datenstruktur:
-   *
-   * [
-   *   [tx],
-   *   [ty],
-   *   [tz]
-   * ]
+   * EXAKT das tatsächlich beobachtete Format.
    */
 
   const tx =
-    Number(t[0][0]);
+    Number(pose.t[0]);
 
   const ty =
-    Number(t[1][0]);
+    Number(pose.t[1]);
 
   const tz =
-    Number(t[2][0]);
+    Number(pose.t[2]);
 
 
   if (
@@ -629,28 +614,29 @@ function applyTranslation(pose) {
   }
 
 
+  lastTx = tx;
+  lastTy = ty;
+  lastTz = tz;
+
+
   /*
    * AprilTag:
    *
-   * +X = rechts
-   * +Y = unten
-   * +Z = vor der Kamera
+   * +X rechts
+   * +Y unten
+   * +Z vor Kamera
    *
    * Three.js:
    *
-   * +X = rechts
-   * +Y = oben
-   * -Z = vor der Kamera
+   * +X rechts
+   * +Y oben
+   * -Z vor Kamera
    */
 
   sphere.position.set(
-
     tx,
-
     -ty,
-
     -tz
-
   );
 
 
@@ -709,6 +695,7 @@ async function detectFrame() {
     if (detection) {
 
       tagDetected = true;
+
 
       applyTranslation(
         detection.pose
@@ -782,6 +769,7 @@ function resize() {
   const screenHeight =
     window.innerHeight;
 
+
   const videoAspect =
     WIDTH / HEIGHT;
 
@@ -828,6 +816,7 @@ function resize() {
 
   renderer.domElement.style.width =
     displayWidth + "px";
+
 
   renderer.domElement.style.height =
     displayHeight + "px";
@@ -884,9 +873,29 @@ function animate() {
   );
 
 
+  let positionText = "";
+
+
+  if (poseReceived) {
+
+    positionText =
+
+      "\n\nx: " +
+      lastTx.toFixed(4) +
+
+      "\ny: " +
+      lastTy.toFixed(4) +
+
+      "\nz: " +
+      lastTz.toFixed(4) +
+      " m";
+
+  }
+
+
   status.textContent =
 
-    "APRILTAG 5b-1\n\n" +
+    "APRILTAG 5b-2\n\n" +
 
     "Tag 0: " +
     (
@@ -910,7 +919,9 @@ function animate() {
     ) +
 
     "\nErkennungen/s: " +
-    detectionFPS.toFixed(1);
+    detectionFPS.toFixed(1) +
+
+    positionText;
 
 }
 
@@ -925,10 +936,13 @@ async function start() {
 
     await initializeAprilTag();
 
+
     status.textContent =
       "Kamera wird gestartet …";
 
+
     await startCamera();
+
 
     requestAnimationFrame(
       animate
