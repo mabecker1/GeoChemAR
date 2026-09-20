@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-1b OpenCV PnP</title>
+<title>GeoChemAR – 5c-1c OpenCV PnP</title>
 
 <style>
 html,
@@ -56,17 +56,13 @@ body {
   top: 10px;
   left: 10px;
   z-index: 10;
-
   padding: 9px 12px;
   border-radius: 8px;
-
   background: rgba(0,0,0,0.78);
   color: white;
-
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-line;
-
   pointer-events: none;
 }
 
@@ -76,16 +72,12 @@ body {
   right: 10px;
   bottom: 10px;
   z-index: 20;
-
   padding: 10px;
   border-radius: 8px;
-
   background: rgba(160,0,0,0.92);
   color: white;
-
   font-size: 13px;
   white-space: pre-wrap;
-
   display: none;
 }
 </style>
@@ -125,6 +117,47 @@ Initialisierung …
 <div id="error"></div>
 
 
+<!--
+  WICHTIG:
+  Module wird VOR opencv.js angelegt.
+-->
+<script>
+
+window.openCVRuntimeReady =
+  new Promise(
+    (resolve, reject) => {
+
+      window.Module = {
+
+        onRuntimeInitialized() {
+
+          resolve();
+
+        },
+
+        onAbort(reason) {
+
+          reject(
+            new Error(
+              "OpenCV wurde abgebrochen: " +
+              String(reason)
+            )
+          );
+
+        }
+
+      };
+
+    }
+  );
+
+</script>
+
+
+<!-- Erst jetzt OpenCV laden -->
+<script src="./libs/opencv.js"></script>
+
+
 <script type="module">
 
 import * as THREE
@@ -139,7 +172,7 @@ import * as Comlink
    ===================================================== */
 
 const VERSION =
-  "5c-1b";
+  "5c-1c";
 
 
 /* =====================================================
@@ -445,6 +478,7 @@ function createMethane() {
       ),
 
       carbonMaterial
+
     );
 
   group.add(
@@ -592,6 +626,7 @@ function createMethane() {
 
 }
 
+
 const methane =
   createMethane();
 
@@ -613,67 +648,44 @@ tagRoot.add(
 async function initializeOpenCV() {
 
   status.textContent =
-    "OpenCV-Datei wird geladen …";
+    "OpenCV-Runtime wird initialisiert …";
+
 
   /*
-   * OpenCV wird jetzt bewusst erst hier geladen.
-   *
-   * Dadurch können wir die verschiedenen
-   * Initialisierungsvarianten von OpenCV.js
-   * kontrolliert behandeln.
+   * Der Callback wurde bereits VOR dem Laden
+   * von opencv.js registriert.
    */
 
-  if (
-    !document.querySelector(
-      'script[data-geochem-opencv]'
-    )
-  ) {
+  const timeout =
+    new Promise(
+      (_, reject) => {
 
-    await new Promise(
-      (resolve, reject) => {
+        setTimeout(
+          () => {
 
-        const script =
-          document.createElement(
-            "script"
-          );
-
-        script.src =
-          "./libs/opencv.js";
-
-        script.async =
-          true;
-
-        script.dataset.geochemOpencv =
-          "true";
-
-        script.onload =
-          resolve;
-
-        script.onerror =
-          () =>
             reject(
               new Error(
-                "Die Datei libs/opencv.js konnte nicht geladen werden."
+                "OpenCV-Runtime wurde nicht innerhalb von 30 Sekunden initialisiert."
               )
             );
 
-        document.head.appendChild(
-          script
+          },
+          30000
         );
 
       }
     );
 
-  }
 
-
-  status.textContent =
-    "OpenCV-Runtime wird initialisiert …";
+  await Promise.race([
+    window.openCVRuntimeReady,
+    timeout
+  ]);
 
 
   /*
-   * Manche aktuelle Builds stellen cv als
-   * Promise bereit.
+   * Einige OpenCV-Versionen stellen cv zusätzlich
+   * als Promise bereit.
    */
 
   if (
@@ -689,136 +701,40 @@ async function initializeOpenCV() {
 
 
   /*
-   * Falls cv bereits vollständig initialisiert
-   * wurde, können wir sofort weiter.
+   * Jetzt müssen die benötigten Funktionen
+   * tatsächlich vorhanden sein.
    */
 
   if (
-    window.cv &&
-    typeof window.cv.solvePnP ===
-      "function" &&
-    typeof window.cv.matFromArray ===
-      "function"
+    !window.cv
   ) {
 
-    cvReady =
-      true;
-
-    return;
-
-  }
-
-
-  /*
-   * Klassische Emscripten/OpenCV.js-Builds
-   * melden die fertige WASM-Runtime über
-   * onRuntimeInitialized.
-   */
-
-  if (
-    window.cv &&
-    typeof window.cv ===
-      "object"
-  ) {
-
-    await new Promise(
-      (resolve, reject) => {
-
-        const timeout =
-          setTimeout(
-            () => {
-
-              reject(
-                new Error(
-                  "OpenCV-Runtime wurde nicht innerhalb von 30 Sekunden bereit."
-                )
-              );
-
-            },
-            30000
-          );
-
-
-        const oldCallback =
-          window.cv
-            .onRuntimeInitialized;
-
-
-        window.cv
-          .onRuntimeInitialized =
-          function() {
-
-            if (
-              typeof oldCallback ===
-                "function"
-            ) {
-
-              try {
-
-                oldCallback();
-
-              }
-              catch(error) {
-
-                console.warn(
-                  error
-                );
-
-              }
-
-            }
-
-
-            clearTimeout(
-              timeout
-            );
-
-            resolve();
-
-          };
-
-
-        /*
-         * Es kann sein, dass die Runtime zwischen
-         * unserer ersten Prüfung und dem Setzen des
-         * Callbacks fertig geworden ist.
-         */
-
-        if (
-          typeof window.cv.solvePnP ===
-            "function" &&
-          typeof window.cv.matFromArray ===
-            "function"
-        ) {
-
-          clearTimeout(
-            timeout
-          );
-
-          resolve();
-
-        }
-
-      }
+    throw new Error(
+      "OpenCV-Runtime ist bereit, aber window.cv existiert nicht."
     );
 
   }
 
 
-  /*
-   * Abschließende Prüfung.
-   */
+  if (
+    typeof window.cv.solvePnP !==
+      "function"
+  ) {
+
+    throw new Error(
+      "OpenCV ist bereit, aber solvePnP fehlt."
+    );
+
+  }
+
 
   if (
-    !window.cv ||
-    typeof window.cv.solvePnP !==
-      "function" ||
     typeof window.cv.matFromArray !==
       "function"
   ) {
 
     throw new Error(
-      "OpenCV wurde geladen, aber die benötigten Funktionen sind nicht verfügbar."
+      "OpenCV ist bereit, aber matFromArray fehlt."
     );
 
   }
@@ -1223,6 +1139,7 @@ function calculatePoseWithOpenCV(
 
     }
 
+
     const rotationMatrix =
       new cv.Mat();
 
@@ -1251,6 +1168,7 @@ function calculatePoseWithOpenCV(
 
       }
 
+
       const tx =
         T[0];
 
@@ -1260,11 +1178,13 @@ function calculatePoseWithOpenCV(
       const tz =
         T[2];
 
+
       tagRoot.position.set(
         tx,
         -ty,
         -tz
       );
+
 
       const opencvRotation =
         new THREE.Matrix4();
@@ -1278,6 +1198,7 @@ function calculatePoseWithOpenCV(
 
       );
 
+
       const basisChange =
         new THREE.Matrix4();
 
@@ -1289,6 +1210,7 @@ function calculatePoseWithOpenCV(
         0,  0,  0, 1
 
       );
+
 
       const convertedRotation =
         new THREE.Matrix4();
@@ -1304,10 +1226,12 @@ function calculatePoseWithOpenCV(
           basisChange
         );
 
+
       tagRoot.quaternion
         .setFromRotationMatrix(
           convertedRotation
         );
+
 
       tagRoot.visible =
         true;
@@ -1385,6 +1309,7 @@ async function detectFrame() {
           TEST_TAG_ID
       ) || null;
 
+
     if (
       latestDetection
     ) {
@@ -1405,10 +1330,13 @@ async function detectFrame() {
 
     }
 
+
     detectionCounter++;
+
 
     const now =
       performance.now();
+
 
     if (
       now -
@@ -1422,9 +1350,11 @@ async function detectFrame() {
           fpsStart
         ) / 1000;
 
+
       detectionFPS =
         detectionCounter /
         seconds;
+
 
       detectionCounter =
         0;
@@ -1484,12 +1414,14 @@ function drawOverlay() {
 
   }
 
+
   const corners =
     latestDetection.corners
       .slice(0, 4)
       .map(
         getPoint
       );
+
 
   if (
     corners.some(
@@ -1502,12 +1434,14 @@ function drawOverlay() {
 
   }
 
+
   overlayCtx.beginPath();
 
   overlayCtx.moveTo(
     corners[0].x,
     corners[0].y
   );
+
 
   for (
     let i = 1;
@@ -1522,6 +1456,7 @@ function drawOverlay() {
 
   }
 
+
   overlayCtx.closePath();
 
   overlayCtx.lineWidth =
@@ -1531,6 +1466,7 @@ function drawOverlay() {
     "#00ff00";
 
   overlayCtx.stroke();
+
 
   for (
     let i = 0;
@@ -1600,6 +1536,7 @@ function resize() {
   let displayWidth;
   let displayHeight;
 
+
   if (
     screenAspect >
     videoAspect
@@ -1625,17 +1562,20 @@ function resize() {
 
   }
 
+
   const left =
     (
       screenWidth -
       displayWidth
     ) / 2;
 
+
   const top =
     (
       screenHeight -
       displayHeight
     ) / 2;
+
 
   for (
     const canvas
@@ -1680,6 +1620,7 @@ function animate() {
     animate
   );
 
+
   if (
     !detectionRunning
   ) {
@@ -1688,12 +1629,15 @@ function animate() {
 
   }
 
+
   drawOverlay();
+
 
   renderer.render(
     scene,
     camera
   );
+
 
   status.textContent =
 
@@ -1736,19 +1680,25 @@ async function start() {
   try {
 
     status.textContent =
-      "OpenCV wird geladen …";
+      "OpenCV wird initialisiert …";
+
 
     await initializeOpenCV();
+
 
     status.textContent =
       "OpenCV bereit ✓\nAprilTag wird geladen …";
 
+
     await initializeAprilTag();
+
 
     status.textContent =
       "OpenCV bereit ✓\nAprilTag bereit ✓\nKamera wird gestartet …";
 
+
     await startCamera();
+
 
     requestAnimationFrame(
       animate
