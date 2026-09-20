@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-2e Rotationskalibrierung</title>
+<title>GeoChemAR – 5c-2f Zwei-Seiten-Würfelpose</title>
 
 <style>
 html,
@@ -138,7 +138,7 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-2e";
+const VERSION = "5c-2f";
 
 
 /* =====================================================
@@ -150,10 +150,12 @@ const HEIGHT = 480;
 
 const TAG_SIZE = 0.0395;
 
+/*
+ * Physischer Würfel:
+ * 45,0 mm Kantenlänge
+ */
 const CUBE_SIZE = 0.045;
 const HALF_CUBE = CUBE_SIZE / 2;
-
-const CALIBRATION_FRAMES = 30;
 
 
 /* =====================================================
@@ -175,6 +177,7 @@ const fx =
   );
 
 const fy = fx;
+
 const cx = WIDTH / 2;
 const cy = HEIGHT / 2;
 
@@ -249,21 +252,8 @@ let detectionFPS = 0;
 let fpsStart =
   performance.now();
 
-
-/* =====================================================
-   KALIBRIERUNG
-   ===================================================== */
-
-let calibrationSamples = [];
-
-let calibrationFinished = false;
-
-let calibratedRelativeQuaternion = null;
-
-let calibratedAxis =
-  new THREE.Vector3();
-
-let calibratedAngleDeg = 0;
+let lastCenterDistance = null;
+let lastRotationDifference = null;
 
 
 /* =====================================================
@@ -331,7 +321,35 @@ renderer.setClearColor(
 
 
 /* =====================================================
-   MARKER ROOTS
+   LICHT
+   ===================================================== */
+
+scene.add(
+  new THREE.AmbientLight(
+    0xffffff,
+    2
+  )
+);
+
+const directionalLight =
+  new THREE.DirectionalLight(
+    0xffffff,
+    2
+  );
+
+directionalLight.position.set(
+  1,
+  2,
+  2
+);
+
+scene.add(
+  directionalLight
+);
+
+
+/* =====================================================
+   MARKER-ROOTS
    ===================================================== */
 
 const marker3Root =
@@ -348,173 +366,14 @@ scene.add(marker1Root);
 
 
 /* =====================================================
-   ACHSEN
-   ===================================================== */
+   BESTÄTIGTE WÜRFELZENTREN
 
-function createDiagnosticAxes() {
-
-  const group =
-    new THREE.Group();
-
-  const axisLength =
-    0.015;
-
-  const axisRadius =
-    0.0008;
-
-
-  const origin =
-    new THREE.Mesh(
-
-      new THREE.SphereGeometry(
-        0.0025,
-        24,
-        16
-      ),
-
-      new THREE.MeshBasicMaterial({
-        color: 0xffffff
-      })
-
-    );
-
-  group.add(origin);
-
-
-  function createAxis(
-    direction,
-    color
-  ) {
-
-    const material =
-      new THREE.MeshBasicMaterial({
-        color
-      });
-
-
-    const cylinder =
-      new THREE.Mesh(
-
-        new THREE.CylinderGeometry(
-          axisRadius,
-          axisRadius,
-          axisLength,
-          12,
-          1,
-          false
-        ),
-
-        material
-
-      );
-
-
-    cylinder.position.copy(
-      direction
-        .clone()
-        .multiplyScalar(
-          axisLength / 2
-        )
-    );
-
-
-    cylinder.quaternion
-      .setFromUnitVectors(
-        new THREE.Vector3(
-          0,
-          1,
-          0
-        ),
-        direction
-      );
-
-
-    group.add(cylinder);
-
-
-    const tip =
-      new THREE.Mesh(
-
-        new THREE.SphereGeometry(
-          0.0017,
-          16,
-          12
-        ),
-
-        material
-
-      );
-
-
-    tip.position.copy(
-      direction
-        .clone()
-        .multiplyScalar(
-          axisLength
-        )
-    );
-
-
-    group.add(tip);
-
-  }
-
-
-  createAxis(
-    new THREE.Vector3(
-      1, 0, 0
-    ),
-    0xff3030
-  );
-
-  createAxis(
-    new THREE.Vector3(
-      0, 1, 0
-    ),
-    0x30ff30
-  );
-
-  createAxis(
-    new THREE.Vector3(
-      0, 0, 1
-    ),
-    0x3080ff
-  );
-
-
-  return group;
-
-}
-
-
-marker3Root.add(
-  createDiagnosticAxes()
-);
-
-marker1Root.add(
-  createDiagnosticAxes()
-);
-
-
-/* =====================================================
-   WÜRFELZENTREN
-   Bereits experimentell bestätigt.
+   +Z zeigt aus dem Würfel heraus.
+   Zentrum daher bei -22,5 mm.
    ===================================================== */
 
 const centerFrom3 =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.0035,
-      20,
-      14
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xff3030
-    })
-
-  );
+  new THREE.Object3D();
 
 centerFrom3.position.set(
   0,
@@ -528,19 +387,7 @@ marker3Root.add(
 
 
 const centerFrom1 =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.0027,
-      20,
-      14
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xffff00
-    })
-
-  );
+  new THREE.Object3D();
 
 centerFrom1.position.set(
   0,
@@ -551,6 +398,240 @@ centerFrom1.position.set(
 marker1Root.add(
   centerFrom1
 );
+
+
+/* =====================================================
+   METHAN
+   ===================================================== */
+
+function createMethane() {
+
+  const group =
+    new THREE.Group();
+
+  /*
+   * Bewährte metrische Skalierung.
+   */
+
+  const scale = 0.05;
+
+  const carbonRadius =
+    0.22 * scale;
+
+  const hydrogenRadius =
+    0.14 * scale;
+
+  const hydrogenDistance =
+    0.72 * scale;
+
+  const bondRadius =
+    0.040 * scale;
+
+
+  const carbonMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x202020,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.55,
+      metalness: 0
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xb8bec7,
+      roughness: 0.65,
+      metalness: 0
+    });
+
+
+  /*
+   * Kohlenstoff sitzt exakt im Ursprung
+   * der Methan-Gruppe.
+   */
+
+  const carbon =
+    new THREE.Mesh(
+
+      new THREE.SphereGeometry(
+        carbonRadius,
+        48,
+        32
+      ),
+
+      carbonMaterial
+
+    );
+
+  group.add(carbon);
+
+
+  /*
+   * Exakte tetraedrische Richtungen.
+   */
+
+  const directions = [
+
+    new THREE.Vector3(
+      1, 1, 1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1, -1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, 1, -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1, -1, 1
+    ).normalize()
+
+  ];
+
+
+  for (
+    const direction
+    of directions
+  ) {
+
+    const hydrogen =
+      new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+          hydrogenRadius,
+          40,
+          28
+        ),
+
+        hydrogenMaterial
+
+      );
+
+
+    hydrogen.position.copy(
+
+      direction
+        .clone()
+        .multiplyScalar(
+          hydrogenDistance
+        )
+
+    );
+
+    group.add(hydrogen);
+
+
+    /*
+     * Bindung exakt von Kugeloberfläche
+     * zu Kugeloberfläche.
+     */
+
+    const startDistance =
+      carbonRadius;
+
+    const endDistance =
+      hydrogenDistance -
+      hydrogenRadius;
+
+
+    const startPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          startDistance
+        );
+
+
+    const endPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          endDistance
+        );
+
+
+    const bondVector =
+      endPoint
+        .clone()
+        .sub(
+          startPoint
+        );
+
+
+    const bondLength =
+      bondVector.length();
+
+
+    const bond =
+      new THREE.Mesh(
+
+        new THREE.CylinderGeometry(
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+        ),
+
+        bondMaterial
+
+      );
+
+
+    bond.position.copy(
+
+      startPoint
+        .clone()
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
+
+    );
+
+
+    bond.quaternion
+      .setFromUnitVectors(
+
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+
+        direction
+
+      );
+
+
+    group.add(bond);
+
+  }
+
+
+  return group;
+
+}
+
+
+const methane =
+  createMethane();
+
+methane.visible = false;
+
+scene.add(methane);
 
 
 /* =====================================================
@@ -631,6 +712,10 @@ function applyAprilTagPose(
   }
 
 
+  /*
+   * Bewährte Translation.
+   */
+
   root.position.set(
     tx,
     -ty,
@@ -638,14 +723,13 @@ function applyAprilTagPose(
   );
 
 
+  /*
+   * Bewährte transponierte AprilTag-Rotation.
+   */
+
   const aprilRotation =
     new THREE.Matrix4();
 
-
-  /*
-   * Bewährte transponierte Rotation
-   * aus 5b-10.
-   */
 
   aprilRotation.set(
 
@@ -702,312 +786,41 @@ function applyAprilTagPose(
 
 
 /* =====================================================
-   RELATIVE ROTATION
+   STARRE ROTATIONSBEZIEHUNG ID 3 -> ID 1
 
-   qRelative = inverse(q3) * q1
+   Messung:
+   (-0.50580, -0.49662, -0.49008, 0.50731)
+   Winkel 119,03°
 
-   Diese Rotation beschreibt direkt,
-   wie ID 1 gegenüber ID 3 auf dem
-   starren realen Würfel orientiert ist.
+   Ideale Würfelgeometrie:
+   (-0.5, -0.5, -0.5, 0.5)
+
+   q1 = q3 * q3to1
+
+   daher:
+
+   q3 = q1 * inverse(q3to1)
    ===================================================== */
 
-function calculateRelativeQuaternion() {
-
-  const inverseQ3 =
-    marker3Root.quaternion
-      .clone()
-      .invert();
-
-
-  const relative =
-    inverseQ3.multiply(
-      marker1Root.quaternion
-    );
-
-
-  relative.normalize();
-
-
-  /*
-   * q und -q sind dieselbe Rotation.
-   * Für die spätere Mittelung erzwingen
-   * wir w >= 0.
-   */
-
-  if (
-    relative.w < 0
-  ) {
-
-    relative.x *= -1;
-    relative.y *= -1;
-    relative.z *= -1;
-    relative.w *= -1;
-
-  }
-
-
-  return relative;
-
-}
-
-
-/* =====================================================
-   QUATERNION MITTELN
-   ===================================================== */
-
-function averageQuaternions(
-  samples
-) {
-
-  if (
-    samples.length === 0
-  ) {
-
-    return null;
-
-  }
-
-
-  /*
-   * Referenz für Vorzeichenausrichtung.
-   */
-
-  const reference =
-    samples[0];
-
-
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  let w = 0;
-
-
-  for (
-    const original
-    of samples
-  ) {
-
-    const q =
-      original.clone();
-
-
-    if (
-      reference.dot(q) < 0
-    ) {
-
-      q.x *= -1;
-      q.y *= -1;
-      q.z *= -1;
-      q.w *= -1;
-
-    }
-
-
-    x += q.x;
-    y += q.y;
-    z += q.z;
-    w += q.w;
-
-  }
-
-
-  const result =
-    new THREE.Quaternion(
-      x,
-      y,
-      z,
-      w
-    );
-
-
-  result.normalize();
-
-  return result;
-
-}
-
-
-/* =====================================================
-   QUATERNION -> ACHSE/WINKEL
-   ===================================================== */
-
-function quaternionToAxisAngle(
-  quaternion
-) {
-
-  const q =
-    quaternion.clone()
-      .normalize();
-
-
-  /*
-   * Für eindeutige Darstellung:
-   * Winkel <= 180°
-   */
-
-  if (
-    q.w < 0
-  ) {
-
-    q.x *= -1;
-    q.y *= -1;
-    q.z *= -1;
-    q.w *= -1;
-
-  }
-
-
-  const w =
-    THREE.MathUtils.clamp(
-      q.w,
-      -1,
-      1
-    );
-
-
-  const angle =
-    2 *
-    Math.acos(w);
-
-
-  const sinHalf =
-    Math.sqrt(
-      Math.max(
-        0,
-        1 - w * w
-      )
-    );
-
-
-  const axis =
-    new THREE.Vector3();
-
-
-  if (
-    sinHalf <
-    0.000001
-  ) {
-
-    axis.set(
-      1,
-      0,
-      0
-    );
-
-  }
-
-  else {
-
-    axis.set(
-      q.x / sinHalf,
-      q.y / sinHalf,
-      q.z / sinHalf
-    );
-
-  }
-
-
-  return {
-    axis,
-    angleDeg:
-      THREE.MathUtils.radToDeg(
-        angle
-      )
-  };
-
-}
-
-
-/* =====================================================
-   KALIBRIERUNG
-   ===================================================== */
-
-function updateCalibration() {
-
-  if (
-    calibrationFinished
-  ) {
-
-    return;
-
-  }
-
-
-  if (
-    !marker3Root.visible ||
-    !marker1Root.visible
-  ) {
-
-    return;
-
-  }
-
-
-  const relative =
-    calculateRelativeQuaternion();
-
-
-  calibrationSamples.push(
-    relative
+const relative3to1 =
+  new THREE.Quaternion(
+    -0.5,
+    -0.5,
+    -0.5,
+     0.5
   );
 
-
-  if (
-    calibrationSamples.length >=
-    CALIBRATION_FRAMES
-  ) {
-
-    calibratedRelativeQuaternion =
-      averageQuaternions(
-        calibrationSamples
-      );
+relative3to1.normalize();
 
 
-    const axisAngle =
-      quaternionToAxisAngle(
-        calibratedRelativeQuaternion
-      );
-
-
-    calibratedAxis.copy(
-      axisAngle.axis
-    );
-
-
-    calibratedAngleDeg =
-      axisAngle.angleDeg;
-
-
-    calibrationFinished =
-      true;
-
-
-    console.log(
-      "=== GeoChemAR 5c-2e ==="
-    );
-
-    console.log(
-      "Relative Quaternion ID3 -> ID1:",
-      calibratedRelativeQuaternion
-    );
-
-    console.log(
-      "Achse:",
-      calibratedAxis
-    );
-
-    console.log(
-      "Winkel:",
-      calibratedAngleDeg
-    );
-
-  }
-
-}
+const inverseRelative3to1 =
+  relative3to1
+    .clone()
+    .invert();
 
 
 /* =====================================================
-   ABSTAND DER WÜRFELZENTREN
+   ARBEITSOBJEKTE
    ===================================================== */
 
 const worldCenter3 =
@@ -1016,37 +829,306 @@ const worldCenter3 =
 const worldCenter1 =
   new THREE.Vector3();
 
+const cubeQuaternion3 =
+  new THREE.Quaternion();
 
-function getCenterDistance() {
+const cubeQuaternion1 =
+  new THREE.Quaternion();
+
+const fusedPosition =
+  new THREE.Vector3();
+
+const fusedQuaternion =
+  new THREE.Quaternion();
+
+
+/* =====================================================
+   ROTATIONSDIFFERENZ
+   ===================================================== */
+
+function quaternionAngleDegrees(
+  a,
+  b
+) {
+
+  let dot =
+    Math.abs(
+      a.dot(b)
+    );
+
+
+  dot =
+    THREE.MathUtils.clamp(
+      dot,
+      -1,
+      1
+    );
+
+
+  return THREE.MathUtils.radToDeg(
+
+    2 *
+    Math.acos(dot)
+
+  );
+
+}
+
+
+/* =====================================================
+   WÜRFELPOSE
+   ===================================================== */
+
+function updateCubePose() {
+
+  const has3 =
+    marker3Root.visible;
+
+  const has1 =
+    marker1Root.visible;
+
 
   if (
-    !marker3Root.visible ||
-    !marker1Root.visible
+    !has3 &&
+    !has1
   ) {
 
-    return null;
+    methane.visible = false;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+    return;
 
   }
 
 
-  scene.updateMatrixWorld(
-    true
-  );
+  /*
+   * Child-Positionen müssen zunächst
+   * in Weltkoordinaten aktualisiert werden.
+   */
+
+  scene.updateMatrixWorld(true);
 
 
-  centerFrom3.getWorldPosition(
-    worldCenter3
-  );
+  let valid3 = false;
+  let valid1 = false;
 
 
-  centerFrom1.getWorldPosition(
-    worldCenter1
-  );
+  /* -------------------------------------------------
+     Kandidat aus ID 3
+     ------------------------------------------------- */
+
+  if (has3) {
+
+    centerFrom3.getWorldPosition(
+      worldCenter3
+    );
 
 
-  return worldCenter3.distanceTo(
-    worldCenter1
-  );
+    /*
+     * ID 3 definiert direkt unser
+     * Würfelkoordinatensystem.
+     */
+
+    cubeQuaternion3.copy(
+      marker3Root.quaternion
+    );
+
+    cubeQuaternion3.normalize();
+
+    valid3 = true;
+
+  }
+
+
+  /* -------------------------------------------------
+     Kandidat aus ID 1
+     ------------------------------------------------- */
+
+  if (has1) {
+
+    centerFrom1.getWorldPosition(
+      worldCenter1
+    );
+
+
+    /*
+     * Gemessene Beziehung:
+     *
+     * q1 = q3 * q3to1
+     *
+     * also:
+     *
+     * q3 = q1 * inverse(q3to1)
+     */
+
+    cubeQuaternion1
+      .copy(
+        marker1Root.quaternion
+      )
+      .multiply(
+        inverseRelative3to1
+      )
+      .normalize();
+
+
+    valid1 = true;
+
+  }
+
+
+  /* -------------------------------------------------
+     BEIDE MARKER SICHTBAR
+     ------------------------------------------------- */
+
+  if (
+    valid3 &&
+    valid1
+  ) {
+
+    /*
+     * Diagnose der Position.
+     */
+
+    lastCenterDistance =
+      worldCenter3.distanceTo(
+        worldCenter1
+      );
+
+
+    /*
+     * Diagnose der Rotation NACH
+     * Anwendung der starren Transformation.
+     */
+
+    lastRotationDifference =
+      quaternionAngleDegrees(
+        cubeQuaternion3,
+        cubeQuaternion1
+      );
+
+
+    /*
+     * Position:
+     * Mittelwert der beiden unabhängig
+     * bestimmten Würfelzentren.
+     */
+
+    fusedPosition
+      .copy(
+        worldCenter3
+      )
+      .add(
+        worldCenter1
+      )
+      .multiplyScalar(
+        0.5
+      );
+
+
+    /*
+     * Quaternion-Vorzeichen angleichen.
+     */
+
+    const q1 =
+      cubeQuaternion1.clone();
+
+
+    if (
+      cubeQuaternion3.dot(q1) < 0
+    ) {
+
+      q1.x *= -1;
+      q1.y *= -1;
+      q1.z *= -1;
+      q1.w *= -1;
+
+    }
+
+
+    /*
+     * Gleichgewichtete Fusion.
+     *
+     * KEINE zeitliche Glättung.
+     */
+
+    fusedQuaternion
+      .copy(
+        cubeQuaternion3
+      )
+      .slerp(
+        q1,
+        0.5
+      )
+      .normalize();
+
+
+    methane.position.copy(
+      fusedPosition
+    );
+
+
+    methane.quaternion.copy(
+      fusedQuaternion
+    );
+
+
+    methane.visible = true;
+
+    return;
+
+  }
+
+
+  /* -------------------------------------------------
+     NUR ID 3
+     ------------------------------------------------- */
+
+  if (valid3) {
+
+    methane.position.copy(
+      worldCenter3
+    );
+
+
+    methane.quaternion.copy(
+      cubeQuaternion3
+    );
+
+
+    methane.visible = true;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+    return;
+
+  }
+
+
+  /* -------------------------------------------------
+     NUR ID 1
+     ------------------------------------------------- */
+
+  if (valid1) {
+
+    methane.position.copy(
+      worldCenter1
+    );
+
+
+    methane.quaternion.copy(
+      cubeQuaternion1
+    );
+
+
+    methane.visible = true;
+
+    lastCenterDistance = null;
+    lastRotationDifference = null;
+
+  }
 
 }
 
@@ -1190,8 +1272,7 @@ async function startCamera() {
       });
 
 
-  video.srcObject =
-    stream;
+  video.srcObject = stream;
 
 
   await new Promise(
@@ -1372,7 +1453,12 @@ async function detectFrame() {
     }
 
 
-    updateCalibration();
+    /*
+     * Erst jetzt die gemeinsame
+     * Würfelpose bestimmen.
+     */
+
+    updateCubePose();
 
 
     detectionCounter++;
@@ -1411,6 +1497,8 @@ async function detectFrame() {
 
     marker3Root.visible = false;
     marker1Root.visible = false;
+
+    methane.visible = false;
 
     showError(error);
 
@@ -1722,18 +1810,6 @@ resize();
 
 
 /* =====================================================
-   ZAHL FORMATIEREN
-   ===================================================== */
-
-function f(value) {
-
-  return Number(value)
-    .toFixed(5);
-
-}
-
-
-/* =====================================================
    STATUS
    ===================================================== */
 
@@ -1746,20 +1822,17 @@ function updateStatus() {
     marker1Root.visible;
 
 
-  const distance =
-    getCenterDistance();
-
-
-  let distanceText = "–";
+  let centerText = "–";
+  let rotationText = "–";
 
 
   if (
-    distance !== null
+    lastCenterDistance !== null
   ) {
 
-    distanceText =
+    centerText =
       (
-        distance *
+        lastCenterDistance *
         1000
       ).toFixed(1) +
       " mm";
@@ -1767,64 +1840,14 @@ function updateStatus() {
   }
 
 
-  let calibrationText;
-
-
   if (
-    calibrationFinished &&
-    calibratedRelativeQuaternion
+    lastRotationDifference !== null
   ) {
 
-    const q =
-      calibratedRelativeQuaternion;
-
-
-    calibrationText =
-
-      "KALIBRIERUNG FERTIG ✓" +
-
-      "\n\nQuaternion ID3 → ID1:" +
-
-      "\nx = " + f(q.x) +
-
-      "\ny = " + f(q.y) +
-
-      "\nz = " + f(q.z) +
-
-      "\nw = " + f(q.w) +
-
-      "\n\nAchse:" +
-
-      "\nx = " +
-      f(calibratedAxis.x) +
-
-      "\ny = " +
-      f(calibratedAxis.y) +
-
-      "\nz = " +
-      f(calibratedAxis.z) +
-
-      "\n\nWinkel = " +
-      calibratedAngleDeg.toFixed(2) +
+    rotationText =
+      lastRotationDifference
+        .toFixed(2) +
       "°";
-
-  }
-
-  else {
-
-    calibrationText =
-
-      "Kalibrierung: " +
-
-      calibrationSamples.length +
-
-      " / " +
-
-      CALIBRATION_FRAMES +
-
-      "\n\nWürfel ruhig halten." +
-
-      "\nID 3 und ID 1 müssen gleichzeitig sichtbar sein.";
 
   }
 
@@ -1833,6 +1856,7 @@ function updateStatus() {
 
     "GeoChemAR " +
     VERSION +
+    " – Zwei-Seiten-Würfelpose" +
 
     "\n\nID 3: " +
     (
@@ -1851,11 +1875,15 @@ function updateStatus() {
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    "\nAbstand Zentren: " +
-    distanceText +
+    "\n\nAbstand Zentren: " +
+    centerText +
 
-    "\n\n" +
-    calibrationText;
+    "\nRotationsdifferenz: " +
+    rotationText +
+
+    "\n\nC-Atom = Würfelzentrum" +
+
+    "\nGlättung: AUS";
 
 }
 
