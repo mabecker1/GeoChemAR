@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – AprilTag Rotation</title>
+<title>GeoChemAR – Methan Rotationstest</title>
 
 <style>
 
@@ -204,7 +204,7 @@ function showError(error) {
 /* =====================================================
    KAMERAMODELL
 
-   UNVERÄNDERT AUS 5b-6 / 5b-7
+   UNVERÄNDERT AUS 5b-6
    ===================================================== */
 
 const cx =
@@ -250,6 +250,7 @@ const verticalFovDeg =
 const scene =
   new THREE.Scene();
 
+
 const camera =
   new THREE.PerspectiveCamera(
     verticalFovDeg,
@@ -258,11 +259,13 @@ const camera =
     10
   );
 
+
 camera.position.set(
   0,
   0,
   0
 );
+
 
 camera.lookAt(
   0,
@@ -277,13 +280,16 @@ const renderer =
     antialias: true
   });
 
+
 renderer.domElement.id =
   "threeCanvas";
+
 
 renderer.setClearColor(
   0x000000,
   0
 );
+
 
 renderer.setPixelRatio(
   Math.min(
@@ -292,20 +298,23 @@ renderer.setPixelRatio(
   )
 );
 
+
 document.body.appendChild(
   renderer.domElement
 );
 
 
 /* =====================================================
-   TAG-ROOT
+   TAG ROOT
    ===================================================== */
 
 const tagRoot =
   new THREE.Group();
 
+
 tagRoot.visible =
   false;
+
 
 scene.add(
   tagRoot
@@ -313,121 +322,271 @@ scene.add(
 
 
 /* =====================================================
-   ACHSEN
+   METHAN
+
+   Bewährte Geometrie aus unserem bisherigen
+   Methanmodell.
+
+   Die alten AR.js-Einheiten werden lediglich
+   einheitlich auf Meter skaliert.
+
+   Alte Größen:
+   C-Radius          0.22
+   H-Radius          0.14
+   H-Abstand         0.72
+   Bindungsradius    0.040
+
+   Skalierungsfaktor:
+   0.05
+
+   Dadurch hat das Molekül eine sinnvolle
+   Größe für unseren 40-mm-Testmarker.
    ===================================================== */
 
-function createAxis(
-  direction,
-  length,
-  color
-) {
+function createMethane() {
 
-  const radius =
-    0.0025;
+  const methane =
+    new THREE.Group();
 
-  const geometry =
-    new THREE.CylinderGeometry(
-      radius,
-      radius,
-      length,
-      16
-    );
 
-  const material =
+  const scale =
+    0.05;
+
+
+  const carbonRadius =
+    0.22 * scale;
+
+  const hydrogenRadius =
+    0.14 * scale;
+
+  const hydrogenDistance =
+    0.72 * scale;
+
+  const bondRadius =
+    0.040 * scale;
+
+
+  /* -------------------------------------------------
+     MATERIALIEN
+     ------------------------------------------------- */
+
+  const carbonMaterial =
     new THREE.MeshBasicMaterial({
-      color: color
+      color: 0x202020
     });
 
-  const cylinder =
+
+  const hydrogenMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xb8bec7
+    });
+
+
+  /* -------------------------------------------------
+     KOHLENSTOFF
+     ------------------------------------------------- */
+
+  const carbon =
     new THREE.Mesh(
-      geometry,
-      material
-    );
 
-  const dir =
-    direction
-      .clone()
-      .normalize();
-
-  cylinder.quaternion
-    .setFromUnitVectors(
-      new THREE.Vector3(
-        0,
-        1,
-        0
+      new THREE.SphereGeometry(
+        carbonRadius,
+        48,
+        32
       ),
-      dir
+
+      carbonMaterial
+
     );
 
-  cylinder.position.copy(
-    dir
-      .clone()
-      .multiplyScalar(
-        length / 2
-      )
+
+  methane.add(
+    carbon
   );
 
-  return cylinder;
+
+  /* -------------------------------------------------
+     EXAKTE TETRAEDRISCHE RICHTUNGEN
+     ------------------------------------------------- */
+
+  const directions = [
+
+    new THREE.Vector3(
+       1,
+       1,
+       1
+    ).normalize(),
+
+    new THREE.Vector3(
+       1,
+      -1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+       1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+      -1,
+       1
+    ).normalize()
+
+  ];
+
+
+  /* -------------------------------------------------
+     WASSERSTOFFE + BINDUNGEN
+     ------------------------------------------------- */
+
+  for (
+    const direction of directions
+  ) {
+
+    /* Wasserstoff */
+
+    const hydrogen =
+      new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+          hydrogenRadius,
+          40,
+          28
+        ),
+
+        hydrogenMaterial
+
+      );
+
+
+    hydrogen.position.copy(
+
+      direction
+        .clone()
+        .multiplyScalar(
+          hydrogenDistance
+        )
+
+    );
+
+
+    methane.add(
+      hydrogen
+    );
+
+
+    /* Bindung */
+
+    const startDistance =
+      carbonRadius;
+
+
+    const endDistance =
+      hydrogenDistance -
+      hydrogenRadius;
+
+
+    const startPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          startDistance
+        );
+
+
+    const endPoint =
+      direction
+        .clone()
+        .multiplyScalar(
+          endDistance
+        );
+
+
+    const bondVector =
+      endPoint
+        .clone()
+        .sub(
+          startPoint
+        );
+
+
+    const bondLength =
+      bondVector.length();
+
+
+    const bondGeometry =
+      new THREE.CylinderGeometry(
+        bondRadius,
+        bondRadius,
+        bondLength,
+        32,
+        1,
+        false
+      );
+
+
+    const bond =
+      new THREE.Mesh(
+        bondGeometry,
+        bondMaterial
+      );
+
+
+    bond.position.copy(
+
+      startPoint
+        .clone()
+        .add(
+          endPoint
+        )
+        .multiplyScalar(
+          0.5
+        )
+
+    );
+
+
+    bond.quaternion
+      .setFromUnitVectors(
+
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+
+        direction
+
+      );
+
+
+    methane.add(
+      bond
+    );
+
+  }
+
+
+  return methane;
 
 }
 
 
-tagRoot.add(
-  createAxis(
-    new THREE.Vector3(
-      1,
-      0,
-      0
-    ),
-    0.030,
-    0xff0000
-  )
-);
+const methane =
+  createMethane();
 
 
 tagRoot.add(
-  createAxis(
-    new THREE.Vector3(
-      0,
-      1,
-      0
-    ),
-    0.025,
-    0x00ff00
-  )
-);
-
-
-tagRoot.add(
-  createAxis(
-    new THREE.Vector3(
-      0,
-      0,
-      1
-    ),
-    0.020,
-    0x0080ff
-  )
-);
-
-
-const originSphere =
-  new THREE.Mesh(
-
-    new THREE.SphereGeometry(
-      0.004,
-      24,
-      16
-    ),
-
-    new THREE.MeshBasicMaterial({
-      color: 0xffffff
-    })
-
-  );
-
-tagRoot.add(
-  originSphere
+  methane
 );
 
 
@@ -473,8 +632,10 @@ async function initializeAprilTag() {
       "./libs/apriltag.js"
     );
 
+
   const Apriltag =
     Comlink.wrap(worker);
+
 
   apriltag =
     await new Apriltag(
@@ -626,6 +787,7 @@ async function startCamera() {
 
   await video.play();
 
+
   cameraReady =
     true;
 
@@ -690,13 +852,13 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   APRILTAG-POSE → THREE.JS
+   ROTATION
 
-   Translation bleibt unverändert.
+   Zunächst exakt der Stand aus 5b-8.
 
-   In 5b-8 korrigieren wir ausschließlich
-   die Orientierung des lokalen
-   Marker-Koordinatensystems.
+   Wir verändern ihn bewusst NICHT,
+   damit wir die fehlerhafte Bewegung
+   am Methan beurteilen können.
    ===================================================== */
 
 const basisChange =
@@ -710,42 +872,34 @@ const basisChange =
   );
 
 
-/*
- * Lokale Korrektur:
- *
- * X bleibt X
- * Y wird -Y
- * Z wird -Z
- *
- * Das entspricht einer Rotation von 180°
- * um die lokale X-Achse.
- *
- * Wichtig:
- * Das ist eine echte Rotation
- * (Determinante +1), keine einzelne
- * Matrix-Spiegelung.
- */
-
 const localCorrection =
-  new THREE.Matrix4().makeRotationX(
-    Math.PI
-  );
+  new THREE.Matrix4()
+    .makeRotationX(
+      Math.PI
+    );
 
 
 const aprilRotation =
   new THREE.Matrix4();
 
+
 const convertedRotation =
   new THREE.Matrix4();
+
 
 const finalRotation =
   new THREE.Matrix4();
 
 
+/* =====================================================
+   POSE
+   ===================================================== */
+
 function applyPose(pose) {
 
   poseReceived =
     false;
+
 
   tagRoot.visible =
     false;
@@ -785,11 +939,11 @@ function applyPose(pose) {
   }
 
 
-  /* -------------------------------------------------
+  /* =================================================
      TRANSLATION
 
-     Unverändert und bereits bestätigt.
-     ------------------------------------------------- */
+     Bereits bestätigt.
+     ================================================= */
 
   tagRoot.position.set(
     tx,
@@ -798,9 +952,9 @@ function applyPose(pose) {
   );
 
 
-  /* -------------------------------------------------
-     APRILTAG ROTATION EINLESEN
-     ------------------------------------------------- */
+  /* =================================================
+     ROTATION EINLESEN
+     ================================================= */
 
   const r00 =
     Number(pose.R[0][0]);
@@ -858,33 +1012,25 @@ function applyPose(pose) {
   );
 
 
-  /* -------------------------------------------------
-     BASISWECHSEL
-
-     C * R * C
-
-     Genau wie in 5b-7.
-     ------------------------------------------------- */
-
   convertedRotation
-    .copy(basisChange)
-    .multiply(aprilRotation)
-    .multiply(basisChange);
+    .copy(
+      basisChange
+    )
+    .multiply(
+      aprilRotation
+    )
+    .multiply(
+      basisChange
+    );
 
-
-  /* -------------------------------------------------
-     NEU:
-
-     lokale Orientierung des Tag-Objekts
-     korrigieren.
-
-     R_final =
-       R_converted * R_local
-     ------------------------------------------------- */
 
   finalRotation
-    .copy(convertedRotation)
-    .multiply(localCorrection);
+    .copy(
+      convertedRotation
+    )
+    .multiply(
+      localCorrection
+    );
 
 
   tagRoot.quaternion
@@ -895,6 +1041,7 @@ function applyPose(pose) {
 
   tagRoot.visible =
     true;
+
 
   poseReceived =
     true;
@@ -957,6 +1104,7 @@ async function detectFrame() {
       tagDetected =
         true;
 
+
       applyPose(
         detection.pose
       );
@@ -985,7 +1133,8 @@ async function detectFrame() {
 
 
     if (
-      now - fpsStart >=
+      now -
+      fpsStart >=
       1000
     ) {
 
@@ -1003,6 +1152,7 @@ async function detectFrame() {
 
       detectionCounter =
         0;
+
 
       fpsStart =
         now;
@@ -1100,19 +1250,23 @@ function drawOverlay() {
 
   overlayCtx.beginPath();
 
+
   overlayCtx.arc(
     x,
     y,
-    8,
+    7,
     0,
     Math.PI * 2
   );
 
+
   overlayCtx.lineWidth =
     3;
 
+
   overlayCtx.strokeStyle =
     "#00ff00";
+
 
   overlayCtx.stroke();
 
@@ -1220,6 +1374,7 @@ function resize() {
   camera.aspect =
     WIDTH / HEIGHT;
 
+
   camera.updateProjectionMatrix();
 
 }
@@ -1263,11 +1418,7 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-8 – ROTATIONSTEST\n\n" +
-
-    "Rot = X\n" +
-    "Grün = Y\n" +
-    "Blau = Z\n\n" +
+    "APRILTAG 5b-9 – METHAN\n\n" +
 
     "Tag 0: " +
     (
@@ -1299,10 +1450,13 @@ async function start() {
 
     await initializeAprilTag();
 
+
     status.textContent =
       "Kamera wird gestartet …";
 
+
     await startCamera();
+
 
     requestAnimationFrame(
       animate
