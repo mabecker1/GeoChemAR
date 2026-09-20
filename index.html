@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-3a Kalibrierung ID 3 ↔ ID 2</title>
+<title>GeoChemAR – 5c-3b Kalibrierung ID 3 ↔ ID 4</title>
 
 <style>
 html,
@@ -138,7 +138,7 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-3a";
+const VERSION = "5c-3b";
 
 
 /* =====================================================
@@ -333,20 +333,20 @@ renderer.setClearColor(
    MARKER-ROOTS
 
    ID 3 = Referenz
-   ID 2 = zu kalibrierende Nachbarseite
+   ID 4 = zu kalibrierende Nachbarseite
    ===================================================== */
 
 const marker3Root =
   new THREE.Group();
 
-const marker2Root =
+const marker4Root =
   new THREE.Group();
 
 marker3Root.visible = false;
-marker2Root.visible = false;
+marker4Root.visible = false;
 
 scene.add(marker3Root);
-scene.add(marker2Root);
+scene.add(marker4Root);
 
 
 /* =====================================================
@@ -500,7 +500,7 @@ marker3Root.add(
   createDiagnosticAxes()
 );
 
-marker2Root.add(
+marker4Root.add(
   createDiagnosticAxes()
 );
 
@@ -508,9 +508,8 @@ marker2Root.add(
 /* =====================================================
    WÜRFELZENTREN
 
-   Bereits für die Marker-Geometrie bestätigt:
-   +Z zeigt nach außen,
-   Zentrum liegt bei -22,5 mm.
+   +Z zeigt nach außen.
+   Zentrum liegt daher bei -22,5 mm.
    ===================================================== */
 
 const centerFrom3 =
@@ -539,7 +538,7 @@ marker3Root.add(
 );
 
 
-const centerFrom2 =
+const centerFrom4 =
   new THREE.Mesh(
 
     new THREE.SphereGeometry(
@@ -554,14 +553,14 @@ const centerFrom2 =
 
   );
 
-centerFrom2.position.set(
+centerFrom4.position.set(
   0,
   0,
   -HALF_CUBE
 );
 
-marker2Root.add(
-  centerFrom2
+marker4Root.add(
+  centerFrom4
 );
 
 
@@ -643,21 +642,12 @@ function applyAprilTagPose(
   }
 
 
-  /*
-   * Bewährte Translation aus 5b-10.
-   */
-
   root.position.set(
     tx,
     -ty,
     -tz
   );
 
-
-  /*
-   * Bewährte transponierte
-   * AprilTag-Rotationsmatrix.
-   */
 
   const aprilRotation =
     new THREE.Matrix4();
@@ -720,12 +710,10 @@ function applyAprilTagPose(
 /* =====================================================
    RELATIVE ROTATION
 
-   Diesmal:
+   qRelative = inverse(q3) * q4
 
-   qRelative = inverse(q3) * q2
-
-   also die tatsächlich gemessene starre
-   Orientierung ID 3 -> ID 2.
+   Das ergibt die tatsächliche starre
+   Orientierung ID 3 -> ID 4.
    ===================================================== */
 
 function calculateRelativeQuaternion() {
@@ -738,7 +726,7 @@ function calculateRelativeQuaternion() {
 
   const relative =
     inverseQ3.multiply(
-      marker2Root.quaternion
+      marker4Root.quaternion
     );
 
 
@@ -945,7 +933,7 @@ function updateCalibration() {
 
   if (
     !marker3Root.visible ||
-    !marker2Root.visible
+    !marker4Root.visible
   ) {
 
     return;
@@ -992,11 +980,11 @@ function updateCalibration() {
 
 
     console.log(
-      "=== GeoChemAR 5c-3a ==="
+      "=== GeoChemAR 5c-3b ==="
     );
 
     console.log(
-      "Relative Quaternion ID3 -> ID2:",
+      "Relative Quaternion ID3 -> ID4:",
       calibratedRelativeQuaternion
     );
 
@@ -1016,13 +1004,13 @@ function updateCalibration() {
 
 
 /* =====================================================
-   ABSTAND DER BEIDEN WÜRFELZENTREN
+   ABSTAND DER WÜRFELZENTREN
    ===================================================== */
 
 const worldCenter3 =
   new THREE.Vector3();
 
-const worldCenter2 =
+const worldCenter4 =
   new THREE.Vector3();
 
 
@@ -1030,7 +1018,7 @@ function getCenterDistance() {
 
   if (
     !marker3Root.visible ||
-    !marker2Root.visible
+    !marker4Root.visible
   ) {
 
     return null;
@@ -1048,13 +1036,13 @@ function getCenterDistance() {
   );
 
 
-  centerFrom2.getWorldPosition(
-    worldCenter2
+  centerFrom4.getWorldPosition(
+    worldCenter4
   );
 
 
   return worldCenter3.distanceTo(
-    worldCenter2
+    worldCenter4
   );
 
 }
@@ -1137,7 +1125,7 @@ async function initializeAprilTag() {
 
 
   await apriltag.set_tag_size(
-    2,
+    4,
     TAG_SIZE
   );
 
@@ -1342,10 +1330,10 @@ async function detectFrame() {
       ) || null;
 
 
-    const detection2 =
+    const detection4 =
       latestDetections.find(
         detection =>
-          Number(detection.id) === 2
+          Number(detection.id) === 4
       ) || null;
 
 
@@ -1365,18 +1353,18 @@ async function detectFrame() {
     }
 
 
-    if (detection2) {
+    if (detection4) {
 
       applyAprilTagPose(
-        detection2,
-        marker2Root
+        detection4,
+        marker4Root
       );
 
     }
 
     else {
 
-      marker2Root.visible = false;
+      marker4Root.visible = false;
 
     }
 
@@ -1419,7 +1407,7 @@ async function detectFrame() {
   catch(error) {
 
     marker3Root.visible = false;
-    marker2Root.visible = false;
+    marker4Root.visible = false;
 
     showError(error);
 
@@ -1618,7 +1606,7 @@ function drawOverlay() {
     }
 
 
-    if (id === 2) {
+    if (id === 4) {
 
       drawDetection(
         detection,
@@ -1751,8 +1739,8 @@ function updateStatus() {
   const has3 =
     marker3Root.visible;
 
-  const has2 =
-    marker2Root.visible;
+  const has4 =
+    marker4Root.visible;
 
 
   const distance =
@@ -1792,7 +1780,7 @@ function updateStatus() {
 
       "KALIBRIERUNG FERTIG ✓" +
 
-      "\n\nQuaternion ID3 → ID2:" +
+      "\n\nQuaternion ID3 → ID4:" +
 
       "\nx = " + f(q.x) +
 
@@ -1833,7 +1821,7 @@ function updateStatus() {
 
       "\n\nWürfel ruhig halten." +
 
-      "\nID 3 und ID 2 gleichzeitig sichtbar.";
+      "\nID 3 und ID 4 gleichzeitig sichtbar.";
 
   }
 
@@ -1843,7 +1831,7 @@ function updateStatus() {
     "GeoChemAR " +
     VERSION +
 
-    "\nKalibrierung ID 3 ↔ ID 2" +
+    "\nKalibrierung ID 3 ↔ ID 4" +
 
     "\n\nID 3: " +
     (
@@ -1852,9 +1840,9 @@ function updateStatus() {
         : "NEIN"
     ) +
 
-    "\nID 2: " +
+    "\nID 4: " +
     (
-      has2
+      has4
         ? "JA"
         : "NEIN"
     ) +
