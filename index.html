@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-2a Würfelzentrum</title>
+<title>GeoChemAR – 5c-2b Pose-Diagnose</title>
 
 <style>
 html,
@@ -64,7 +64,7 @@ body {
   color: white;
 
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.45;
   white-space: pre-line;
 
   pointer-events: none;
@@ -119,7 +119,7 @@ body {
 ></canvas>
 
 <div id="status">
-GeoChemAR wird gestartet …
+AprilTag wird geladen …
 </div>
 
 <div id="error"></div>
@@ -139,7 +139,7 @@ import * as Comlink
    ===================================================== */
 
 const VERSION =
-  "5c-2a";
+  "5c-2b";
 
 
 /* =====================================================
@@ -152,26 +152,13 @@ const WIDTH =
 const HEIGHT =
   480;
 
-/*
- * Gemessene schwarze Tag-Kantenlänge.
- * Für die AprilTag-Pose zunächst wie bisher verwendet.
- */
 const TAG_SIZE =
   0.0395;
 
-/*
- * Physische Würfelkante:
- * 45,0 mm
- */
-const CUBE_SIZE =
-  0.045;
-
-const HALF_CUBE =
-  CUBE_SIZE / 2;
-
 
 /* =====================================================
-   KAMERAMODELL – UNVERÄNDERT AUS 5b-10
+   KAMERAMODELL
+   Bewährte Geometrie aus 5b-10
    ===================================================== */
 
 const horizontalFovDeg =
@@ -354,269 +341,200 @@ renderer.setClearColor(
 
 
 /* =====================================================
-   LICHT
+   MARKER-ROOTS
    ===================================================== */
 
+const marker3Root =
+  new THREE.Group();
+
+const marker1Root =
+  new THREE.Group();
+
+marker3Root.visible =
+  false;
+
+marker1Root.visible =
+  false;
+
 scene.add(
-  new THREE.AmbientLight(
-    0xffffff,
-    2
-  )
-);
-
-const light =
-  new THREE.DirectionalLight(
-    0xffffff,
-    2
-  );
-
-light.position.set(
-  1,
-  2,
-  2
+  marker3Root
 );
 
 scene.add(
-  light
+  marker1Root
 );
 
 
 /* =====================================================
-   DIAGNOSEPUNKTE
+   ACHSEN-DIAGNOSE
+
+   X = rot
+   Y = grün
+   Z = blau
    ===================================================== */
 
-/*
- * Grün = aus ID 3 berechnetes Würfelzentrum
- * Blau = aus ID 1 berechnetes Würfelzentrum
- */
-
-const center3 =
-  new THREE.Mesh(
-    new THREE.SphereGeometry(
-      0.004,
-      24,
-      16
-    ),
-    new THREE.MeshBasicMaterial({
-      color: 0x00ff55
-    })
-  );
-
-center3.visible =
-  false;
-
-scene.add(
-  center3
-);
-
-
-const center1 =
-  new THREE.Mesh(
-    new THREE.SphereGeometry(
-      0.003,
-      24,
-      16
-    ),
-    new THREE.MeshBasicMaterial({
-      color: 0x3399ff
-    })
-  );
-
-center1.visible =
-  false;
-
-scene.add(
-  center1
-);
-
-
-/* =====================================================
-   METHAN
-   ===================================================== */
-
-function createMethane() {
+function createDiagnosticAxes() {
 
   const group =
     new THREE.Group();
 
-  const scale =
-    0.05;
 
-  const carbonRadius =
-    0.22 * scale;
+  /*
+   * 15 mm Achsenlänge.
+   * Damit sind die Richtungen gut erkennbar,
+   * ohne wesentlich größer als der Tag zu sein.
+   */
 
-  const hydrogenRadius =
-    0.14 * scale;
+  const axisLength =
+    0.015;
 
-  const hydrogenDistance =
-    0.72 * scale;
-
-  const bondRadius =
-    0.040 * scale;
+  const axisRadius =
+    0.0008;
 
 
-  const carbonMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x202020,
-      roughness: 0.65,
-      metalness: 0
-    });
-
-  const hydrogenMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.55,
-      metalness: 0
-    });
-
-  const bondMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0xb8bec7,
-      roughness: 0.65,
-      metalness: 0
-    });
-
-
-  const carbon =
+  const origin =
     new THREE.Mesh(
+
       new THREE.SphereGeometry(
-        carbonRadius,
-        48,
-        32
+        0.0025,
+        24,
+        16
       ),
-      carbonMaterial
+
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff
+      })
+
     );
 
   group.add(
-    carbon
+    origin
   );
 
 
-  const directions = [
-
-    new THREE.Vector3(
-      1, 1, 1
-    ).normalize(),
-
-    new THREE.Vector3(
-      1, -1, -1
-    ).normalize(),
-
-    new THREE.Vector3(
-      -1, 1, -1
-    ).normalize(),
-
-    new THREE.Vector3(
-      -1, -1, 1
-    ).normalize()
-
-  ];
-
-
-  for (
-    const direction
-    of directions
+  function createAxis(
+    direction,
+    color
   ) {
 
-    const hydrogen =
+    const material =
+      new THREE.MeshBasicMaterial({
+        color
+      });
+
+
+    const cylinder =
       new THREE.Mesh(
-        new THREE.SphereGeometry(
-          hydrogenRadius,
-          40,
-          28
-        ),
-        hydrogenMaterial
-      );
 
-
-    hydrogen.position.copy(
-      direction
-        .clone()
-        .multiplyScalar(
-          hydrogenDistance
-        )
-    );
-
-    group.add(
-      hydrogen
-    );
-
-
-    const startDistance =
-      carbonRadius;
-
-    const endDistance =
-      hydrogenDistance -
-      hydrogenRadius;
-
-
-    const startPoint =
-      direction
-        .clone()
-        .multiplyScalar(
-          startDistance
-        );
-
-    const endPoint =
-      direction
-        .clone()
-        .multiplyScalar(
-          endDistance
-        );
-
-    const bondVector =
-      endPoint
-        .clone()
-        .sub(
-          startPoint
-        );
-
-    const bondLength =
-      bondVector.length();
-
-
-    const bond =
-      new THREE.Mesh(
         new THREE.CylinderGeometry(
-          bondRadius,
-          bondRadius,
-          bondLength,
-          32,
+          axisRadius,
+          axisRadius,
+          axisLength,
+          12,
           1,
           false
         ),
-        bondMaterial
+
+        material
+
       );
 
 
-    bond.position.copy(
-      startPoint
+    const halfDirection =
+      direction
         .clone()
-        .add(
-          endPoint
-        )
         .multiplyScalar(
-          0.5
-        )
+          axisLength / 2
+        );
+
+
+    cylinder.position.copy(
+      halfDirection
     );
 
 
-    bond.quaternion
+    cylinder.quaternion
       .setFromUnitVectors(
+
         new THREE.Vector3(
           0,
           1,
           0
         ),
+
         direction
+
       );
 
 
     group.add(
-      bond
+      cylinder
+    );
+
+
+    /*
+     * Kugel am positiven Ende,
+     * damit die Richtung eindeutig ist.
+     */
+
+    const tip =
+      new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+          0.0017,
+          16,
+          12
+        ),
+
+        material
+
+      );
+
+
+    tip.position.copy(
+      direction
+        .clone()
+        .multiplyScalar(
+          axisLength
+        )
+    );
+
+
+    group.add(
+      tip
     );
 
   }
+
+
+  createAxis(
+    new THREE.Vector3(
+      1,
+      0,
+      0
+    ),
+    0xff3030
+  );
+
+
+  createAxis(
+    new THREE.Vector3(
+      0,
+      1,
+      0
+    ),
+    0x30ff30
+  );
+
+
+  createAxis(
+    new THREE.Vector3(
+      0,
+      0,
+      1
+    ),
+    0x3080ff
+  );
 
 
   return group;
@@ -624,21 +542,17 @@ function createMethane() {
 }
 
 
-const methane =
-  createMethane();
+marker3Root.add(
+  createDiagnosticAxes()
+);
 
-methane.visible =
-  false;
-
-scene.add(
-  methane
+marker1Root.add(
+  createDiagnosticAxes()
 );
 
 
 /* =====================================================
-   APRILTAG-POSE -> THREE.JS
-
-   EXAKT DIE BEWÄHRTE 5b-10-UMRECHNUNG
+   5b-10 POSE-UMRECHNUNG
    ===================================================== */
 
 const basisChange =
@@ -654,8 +568,9 @@ basisChange.set(
 );
 
 
-function poseToThree(
-  detection
+function applyAprilTagPose(
+  detection,
+  root
 ) {
 
   if (
@@ -669,7 +584,10 @@ function poseToThree(
     )
   ) {
 
-    return null;
+    root.visible =
+      false;
+
+    return false;
 
   }
 
@@ -683,10 +601,16 @@ function poseToThree(
 
   if (
     t.length < 3 ||
-    R.length < 3
+    R.length < 3 ||
+    !Array.isArray(R[0]) ||
+    !Array.isArray(R[1]) ||
+    !Array.isArray(R[2])
   ) {
 
-    return null;
+    root.visible =
+      false;
+
+    return false;
 
   }
 
@@ -707,16 +631,30 @@ function poseToThree(
     !Number.isFinite(tz)
   ) {
 
-    return null;
+    root.visible =
+      false;
+
+    return false;
 
   }
 
 
   /*
-   * WICHTIG:
+   * Bewährte Translation aus 5b-10.
+   */
+
+  root.position.set(
+    tx,
+    -ty,
+    -tz
+  );
+
+
+  /*
+   * Bewährte Rotation aus 5b-10:
    *
-   * 5b-10 verwendete die TRANSponierte
-   * AprilTag-Rotationsmatrix.
+   * Die AprilTag-Rotationsmatrix wird
+   * transponiert eingesetzt.
    */
 
   const aprilRotation =
@@ -764,221 +702,16 @@ function poseToThree(
     );
 
 
-  const quaternion =
-    new THREE.Quaternion();
-
-  quaternion
+  root.quaternion
     .setFromRotationMatrix(
       convertedRotation
     );
 
 
-  const position =
-    new THREE.Vector3(
-      tx,
-      -ty,
-      -tz
-    );
+  root.visible =
+    true;
 
-
-  return {
-    position,
-    quaternion
-  };
-
-}
-
-
-/* =====================================================
-   WÜRFELZENTRUM AUS EINEM TAG
-   ===================================================== */
-
-function cubeCenterFromTagPose(
-  pose
-) {
-
-  /*
-   * Ein AprilTag liegt auf der Außenfläche.
-   *
-   * Seine lokale Z-Achse steht senkrecht
-   * auf der Tag-Ebene.
-   *
-   * Das Würfelzentrum liegt HALF_CUBE
-   * hinter der Tag-Ebene.
-   *
-   * Für die 5b-10-Koordinatenumrechnung
-   * testen wir zunächst -Z als Richtung
-   * in den Würfel hinein.
-   */
-
-  const inward =
-    new THREE.Vector3(
-      0,
-      0,
-      -HALF_CUBE
-    );
-
-
-  inward.applyQuaternion(
-    pose.quaternion
-  );
-
-
-  return pose.position
-    .clone()
-    .add(
-      inward
-    );
-
-}
-
-
-/* =====================================================
-   MITTELPUNKT DER BEIDEN KANDIDATEN
-   ===================================================== */
-
-function updateCubePose(
-  detection3,
-  detection1
-) {
-
-  center3.visible =
-    false;
-
-  center1.visible =
-    false;
-
-  methane.visible =
-    false;
-
-
-  let p3 =
-    null;
-
-  let p1 =
-    null;
-
-
-  if (detection3) {
-
-    const pose3 =
-      poseToThree(
-        detection3
-      );
-
-
-    if (pose3) {
-
-      p3 =
-        cubeCenterFromTagPose(
-          pose3
-        );
-
-
-      center3.position.copy(
-        p3
-      );
-
-      center3.visible =
-        true;
-
-    }
-
-  }
-
-
-  if (detection1) {
-
-    const pose1 =
-      poseToThree(
-        detection1
-      );
-
-
-    if (pose1) {
-
-      p1 =
-        cubeCenterFromTagPose(
-          pose1
-        );
-
-
-      center1.position.copy(
-        p1
-      );
-
-      center1.visible =
-        true;
-
-    }
-
-  }
-
-
-  /*
-   * Methan dient hier bereits als zusätzliche
-   * Orientierung.
-   *
-   * Sind beide Marker sichtbar, sitzt es genau
-   * zwischen den beiden berechneten Zentren.
-   *
-   * Sind die beiden grünen/blauen Punkte korrekt
-   * deckungsgleich, entspricht das unmittelbar
-   * dem Würfelzentrum.
-   */
-
-  if (
-    p3 &&
-    p1
-  ) {
-
-    methane.position
-      .copy(
-        p3
-      )
-      .add(
-        p1
-      )
-      .multiplyScalar(
-        0.5
-      );
-
-
-    methane.visible =
-      true;
-
-  }
-
-  else if (p3) {
-
-    methane.position.copy(
-      p3
-    );
-
-    methane.visible =
-      true;
-
-  }
-
-  else if (p1) {
-
-    methane.position.copy(
-      p1
-    );
-
-    methane.visible =
-      true;
-
-  }
-
-
-  /*
-   * Rotation des Methans ist in diesem
-   * Diagnoseschritt ABSICHTLICH noch nicht
-   * an den Würfel gekoppelt.
-   *
-   * Zuerst muss die Translation stimmen.
-   */
+  return true;
 
 }
 
@@ -1048,29 +781,33 @@ async function initializeAprilTag() {
   }
 
 
-  /*
-   * Pose wieder aktivieren:
-   * bewährter 5b-10-Weg.
-   */
-
-  await apriltag.set_return_pose(
-    1
+  await apriltag.set_camera_info(
+    fx,
+    fy,
+    cx,
+    cy
   );
 
-
-  /*
-   * Beide Testmarker benötigen ihre
-   * physische Größe.
-   */
 
   await apriltag.set_tag_size(
     3,
     TAG_SIZE
   );
 
+
   await apriltag.set_tag_size(
     1,
     TAG_SIZE
+  );
+
+
+  await apriltag.set_return_pose(
+    1
+  );
+
+
+  await apriltag.set_return_solutions(
+    1
   );
 
 
@@ -1154,7 +891,6 @@ async function startCamera() {
 
 
   await video.play();
-
 
   cameraReady =
     true;
@@ -1276,10 +1012,38 @@ async function detectFrame() {
       ) || null;
 
 
-    updateCubePose(
-      detection3,
-      detection1
-    );
+    if (detection3) {
+
+      applyAprilTagPose(
+        detection3,
+        marker3Root
+      );
+
+    }
+
+    else {
+
+      marker3Root.visible =
+        false;
+
+    }
+
+
+    if (detection1) {
+
+      applyAprilTagPose(
+        detection1,
+        marker1Root
+      );
+
+    }
+
+    else {
+
+      marker1Root.visible =
+        false;
+
+    }
 
 
     detectionCounter++;
@@ -1319,6 +1083,12 @@ async function detectFrame() {
 
   catch(error) {
 
+    marker3Root.visible =
+      false;
+
+    marker1Root.visible =
+      false;
+
     showError(
       error
     );
@@ -1352,18 +1122,49 @@ function getPoint(
     Array.isArray(point)
   ) {
 
+    const x =
+      Number(point[0]);
+
+    const y =
+      Number(point[1]);
+
+
+    if (
+      Number.isFinite(x) &&
+      Number.isFinite(y)
+    ) {
+
+      return {
+        x,
+        y
+      };
+
+    }
+
+  }
+
+
+  const x =
+    Number(point.x);
+
+  const y =
+    Number(point.y);
+
+
+  if (
+    Number.isFinite(x) &&
+    Number.isFinite(y)
+  ) {
+
     return {
-      x: Number(point[0]),
-      y: Number(point[1])
+      x,
+      y
     };
 
   }
 
 
-  return {
-    x: Number(point.x),
-    y: Number(point.y)
-  };
+  return null;
 
 }
 
@@ -1396,10 +1197,8 @@ function drawDetection(
 
   if (
     corners.some(
-      p =>
-        !p ||
-        !Number.isFinite(p.x) ||
-        !Number.isFinite(p.y)
+      point =>
+        !point
     )
   ) {
 
@@ -1441,12 +1240,59 @@ function drawDetection(
   overlayCtx.stroke();
 
 
+  /*
+   * Detektor-Ecken zusätzlich nummerieren.
+   */
+
+  for (
+    let i = 0;
+    i < 4;
+    i++
+  ) {
+
+    overlayCtx.beginPath();
+
+    overlayCtx.arc(
+      corners[i].x,
+      corners[i].y,
+      i === 0 ? 6 : 4,
+      0,
+      Math.PI * 2
+    );
+
+    overlayCtx.fillStyle =
+      i === 0
+        ? "#ff00ff"
+        : color;
+
+    overlayCtx.fill();
+
+
+    overlayCtx.font =
+      "bold 14px Arial";
+
+    overlayCtx.textAlign =
+      "center";
+
+    overlayCtx.textBaseline =
+      "middle";
+
+    overlayCtx.fillStyle =
+      "#ffffff";
+
+    overlayCtx.fillText(
+      String(i),
+      corners[i].x,
+      corners[i].y - 13
+    );
+
+  }
+
+
   const center =
-    detection.center
-      ? getPoint(
-          detection.center
-        )
-      : null;
+    getPoint(
+      detection.center
+    );
 
 
   if (center) {
@@ -1456,6 +1302,9 @@ function drawDetection(
 
     overlayCtx.textAlign =
       "center";
+
+    overlayCtx.textBaseline =
+      "middle";
 
     overlayCtx.fillStyle =
       color;
@@ -1522,7 +1371,7 @@ function drawOverlay() {
 
 
 /* =====================================================
-   CANVAS-GEOMETRIE
+   CANVAS AN VIDEO ANPASSEN
    ===================================================== */
 
 function resize() {
@@ -1628,49 +1477,25 @@ function updateStatus() {
 
   const has3 =
     latestDetections.some(
-      d =>
-        Number(d.id) === 3
+      detection =>
+        Number(detection.id) ===
+        3
     );
 
 
   const has1 =
     latestDetections.some(
-      d =>
-        Number(d.id) === 1
+      detection =>
+        Number(detection.id) ===
+        1
     );
-
-
-  let distanceText =
-    "–";
-
-
-  if (
-    center3.visible &&
-    center1.visible
-  ) {
-
-    const distance =
-      center3.position
-        .distanceTo(
-          center1.position
-        );
-
-
-    distanceText =
-      (
-        distance *
-        1000
-      ).toFixed(1) +
-      " mm";
-
-  }
 
 
   status.textContent =
 
     "GeoChemAR " +
     VERSION +
-    "\n\n" +
+    " – Pose-Diagnose\n\n" +
 
     "ID 3: " +
     (
@@ -1686,11 +1511,16 @@ function updateStatus() {
         : "NEIN"
     ) +
 
-    "\nAbstand Zentren: " +
-    distanceText +
-
     "\nErkennungen/s: " +
-    detectionFPS.toFixed(1);
+    detectionFPS.toFixed(1) +
+
+    "\n\nAchsen:" +
+
+    "\nX = ROT" +
+
+    "\nY = GRÜN" +
+
+    "\nZ = BLAU";
 
 }
 
