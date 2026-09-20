@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-1 OpenCV PnP</title>
+<title>GeoChemAR – 5c-1b OpenCV PnP</title>
 
 <style>
 html,
@@ -125,10 +125,6 @@ Initialisierung …
 <div id="error"></div>
 
 
-<!-- OpenCV wird lokal geladen -->
-<script src="./libs/opencv.js"></script>
-
-
 <script type="module">
 
 import * as THREE
@@ -143,7 +139,7 @@ import * as Comlink
    ===================================================== */
 
 const VERSION =
-  "5c-1";
+  "5c-1b";
 
 
 /* =====================================================
@@ -156,19 +152,8 @@ const WIDTH =
 const HEIGHT =
   480;
 
-
-/*
- * Tatsächlich gemessene Tag-Kantenlänge:
- * 39,5 mm
- */
-
 const TAG_SIZE =
   0.0395;
-
-
-/*
- * Für diesen Test ausschließlich ID 3.
- */
 
 const TEST_TAG_ID =
   3;
@@ -177,13 +162,6 @@ const TEST_TAG_ID =
 /* =====================================================
    KAMERAMODELL
    ===================================================== */
-
-/*
- * Dieses Kameramodell entspricht dem funktionierenden
- * 5b-Test.
- *
- * 60° horizontaler Bildwinkel.
- */
 
 const horizontalFovDeg =
   60;
@@ -207,14 +185,6 @@ const cx =
 
 const cy =
   HEIGHT / 2;
-
-
-/*
- * Three.js erwartet einen VERTIKALEN FOV.
- *
- * Dieser Wert beträgt bei unserem Kameramodell
- * ungefähr 46,83°.
- */
 
 const verticalFovRad =
   2 *
@@ -340,7 +310,6 @@ function showError(error) {
 const scene =
   new THREE.Scene();
 
-
 const camera =
   new THREE.PerspectiveCamera(
     verticalFovDeg,
@@ -349,13 +318,11 @@ const camera =
     10
   );
 
-
 camera.position.set(
   0,
   0,
   0
 );
-
 
 const renderer =
   new THREE.WebGLRenderer({
@@ -364,18 +331,15 @@ const renderer =
     antialias: true
   });
 
-
 renderer.setPixelRatio(
   1
 );
-
 
 renderer.setSize(
   WIDTH,
   HEIGHT,
   false
 );
-
 
 renderer.setClearColor(
   0x000000,
@@ -394,20 +358,17 @@ scene.add(
   )
 );
 
-
 const directionalLight =
   new THREE.DirectionalLight(
     0xffffff,
     2.2
   );
 
-
 directionalLight.position.set(
   1,
   2,
   2
 );
-
 
 scene.add(
   directionalLight
@@ -418,17 +379,11 @@ scene.add(
    TAG-ROOT
    ===================================================== */
 
-/*
- * OpenCV liefert die Pose dieses Koordinatensystems.
- */
-
 const tagRoot =
   new THREE.Group();
 
-
 tagRoot.visible =
   false;
-
 
 scene.add(
   tagRoot
@@ -444,15 +399,8 @@ function createMethane() {
   const group =
     new THREE.Group();
 
-
-  /*
-   * Einheitliche metrische Skalierung des bereits
-   * funktionierenden Methanmodells.
-   */
-
   const scale =
     0.05;
-
 
   const carbonRadius =
     0.22 * scale;
@@ -466,14 +414,12 @@ function createMethane() {
   const bondRadius =
     0.040 * scale;
 
-
   const carbonMaterial =
     new THREE.MeshStandardMaterial({
       color: 0x202020,
       roughness: 0.65,
       metalness: 0
     });
-
 
   const hydrogenMaterial =
     new THREE.MeshStandardMaterial({
@@ -482,18 +428,12 @@ function createMethane() {
       metalness: 0
     });
 
-
   const bondMaterial =
     new THREE.MeshStandardMaterial({
       color: 0xb8bec7,
       roughness: 0.65,
       metalness: 0
     });
-
-
-  /*
-   * Kohlenstoffatom
-   */
 
   const carbon =
     new THREE.Mesh(
@@ -505,18 +445,11 @@ function createMethane() {
       ),
 
       carbonMaterial
-
     );
-
 
   group.add(
     carbon
   );
-
-
-  /*
-   * Exakte tetraedrische Richtungen.
-   */
 
   const directions = [
 
@@ -546,15 +479,10 @@ function createMethane() {
 
   ];
 
-
   for (
     const direction
     of directions
   ) {
-
-    /*
-     * Wasserstoffatom
-     */
 
     const hydrogen =
       new THREE.Mesh(
@@ -569,7 +497,6 @@ function createMethane() {
 
       );
 
-
     hydrogen.position.copy(
       direction
         .clone()
@@ -578,16 +505,9 @@ function createMethane() {
         )
     );
 
-
     group.add(
       hydrogen
     );
-
-
-    /*
-     * Bindung exakt von Kugeloberfläche
-     * zu Kugeloberfläche.
-     */
 
     const startDistance =
       carbonRadius;
@@ -596,14 +516,12 @@ function createMethane() {
       hydrogenDistance -
       hydrogenRadius;
 
-
     const startPoint =
       direction
         .clone()
         .multiplyScalar(
           startDistance
         );
-
 
     const endPoint =
       direction
@@ -612,7 +530,6 @@ function createMethane() {
           endDistance
         );
 
-
     const bondVector =
       endPoint
         .clone()
@@ -620,10 +537,8 @@ function createMethane() {
           startPoint
         );
 
-
     const bondLength =
       bondVector.length();
-
 
     const bondGeometry =
       new THREE.CylinderGeometry(
@@ -635,13 +550,11 @@ function createMethane() {
         false
       );
 
-
     const bond =
       new THREE.Mesh(
         bondGeometry,
         bondMaterial
       );
-
 
     bond.position.copy(
 
@@ -656,7 +569,6 @@ function createMethane() {
 
     );
 
-
     bond.quaternion
       .setFromUnitVectors(
 
@@ -670,39 +582,24 @@ function createMethane() {
 
       );
 
-
     group.add(
       bond
     );
 
   }
 
-
   return group;
 
 }
 
-
 const methane =
   createMethane();
-
-
-/*
- * Für 5c-1 sitzt das Methan bewusst zunächst
- * im Zentrum des Tags.
- *
- * Noch KEINE Verschiebung ins Würfelzentrum.
- *
- * Damit testen wir ausschließlich, ob die neue
- * OpenCV-Pose korrekt ist.
- */
 
 methane.position.set(
   0,
   0,
   0
 );
-
 
 tagRoot.add(
   methane
@@ -715,48 +612,74 @@ tagRoot.add(
 
 async function initializeOpenCV() {
 
-  const start =
-    performance.now();
+  status.textContent =
+    "OpenCV-Datei wird geladen …";
 
+  /*
+   * OpenCV wird jetzt bewusst erst hier geladen.
+   *
+   * Dadurch können wir die verschiedenen
+   * Initialisierungsvarianten von OpenCV.js
+   * kontrolliert behandeln.
+   */
 
-  while (
-    typeof window.cv ===
-    "undefined"
+  if (
+    !document.querySelector(
+      'script[data-geochem-opencv]'
+    )
   ) {
 
     await new Promise(
-      resolve =>
-        setTimeout(
-          resolve,
-          25
-        )
+      (resolve, reject) => {
+
+        const script =
+          document.createElement(
+            "script"
+          );
+
+        script.src =
+          "./libs/opencv.js";
+
+        script.async =
+          true;
+
+        script.dataset.geochemOpencv =
+          "true";
+
+        script.onload =
+          resolve;
+
+        script.onerror =
+          () =>
+            reject(
+              new Error(
+                "Die Datei libs/opencv.js konnte nicht geladen werden."
+              )
+            );
+
+        document.head.appendChild(
+          script
+        );
+
+      }
     );
-
-
-    if (
-      performance.now() -
-      start >
-      20000
-    ) {
-
-      throw new Error(
-        "OpenCV.js wurde nicht geladen."
-      );
-
-    }
 
   }
 
 
+  status.textContent =
+    "OpenCV-Runtime wird initialisiert …";
+
+
   /*
-   * Neuere OpenCV.js-Builds können cv
-   * als Promise bereitstellen.
+   * Manche aktuelle Builds stellen cv als
+   * Promise bereit.
    */
 
   if (
     window.cv &&
     typeof window.cv.then ===
-    "function"
+      "function"
   ) {
 
     window.cv =
@@ -765,36 +688,138 @@ async function initializeOpenCV() {
   }
 
 
-  const secondStart =
-    performance.now();
+  /*
+   * Falls cv bereits vollständig initialisiert
+   * wurde, können wir sofort weiter.
+   */
+
+  if (
+    window.cv &&
+    typeof window.cv.solvePnP ===
+      "function" &&
+    typeof window.cv.matFromArray ===
+      "function"
+  ) {
+
+    cvReady =
+      true;
+
+    return;
+
+  }
 
 
-  while (
-    !window.cv ||
-    typeof window.cv.solvePnP !==
-    "function"
+  /*
+   * Klassische Emscripten/OpenCV.js-Builds
+   * melden die fertige WASM-Runtime über
+   * onRuntimeInitialized.
+   */
+
+  if (
+    window.cv &&
+    typeof window.cv ===
+      "object"
   ) {
 
     await new Promise(
-      resolve =>
-        setTimeout(
-          resolve,
-          25
-        )
+      (resolve, reject) => {
+
+        const timeout =
+          setTimeout(
+            () => {
+
+              reject(
+                new Error(
+                  "OpenCV-Runtime wurde nicht innerhalb von 30 Sekunden bereit."
+                )
+              );
+
+            },
+            30000
+          );
+
+
+        const oldCallback =
+          window.cv
+            .onRuntimeInitialized;
+
+
+        window.cv
+          .onRuntimeInitialized =
+          function() {
+
+            if (
+              typeof oldCallback ===
+                "function"
+            ) {
+
+              try {
+
+                oldCallback();
+
+              }
+              catch(error) {
+
+                console.warn(
+                  error
+                );
+
+              }
+
+            }
+
+
+            clearTimeout(
+              timeout
+            );
+
+            resolve();
+
+          };
+
+
+        /*
+         * Es kann sein, dass die Runtime zwischen
+         * unserer ersten Prüfung und dem Setzen des
+         * Callbacks fertig geworden ist.
+         */
+
+        if (
+          typeof window.cv.solvePnP ===
+            "function" &&
+          typeof window.cv.matFromArray ===
+            "function"
+        ) {
+
+          clearTimeout(
+            timeout
+          );
+
+          resolve();
+
+        }
+
+      }
     );
 
+  }
 
-    if (
-      performance.now() -
-      secondStart >
-      20000
-    ) {
 
-      throw new Error(
-        "OpenCV ist geladen, aber solvePnP ist nicht verfügbar."
-      );
+  /*
+   * Abschließende Prüfung.
+   */
 
-    }
+  if (
+    !window.cv ||
+    typeof window.cv.solvePnP !==
+      "function" ||
+    typeof window.cv.matFromArray !==
+      "function"
+  ) {
+
+    throw new Error(
+      "OpenCV wurde geladen, aber die benötigten Funktionen sind nicht verfügbar."
+    );
 
   }
 
@@ -816,12 +841,10 @@ async function initializeAprilTag() {
       "./libs/apriltag.js"
     );
 
-
   const Apriltag =
     Comlink.wrap(
       worker
     );
-
 
   apriltag =
     await new Apriltag(
@@ -837,10 +860,8 @@ async function initializeAprilTag() {
 
     );
 
-
   const start =
     performance.now();
-
 
   while (
     !detectorReady
@@ -853,7 +874,6 @@ async function initializeAprilTag() {
           20
         )
     );
-
 
     if (
       performance.now() -
@@ -869,16 +889,9 @@ async function initializeAprilTag() {
 
   }
 
-
-  /*
-   * OpenCV berechnet die Pose.
-   * AprilTag liefert nur ID und Ecken.
-   */
-
   await apriltag.set_return_pose(
     0
   );
-
 
   await apriltag.set_max_detections(
     6
@@ -926,10 +939,8 @@ async function startCamera() {
 
       });
 
-
   video.srcObject =
     stream;
-
 
   await new Promise(
     resolve => {
@@ -958,9 +969,7 @@ async function startCamera() {
     }
   );
 
-
   await video.play();
-
 
   cameraReady =
     true;
@@ -982,7 +991,6 @@ function createGrayscaleImage() {
     HEIGHT
   );
 
-
   const imageData =
     analysisCtx.getImageData(
       0,
@@ -991,16 +999,13 @@ function createGrayscaleImage() {
       HEIGHT
     );
 
-
   const rgba =
     imageData.data;
-
 
   const grayscale =
     new Uint8Array(
       WIDTH * HEIGHT
     );
-
 
   for (
     let i = 0, j = 0;
@@ -1019,7 +1024,6 @@ function createGrayscaleImage() {
 
   }
 
-
   return grayscale;
 
 }
@@ -1035,7 +1039,6 @@ function getPoint(point) {
     return null;
   }
 
-
   if (
     Array.isArray(point)
   ) {
@@ -1049,7 +1052,6 @@ function getPoint(point) {
       Number(
         point[1]
       );
-
 
     if (
       Number.isFinite(x) &&
@@ -1065,7 +1067,6 @@ function getPoint(point) {
 
   }
 
-
   const x =
     Number(
       point.x
@@ -1075,7 +1076,6 @@ function getPoint(point) {
     Number(
       point.y
     );
-
 
   if (
     Number.isFinite(x) &&
@@ -1088,7 +1088,6 @@ function getPoint(point) {
     };
 
   }
-
 
   return null;
 
@@ -1116,14 +1115,12 @@ function calculatePoseWithOpenCV(
 
   }
 
-
   const corners =
     detection.corners
       .slice(0, 4)
       .map(
         getPoint
       );
-
 
   if (
     corners.some(
@@ -1136,39 +1133,11 @@ function calculatePoseWithOpenCV(
 
   }
 
-
   const cv =
     window.cv;
 
-
-  /*
-   * Halbe Tag-Kantenlänge.
-   */
-
   const s =
     TAG_SIZE / 2;
-
-
-  /*
-   * AprilTag-Eckreihenfolge:
-   *
-   * 0 = unten links
-   * 1 = unten rechts
-   * 2 = oben rechts
-   * 3 = oben links
-   *
-   * Unser Tag-Koordinatensystem:
-   *
-   * +X = rechts
-   * +Y = unten
-   *
-   * Deshalb:
-   *
-   * unten links  = (-s,+s,0)
-   * unten rechts = (+s,+s,0)
-   * oben rechts  = (+s,-s,0)
-   * oben links   = (-s,-s,0)
-   */
 
   const objectPoints =
     cv.matFromArray(
@@ -1182,7 +1151,6 @@ function calculatePoseWithOpenCV(
         -s, -s, 0
       ]
     );
-
 
   const imagePoints =
     cv.matFromArray(
@@ -1204,7 +1172,6 @@ function calculatePoseWithOpenCV(
       ]
     );
 
-
   const cameraMatrix =
     cv.matFromArray(
       3,
@@ -1217,14 +1184,6 @@ function calculatePoseWithOpenCV(
       ]
     );
 
-
-  /*
-   * Zunächst keine Linsenverzeichnung.
-   *
-   * Das entspricht unserem bisherigen
-   * Kameramodell.
-   */
-
   const distCoeffs =
     cv.Mat.zeros(
       4,
@@ -1232,29 +1191,16 @@ function calculatePoseWithOpenCV(
       cv.CV_64F
     );
 
-
   const rvec =
     new cv.Mat();
 
   const tvec =
     new cv.Mat();
 
-
   let success =
     false;
 
-
   try {
-
-    /*
-     * Bewusst SOLVEPNP_ITERATIVE.
-     *
-     * Noch keine Spezialbehandlung für
-     * quadratische Marker.
-     *
-     * Später verwenden wir denselben Solver
-     * für 8 bzw. mehr nicht-koplanare Punkte.
-     */
 
     success =
       cv.solvePnP(
@@ -1268,7 +1214,6 @@ function calculatePoseWithOpenCV(
         cv.SOLVEPNP_ITERATIVE
       );
 
-
     if (!success) {
 
       poseValid =
@@ -1278,14 +1223,8 @@ function calculatePoseWithOpenCV(
 
     }
 
-
-    /*
-     * Rotationsvektor -> 3x3-Matrix.
-     */
-
     const rotationMatrix =
       new cv.Mat();
-
 
     try {
 
@@ -1294,13 +1233,11 @@ function calculatePoseWithOpenCV(
         rotationMatrix
       );
 
-
       const R =
         rotationMatrix.data64F;
 
       const T =
         tvec.data64F;
-
 
       if (
         R.length < 9 ||
@@ -1314,7 +1251,6 @@ function calculatePoseWithOpenCV(
 
       }
 
-
       const tx =
         T[0];
 
@@ -1324,45 +1260,14 @@ function calculatePoseWithOpenCV(
       const tz =
         T[2];
 
-
-      /*
-       * OpenCV:
-       *
-       * +X rechts
-       * +Y unten
-       * +Z nach vorne
-       *
-       * Three.js:
-       *
-       * +X rechts
-       * +Y oben
-       * -Z nach vorne
-       */
-
       tagRoot.position.set(
         tx,
         -ty,
         -tz
       );
 
-
-      /*
-       * solvePnP liefert die Transformation
-       * Objekt -> Kamera.
-       *
-       * Anders als beim AprilTag-WASM-Posewert
-       * transponieren wir diese Matrix NICHT.
-       *
-       * Basiswechsel:
-       *
-       * C = diag(1,-1,-1)
-       *
-       * R_three = C * R_opencv * C
-       */
-
       const opencvRotation =
         new THREE.Matrix4();
-
 
       opencvRotation.set(
 
@@ -1373,10 +1278,8 @@ function calculatePoseWithOpenCV(
 
       );
 
-
       const basisChange =
         new THREE.Matrix4();
-
 
       basisChange.set(
 
@@ -1387,10 +1290,8 @@ function calculatePoseWithOpenCV(
 
       );
 
-
       const convertedRotation =
         new THREE.Matrix4();
-
 
       convertedRotation
         .copy(
@@ -1403,20 +1304,16 @@ function calculatePoseWithOpenCV(
           basisChange
         );
 
-
       tagRoot.quaternion
         .setFromRotationMatrix(
           convertedRotation
         );
 
-
       tagRoot.visible =
         true;
 
-
       poseValid =
         true;
-
 
       return true;
 
@@ -1461,16 +1358,13 @@ async function detectFrame() {
 
   }
 
-
   detectionRunning =
     true;
-
 
   try {
 
     const grayscale =
       createGrayscaleImage();
-
 
     const result =
       await apriltag.detect(
@@ -1479,12 +1373,10 @@ async function detectFrame() {
         HEIGHT
       );
 
-
     const detections =
       Array.isArray(result)
         ? result
         : [];
-
 
     latestDetection =
       detections.find(
@@ -1492,7 +1384,6 @@ async function detectFrame() {
           Number(detection.id) ===
           TEST_TAG_ID
       ) || null;
-
 
     if (
       latestDetection
@@ -1514,13 +1405,10 @@ async function detectFrame() {
 
     }
 
-
     detectionCounter++;
-
 
     const now =
       performance.now();
-
 
     if (
       now -
@@ -1534,11 +1422,9 @@ async function detectFrame() {
           fpsStart
         ) / 1000;
 
-
       detectionFPS =
         detectionCounter /
         seconds;
-
 
       detectionCounter =
         0;
@@ -1587,7 +1473,6 @@ function drawOverlay() {
     HEIGHT
   );
 
-
   if (
     !latestDetection ||
     !Array.isArray(
@@ -1599,14 +1484,12 @@ function drawOverlay() {
 
   }
 
-
   const corners =
     latestDetection.corners
       .slice(0, 4)
       .map(
         getPoint
       );
-
 
   if (
     corners.some(
@@ -1619,18 +1502,12 @@ function drawOverlay() {
 
   }
 
-
-  /*
-   * Grüner Rahmen.
-   */
-
   overlayCtx.beginPath();
 
   overlayCtx.moveTo(
     corners[0].x,
     corners[0].y
   );
-
 
   for (
     let i = 1;
@@ -1645,7 +1522,6 @@ function drawOverlay() {
 
   }
 
-
   overlayCtx.closePath();
 
   overlayCtx.lineWidth =
@@ -1655,14 +1531,6 @@ function drawOverlay() {
     "#00ff00";
 
   overlayCtx.stroke();
-
-
-  /*
-   * Corner 0 bewusst rot.
-   *
-   * Damit sehen wir zusätzlich, ob die
-   * Corner-Orientierung stabil bleibt.
-   */
 
   for (
     let i = 0;
@@ -1686,7 +1554,6 @@ function drawOverlay() {
         : "#00ff00";
 
     overlayCtx.fill();
-
 
     overlayCtx.font =
       "bold 15px Arial";
@@ -1723,7 +1590,6 @@ function resize() {
   const screenHeight =
     window.innerHeight;
 
-
   const videoAspect =
     WIDTH / HEIGHT;
 
@@ -1731,10 +1597,8 @@ function resize() {
     screenWidth /
     screenHeight;
 
-
   let displayWidth;
   let displayHeight;
-
 
   if (
     screenAspect >
@@ -1761,20 +1625,17 @@ function resize() {
 
   }
 
-
   const left =
     (
       screenWidth -
       displayWidth
     ) / 2;
 
-
   const top =
     (
       screenHeight -
       displayHeight
     ) / 2;
-
 
   for (
     const canvas
@@ -1806,7 +1667,6 @@ window.addEventListener(
   resize
 );
 
-
 resize();
 
 
@@ -1820,7 +1680,6 @@ function animate() {
     animate
   );
 
-
   if (
     !detectionRunning
   ) {
@@ -1829,15 +1688,12 @@ function animate() {
 
   }
 
-
   drawOverlay();
-
 
   renderer.render(
     scene,
     camera
   );
-
 
   status.textContent =
 
@@ -1882,23 +1738,17 @@ async function start() {
     status.textContent =
       "OpenCV wird geladen …";
 
-
     await initializeOpenCV();
 
-
     status.textContent =
-      "AprilTag wird geladen …";
-
+      "OpenCV bereit ✓\nAprilTag wird geladen …";
 
     await initializeAprilTag();
 
-
     status.textContent =
-      "Kamera wird gestartet …";
-
+      "OpenCV bereit ✓\nAprilTag bereit ✓\nKamera wird gestartet …";
 
     await startCamera();
-
 
     requestAnimationFrame(
       animate
