@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – Rendering-Test</title>
+<title>GeoChemAR – AprilTag Translation</title>
 
 <style>
 
@@ -29,22 +29,16 @@ body {
 #video {
   position: fixed;
   inset: 0;
-
   width: 100%;
   height: 100%;
-
   object-fit: contain;
-
   background: black;
-
   z-index: 1;
 }
 
 #threeCanvas {
   position: fixed;
-
   z-index: 2;
-
   pointer-events: none;
 }
 
@@ -54,23 +48,18 @@ body {
 
 #status {
   position: fixed;
-
   top: 10px;
   left: 10px;
-
   z-index: 10;
 
   padding: 10px 14px;
-
   border-radius: 8px;
 
   background: rgba(0,0,0,0.82);
-
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
-
   white-space: pre-line;
 
   pointer-events: none;
@@ -78,23 +67,18 @@ body {
 
 #error {
   position: fixed;
-
   left: 10px;
   right: 10px;
   bottom: 10px;
-
   z-index: 20;
 
   padding: 10px;
-
   border-radius: 8px;
 
   background: rgba(160,0,0,0.92);
-
   color: white;
 
   font-size: 13px;
-
   white-space: pre-wrap;
 
   display: none;
@@ -200,15 +184,31 @@ function showError(error) {
 
 
 /* =====================================================
+   KAMERA-INTRINSICS
+
+   Noch immer dieselben Werte wie bei
+   der AprilTag-Poseberechnung.
+   ===================================================== */
+
+const cx = WIDTH / 2;
+const cy = HEIGHT / 2;
+
+const horizontalFov =
+  THREE.MathUtils.degToRad(60);
+
+const fx =
+  (WIDTH / 2) /
+  Math.tan(horizontalFov / 2);
+
+const fy = fx;
+
+
+/* =====================================================
    THREE.JS
 
    WICHTIG:
-
-   Für diesen Test KEINE selbst gebaute
-   Projektionsmatrix.
-
-   Wir verwenden eine ganz normale
-   PerspectiveCamera.
+   Wir behalten die funktionierende
+   PerspectiveCamera aus 5b-3.
    ===================================================== */
 
 const scene =
@@ -269,24 +269,20 @@ document.body.appendChild(
 
 
 /* =====================================================
-   FESTE TESTKUGEL
+   TESTKUGEL
 
-   NICHT mit AprilTag verbunden.
+   Radius 10 mm.
 
-   Position:
-   direkt vor der Kamera.
-
-   Radius:
-   5 cm – absichtlich sehr groß.
+   Die Position kommt diesmal vom Tag.
    ===================================================== */
 
-const testSphere =
+const sphere =
   new THREE.Mesh(
 
     new THREE.SphereGeometry(
-      0.05,
-      40,
-      32
+      0.010,
+      32,
+      24
     ),
 
     new THREE.MeshBasicMaterial({
@@ -296,47 +292,9 @@ const testSphere =
   );
 
 
-testSphere.position.set(
-  0,
-  0,
-  -0.5
-);
+sphere.visible = false;
 
-
-scene.add(
-  testSphere
-);
-
-
-/* =====================================================
-   APRILTAG-INTRINSICS
-
-   Diese sind NUR für den AprilTag-Detector.
-   Sie beeinflussen den Rendering-Test nicht.
-   ===================================================== */
-
-const cx =
-  WIDTH / 2;
-
-const cy =
-  HEIGHT / 2;
-
-
-const horizontalFov =
-  THREE.MathUtils.degToRad(
-    60
-  );
-
-
-const fx =
-  (WIDTH / 2) /
-  Math.tan(
-    horizontalFov / 2
-  );
-
-
-const fy =
-  fx;
+scene.add(sphere);
 
 
 /* =====================================================
@@ -583,14 +541,31 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   POSE NUR AUSLESEN
+   APRILTAG-TRANSLATION → THREE.JS
 
-   KEINE Verbindung mit Three.js.
+   pose.t ist nachweislich:
+
+   [tx, ty, tz]
+
+   AprilTag:
+   +X rechts
+   +Y unten
+   +Z von der Kamera weg
+
+   Three.js:
+   +X rechts
+   +Y oben
+   -Z vor der Kamera
+
+   Deshalb:
+
+   (tx, -ty, -tz)
    ===================================================== */
 
-function readPose(pose) {
+function applyTranslation(pose) {
 
   poseReceived = false;
+  sphere.visible = false;
 
 
   if (
@@ -628,6 +603,22 @@ function readPose(pose) {
   lastTx = tx;
   lastTy = ty;
   lastTz = tz;
+
+
+  /*
+   * DIE EINZIGE NEUE ÄNDERUNG
+   * gegenüber dem funktionierenden
+   * Render-Test:
+   */
+
+  sphere.position.set(
+    tx,
+    -ty,
+    -tz
+  );
+
+
+  sphere.visible = true;
 
   poseReceived = true;
 
@@ -683,7 +674,8 @@ async function detectFrame() {
 
       tagDetected = true;
 
-      readPose(
+
+      applyTranslation(
         detection.pose
       );
 
@@ -693,6 +685,8 @@ async function detectFrame() {
 
       tagDetected = false;
       poseReceived = false;
+
+      sphere.visible = false;
 
     }
 
@@ -741,7 +735,7 @@ async function detectFrame() {
 
 
 /* =====================================================
-   VIDEO / THREE-CANVAS SYNCHRON
+   VIDEO / CANVAS SYNCHRON
    ===================================================== */
 
 function resize() {
@@ -821,11 +815,6 @@ function resize() {
     "px";
 
 
-  /*
-   * PerspectiveCamera passend zum
-   * tatsächlich dargestellten 4:3-Bild.
-   */
-
   camera.aspect =
     displayWidth /
     displayHeight;
@@ -868,16 +857,14 @@ function animate() {
   );
 
 
-  let poseText = "";
+  let positionText = "";
 
 
   if (poseReceived) {
 
-    poseText =
+    positionText =
 
-      "\n\nTag-Pose:" +
-
-      "\nx: " +
+      "\n\nx: " +
       lastTx.toFixed(4) +
 
       "\ny: " +
@@ -892,10 +879,7 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-3 – RENDERTEST\n\n" +
-
-    "ROTE TESTKUGEL MUSS\n" +
-    "IN DER BILDMITTE SEIN\n\n" +
+    "APRILTAG 5b-4 – TRANSLATION\n\n" +
 
     "Tag 0: " +
     (
@@ -911,10 +895,17 @@ function animate() {
         : "NEIN"
     ) +
 
+    "\nKugel: " +
+    (
+      sphere.visible
+        ? "AKTIV"
+        : "AUS"
+    ) +
+
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
-    poseText;
+    positionText;
 
 }
 
