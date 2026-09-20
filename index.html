@@ -8,7 +8,7 @@
   content="width=device-width, initial-scale=1.0"
 >
 
-<title>GeoChemAR – Native MultiMarker 1+2</title>
+<title>GeoChemAR – MultiMarker Pose-Diagnose</title>
 
 <style>
 html, body {
@@ -30,7 +30,7 @@ html, body {
   padding: 10px 14px;
   border-radius: 8px;
 
-  background: rgba(0,0,0,0.80);
+  background: rgba(0,0,0,0.82);
   color: white;
 
   font-size: 14px;
@@ -69,6 +69,7 @@ video {
   top: 0 !important;
   left: 0 !important;
   z-index: 1 !important;
+
   visibility: visible !important;
   opacity: 1 !important;
 }
@@ -82,6 +83,7 @@ video {
 
 
 <script>
+
 window.addEventListener(
   "error",
   function(event) {
@@ -118,6 +120,7 @@ window.addEventListener(
       String(event.reason);
   }
 );
+
 </script>
 
 
@@ -173,13 +176,14 @@ try {
 
   const {
     ArToolkitSource,
-    ArToolkitContext
+    ArToolkitContext,
+    ArMarkerControls
   } = THREEX;
 
 
 
   /* =====================================================
-     THREE.JS
+     THREE
      ===================================================== */
 
   const scene =
@@ -221,19 +225,46 @@ try {
 
 
   /* =====================================================
-     GEMEINSAMER MULTIMARKER-ROOT
+     NORMALE MARKERROOTS
+
+     Nur damit wir gleichzeitig wissen,
+     welche Seiten tatsächlich erkannt sind.
+     ===================================================== */
+
+  const marker1Root =
+    new THREE.Group();
+
+
+  const marker2Root =
+    new THREE.Group();
+
+
+  marker1Root.visible =
+    false;
+
+
+  marker2Root.visible =
+    false;
+
+
+  scene.add(
+    marker1Root
+  );
+
+
+  scene.add(
+    marker2Root
+  );
+
+
+
+  /* =====================================================
+     MULTIMARKER ROOT
      ===================================================== */
 
   const cubeRoot =
     new THREE.Group();
 
-
-  /*
-   * Die Matrix kommt vollständig von
-   * JSARToolKit. Three.js darf sie daher
-   * nicht selbst aus Position/Rotation
-   * neu berechnen.
-   */
 
   cubeRoot.matrixAutoUpdate =
     false;
@@ -289,8 +320,6 @@ try {
 
 
 
-  /* Kohlenstoff */
-
   const carbon =
     new THREE.Mesh(
 
@@ -310,8 +339,6 @@ try {
   );
 
 
-
-  /* Exakte Tetraederrichtungen */
 
   const directions = [
 
@@ -346,8 +373,6 @@ try {
   directions.forEach(
     function(direction) {
 
-      /* Wasserstoff */
-
       const hydrogen =
         new THREE.Mesh(
 
@@ -378,8 +403,6 @@ try {
       );
 
 
-
-      /* Bindung */
 
       const startDistance =
         carbonRadius;
@@ -472,25 +495,10 @@ try {
 
 
 
-  /*
-   * MultiMarker arbeitet mit unseren
-   * realen Millimetermaßen.
-   *
-   * Das bisherige Methan war auf eine
-   * Markerbreite von 1 normiert.
-   *
-   * Markerbreite = 40 mm.
-   */
-
   methane.scale.setScalar(
     40
   );
 
-
-  /*
-   * cube-12.dat definiert den Ursprung
-   * im Würfelzentrum.
-   */
 
   methane.position.set(
     0,
@@ -506,7 +514,7 @@ try {
 
 
   /* =====================================================
-     AR SOURCE
+     KAMERA
      ===================================================== */
 
   const arToolkitSource =
@@ -556,10 +564,6 @@ try {
 
 
 
-  /* =====================================================
-     VIDEO
-     ===================================================== */
-
   const video =
     arToolkitSource.domElement;
 
@@ -604,7 +608,7 @@ try {
 
 
   /* =====================================================
-     AUF VIDEOBILD WARTEN
+     AUF VIDEO WARTEN
      ===================================================== */
 
   if (
@@ -828,12 +832,59 @@ try {
 
 
   /* =====================================================
-     MULTIMARKER LADEN
+     NORMALE MARKER 1 UND 2
      ===================================================== */
 
-  status.textContent =
-    "cube-12.dat wird geladen …";
+  new ArMarkerControls(
 
+    arToolkitContext,
+
+    marker1Root,
+
+    {
+      type:
+        "barcode",
+
+      barcodeValue:
+        1,
+
+      size:
+        1,
+
+      changeMatrixMode:
+        "modelViewMatrix"
+    }
+
+  );
+
+
+  new ArMarkerControls(
+
+    arToolkitContext,
+
+    marker2Root,
+
+    {
+      type:
+        "barcode",
+
+      barcodeValue:
+        2,
+
+      size:
+        1,
+
+      changeMatrixMode:
+        "modelViewMatrix"
+    }
+
+  );
+
+
+
+  /* =====================================================
+     MULTIMARKER LADEN
+     ===================================================== */
 
   let multiMarkerId =
     null;
@@ -896,8 +947,24 @@ try {
 
 
   /* =====================================================
-     NATIVER MULTIMARKER
+     POSE-DIAGNOSE
      ===================================================== */
+
+  const measuredMatrix =
+    new THREE.Matrix4();
+
+
+  const measuredPosition =
+    new THREE.Vector3();
+
+
+  const measuredQuaternion =
+    new THREE.Quaternion();
+
+
+  const measuredScale =
+    new THREE.Vector3();
+
 
   let multiEventCount =
     0;
@@ -907,7 +974,7 @@ try {
     0;
 
 
-  let receivedMatrix =
+  let havePose =
     false;
 
 
@@ -920,36 +987,9 @@ try {
 
       if (
         !event ||
-        !event.data
-      ) {
-
-        return;
-
-      }
-
-
-      if (
+        !event.data ||
         event.data.multiMarkerId !==
-        multiMarkerId
-      ) {
-
-        return;
-
-      }
-
-
-      /*
-       * ENTSCHEIDENDE ÄNDERUNG GEGENÜBER 4f-2:
-       *
-       * NICHT event.data.matrix,
-       * sondern matrixGL_RH.
-       *
-       * Diese Matrix ist bereits für das
-       * rechtshändige OpenGL/Three.js-
-       * Koordinatensystem umgerechnet.
-       */
-
-      if (
+          multiMarkerId ||
         !event.data.matrixGL_RH
       ) {
 
@@ -958,8 +998,38 @@ try {
       }
 
 
-      cubeRoot.matrix.fromArray(
+      /*
+       * Dieselbe Matrix wie in 4f-2b.
+       */
+
+      measuredMatrix.fromArray(
         event.data.matrixGL_RH
+      );
+
+
+      /*
+       * Position und Rotation nur
+       * für die Diagnose auslesen.
+       */
+
+      measuredMatrix.decompose(
+
+        measuredPosition,
+
+        measuredQuaternion,
+
+        measuredScale
+
+      );
+
+
+      /*
+       * Unverändert auch auf cubeRoot
+       * übertragen.
+       */
+
+      cubeRoot.matrix.copy(
+        measuredMatrix
       );
 
 
@@ -978,7 +1048,7 @@ try {
         performance.now();
 
 
-      receivedMatrix =
+      havePose =
         true;
 
     }
@@ -1039,7 +1109,32 @@ try {
 
 
   /* =====================================================
-     RENDER LOOP
+     HILFSFUNKTIONEN
+     ===================================================== */
+
+  function f(value) {
+
+    return Number(
+      value
+    ).toFixed(
+      2
+    );
+
+  }
+
+
+  function yesNo(value) {
+
+    return value
+      ? "JA"
+      : "NEIN";
+
+  }
+
+
+
+  /* =====================================================
+     LOOP
      ===================================================== */
 
   function animate() {
@@ -1061,15 +1156,16 @@ try {
 
 
 
-    /*
-     * Nur kurzer Sichtbarkeitshold.
-     * Keine Positions- oder Rotationsglättung.
-     */
+    const recentlySeen =
+
+      performance.now() -
+      lastSeenTime
+
+      < 150;
+
 
     if (
-      performance.now() -
-      lastSeenTime >
-      150
+      !recentlySeen
     ) {
 
       cubeRoot.visible =
@@ -1079,42 +1175,110 @@ try {
 
 
 
+    let visibility;
+
+
+    if (
+      marker1Root.visible &&
+      marker2Root.visible
+    ) {
+
+      visibility =
+        "1 + 2";
+
+    }
+
+    else if (
+      marker1Root.visible
+    ) {
+
+      visibility =
+        "nur 1";
+
+    }
+
+    else if (
+      marker2Root.visible
+    ) {
+
+      visibility =
+        "nur 2";
+
+    }
+
+    else {
+
+      visibility =
+        "keiner";
+
+    }
+
+
+
+    let poseText =
+      "Noch keine Pose";
+
+
+    if (
+      havePose
+    ) {
+
+      poseText =
+
+        "Position matrixGL_RH:\n" +
+
+        "X = " +
+        f(measuredPosition.x) +
+
+        "\nY = " +
+        f(measuredPosition.y) +
+
+        "\nZ = " +
+        f(measuredPosition.z) +
+
+        "\n\nQuaternion x,y,z,w:\n" +
+
+        f(measuredQuaternion.x) +
+        ", " +
+
+        f(measuredQuaternion.y) +
+        ", " +
+
+        f(measuredQuaternion.z) +
+        ", " +
+
+        f(measuredQuaternion.w);
+
+    }
+
+
+
     status.textContent =
 
-      "NATIVER MULTIMARKER 1+2\n\n" +
+      "MULTIMARKER POSE-DIAGNOSE\n\n" +
 
-      "MultiMarker-ID: " +
-      multiMarkerId +
+      "Marker sichtbar: " +
+      visibility +
 
-      "\nMarkeranzahl: " +
-      loadedMarkerCount +
-
-      "\n\nmatrixGL_RH empfangen: " +
-      (
-        receivedMatrix
-          ? "JA"
-          : "NEIN"
+      "\nMultiMarker-Pose aktuell: " +
+      yesNo(
+        recentlySeen
       ) +
 
-      "\ngetMultiMarker gesamt: " +
+      "\nEvents gesamt: " +
       multiEventCount +
-
-      "\nMethan sichtbar: " +
-      (
-        cubeRoot.visible
-          ? "JA"
-          : "NEIN"
-      ) +
 
       "\n\n" +
 
-      (
-        cubeRoot.visible
+      poseText +
 
-          ? "Jetzt langsam von Seite 1\nüber die Kante zu Seite 2 drehen."
+      "\n\n" +
 
-          : "Marker 1 und/oder 2 zeigen."
-      );
+      "Bitte nacheinander testen:\n" +
+
+      "1. nur Marker 1\n" +
+      "2. nur Marker 2\n" +
+      "3. Marker 1 + 2";
 
 
 
