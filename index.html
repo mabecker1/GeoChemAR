@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – AprilTag 5b</title>
+<title>GeoChemAR – AprilTag Pose Test</title>
 
 <style>
 
@@ -19,93 +19,66 @@ html,
 body {
   margin: 0;
   padding: 0;
-
   width: 100%;
   height: 100%;
-
   overflow: hidden;
-
   background: black;
-
   font-family: Arial, sans-serif;
 }
 
-
 #video {
   position: fixed;
-
-  left: 0;
-  top: 0;
-
+  inset: 0;
   width: 100%;
   height: 100%;
-
   object-fit: contain;
-
   background: black;
-
   z-index: 1;
 }
 
-
 #threeCanvas {
   position: fixed;
-
   z-index: 2;
-
   pointer-events: none;
 }
-
 
 #analysisCanvas {
   display: none;
 }
 
-
 #status {
   position: fixed;
-
   top: 10px;
   left: 10px;
-
   z-index: 10;
 
   padding: 10px 14px;
-
   border-radius: 8px;
 
-  background: rgba(0,0,0,0.80);
-
+  background: rgba(0,0,0,0.82);
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
-
   white-space: pre-line;
 
   pointer-events: none;
 }
 
-
 #error {
   position: fixed;
-
   left: 10px;
   right: 10px;
   bottom: 10px;
-
   z-index: 20;
 
   padding: 10px;
-
   border-radius: 8px;
 
-  background: rgba(160,0,0,0.90);
-
+  background: rgba(160,0,0,0.92);
   color: white;
 
   font-size: 13px;
-
   white-space: pre-wrap;
 
   display: none;
@@ -113,7 +86,6 @@ body {
 
 </style>
 </head>
-
 
 <body>
 
@@ -124,21 +96,17 @@ body {
   playsinline
 ></video>
 
-
 <canvas
   id="analysisCanvas"
   width="640"
   height="480"
 ></canvas>
 
-
 <div id="status">
-AprilTag wird initialisiert …
+Initialisierung …
 </div>
 
-
 <div id="error"></div>
-
 
 
 <script type="importmap">
@@ -150,50 +118,40 @@ AprilTag wird initialisiert …
 </script>
 
 
-
 <script type="module">
 
-import * as THREE
-  from "three";
-
+import * as THREE from "three";
 
 import * as Comlink
   from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
 
-
 /* =====================================================
-   GRUNDWERTE
+   KONSTANTEN
    ===================================================== */
 
-const WIDTH =
-  640;
+const WIDTH = 640;
+const HEIGHT = 480;
+
+const TAG_ID = 0;
+const TAG_SIZE = 0.040;
 
 
-const HEIGHT =
-  480;
+/* =====================================================
+   KAMERA-INTRINSICS
+   ===================================================== */
 
+const cx = WIDTH / 2;
+const cy = HEIGHT / 2;
 
-/*
- * Taggröße:
- * 40 mm
- */
+const horizontalFov =
+  60 * Math.PI / 180;
 
-const TAG_SIZE =
-  0.040;
+const fx =
+  (WIDTH / 2) /
+  Math.tan(horizontalFov / 2);
 
-
-/*
- * Würfelkante:
- * 45 mm
- *
- * Markerfläche → Würfelzentrum:
- * 22,5 mm
- */
-
-const CUBE_CENTER_DEPTH =
-  0.0225;
-
+const fy = fx;
 
 
 /* =====================================================
@@ -201,16 +159,10 @@ const CUBE_CENTER_DEPTH =
    ===================================================== */
 
 const video =
-  document.getElementById(
-    "video"
-  );
-
+  document.getElementById("video");
 
 const analysisCanvas =
-  document.getElementById(
-    "analysisCanvas"
-  );
-
+  document.getElementById("analysisCanvas");
 
 const analysisCtx =
   analysisCanvas.getContext(
@@ -220,18 +172,11 @@ const analysisCtx =
     }
   );
 
-
 const status =
-  document.getElementById(
-    "status"
-  );
-
+  document.getElementById("status");
 
 const errorBox =
-  document.getElementById(
-    "error"
-  );
-
+  document.getElementById("error");
 
 
 /* =====================================================
@@ -242,101 +187,17 @@ function showError(error) {
 
   console.error(error);
 
-
   errorBox.style.display =
     "block";
 
-
   errorBox.textContent =
-
     "FEHLER:\n" +
-
     (
-      error &&
-      error.stack
-
-        ? error.stack
-
-        : String(error)
+      error?.stack ||
+      String(error)
     );
 
 }
-
-
-
-window.addEventListener(
-
-  "error",
-
-  function(event) {
-
-    showError(
-
-      event.error ||
-      event.message
-
-    );
-
-  }
-
-);
-
-
-
-window.addEventListener(
-
-  "unhandledrejection",
-
-  function(event) {
-
-    showError(
-      event.reason
-    );
-
-  }
-
-);
-
-
-
-/* =====================================================
-   KAMERA-INTRINSICS
-   ===================================================== */
-
-/*
- * Für diesen Test weiterhin dieselbe
- * Näherung wie zuvor.
- */
-
-const cx =
-  WIDTH / 2;
-
-
-const cy =
-  HEIGHT / 2;
-
-
-const horizontalFov =
-
-  THREE.MathUtils.degToRad(
-    60
-  );
-
-
-const fx =
-
-  (WIDTH / 2)
-
-  /
-
-  Math.tan(
-    horizontalFov / 2
-  );
-
-
-const fy =
-  fx;
-
 
 
 /* =====================================================
@@ -347,7 +208,6 @@ const scene =
   new THREE.Scene();
 
 
-
 const camera =
   new THREE.Camera();
 
@@ -356,19 +216,10 @@ camera.matrixAutoUpdate =
   false;
 
 
-scene.add(
-  camera
-);
-
-
-
 const renderer =
   new THREE.WebGLRenderer({
-
-    antialias: true,
-
-    alpha: true
-
+    alpha: true,
+    antialias: true
   });
 
 
@@ -395,20 +246,12 @@ document.body.appendChild(
 );
 
 
-
 /* =====================================================
    PROJEKTIONSMATRIX
-
-   Aus den gleichen Intrinsics wie die
-   AprilTag-Pose.
    ===================================================== */
 
-const near =
-  0.01;
-
-
-const far =
-  10.0;
+const near = 0.01;
+const far = 10.0;
 
 
 camera.projectionMatrix.set(
@@ -437,392 +280,58 @@ camera.projectionMatrix.set(
 
 
 camera.projectionMatrixInverse
-  .copy(
-    camera.projectionMatrix
-  )
+  .copy(camera.projectionMatrix)
   .invert();
 
 
-
 /* =====================================================
-   TAG ROOT
+   TESTOBJEKT
+
+   Bewusst groß und rot.
+
+   Radius = 10 mm.
    ===================================================== */
 
-const tagRoot =
-  new THREE.Group();
-
-
-tagRoot.matrixAutoUpdate =
-  false;
-
-
-tagRoot.visible =
-  false;
-
-
-scene.add(
-  tagRoot
-);
-
-
-
-/* =====================================================
-   WÜRFELZENTRUM
-   ===================================================== */
-
-const cubeCenter =
-  new THREE.Group();
-
-
-/*
- * Zunächst 22,5 mm hinter der Markerfläche.
- *
- * Falls die Normalenrichtung nach unserem
- * ersten Sichttest umgekehrt ist, ändern
- * wir ausschließlich dieses Vorzeichen.
- */
-
-cubeCenter.position.set(
-
-  0,
-  0,
-  -CUBE_CENTER_DEPTH
-
-);
-
-
-tagRoot.add(
-  cubeCenter
-);
-
-
-
-/* =====================================================
-   METHAN
-   ===================================================== */
-
-const methane =
-  new THREE.Group();
-
-
-
-/*
- * Die folgenden Werte bleiben EXAKT aus
- * unserem bisherigen stabilen Methanmodell.
- */
-
-const carbonRadius =
-  0.22;
-
-
-const hydrogenRadius =
-  0.14;
-
-
-const hydrogenDistance =
-  0.72;
-
-
-const bondRadius =
-  0.040;
-
-
-
-/*
- * Alte Modellkoordinate:
- *
- * Markerbreite = 1
- *
- * Deshalb skalieren wir jetzt mit 40 mm.
- */
-
-methane.scale.setScalar(
-  TAG_SIZE
-);
-
-
-
-const carbonMaterial =
-  new THREE.MeshBasicMaterial({
-
-    color: 0x202020
-
-  });
-
-
-
-const hydrogenMaterial =
-  new THREE.MeshBasicMaterial({
-
-    color: 0xffffff
-
-  });
-
-
-
-const bondMaterial =
-  new THREE.MeshBasicMaterial({
-
-    color: 0xb8bec7
-
-  });
-
-
-
-/* =====================================================
-   KOHLENSTOFF
-   ===================================================== */
-
-const carbon =
+const sphere =
   new THREE.Mesh(
 
     new THREE.SphereGeometry(
-      carbonRadius,
-      48,
-      32
+      0.010,
+      32,
+      24
     ),
 
-    carbonMaterial
+    new THREE.MeshBasicMaterial({
+      color: 0xff0000
+    })
 
   );
 
 
-methane.add(
-  carbon
-);
+sphere.visible = false;
 
 
-
-/* =====================================================
-   TETRAEDER
-   ===================================================== */
-
-const directions = [
-
-  new THREE.Vector3(
-    1,
-    1,
-    1
-  ).normalize(),
-
-
-  new THREE.Vector3(
-    1,
-    -1,
-    -1
-  ).normalize(),
-
-
-  new THREE.Vector3(
-    -1,
-    1,
-    -1
-  ).normalize(),
-
-
-  new THREE.Vector3(
-    -1,
-    -1,
-    1
-  ).normalize()
-
-];
-
-
-
-directions.forEach(
-
-  function(direction) {
-
-
-    /* -----------------------------
-       Wasserstoff
-       ----------------------------- */
-
-    const hydrogen =
-      new THREE.Mesh(
-
-        new THREE.SphereGeometry(
-          hydrogenRadius,
-          40,
-          28
-        ),
-
-        hydrogenMaterial
-
-      );
-
-
-    hydrogen.position.copy(
-
-      direction
-        .clone()
-        .multiplyScalar(
-          hydrogenDistance
-        )
-
-    );
-
-
-    methane.add(
-      hydrogen
-    );
-
-
-
-    /* -----------------------------
-       Bindung
-       ----------------------------- */
-
-    const startDistance =
-      carbonRadius;
-
-
-    const endDistance =
-      hydrogenDistance -
-      hydrogenRadius;
-
-
-    const startPoint =
-
-      direction
-        .clone()
-        .multiplyScalar(
-          startDistance
-        );
-
-
-    const endPoint =
-
-      direction
-        .clone()
-        .multiplyScalar(
-          endDistance
-        );
-
-
-    const bondVector =
-
-      endPoint
-        .clone()
-        .sub(
-          startPoint
-        );
-
-
-    const bondLength =
-      bondVector.length();
-
-
-
-    const bondGeometry =
-
-      new THREE.CylinderGeometry(
-
-        bondRadius,
-        bondRadius,
-
-        bondLength,
-
-        32,
-        1,
-
-        false
-
-      );
-
-
-
-    const bond =
-
-      new THREE.Mesh(
-
-        bondGeometry,
-
-        bondMaterial
-
-      );
-
-
-
-    bond.position.copy(
-
-      startPoint
-        .clone()
-        .add(
-          endPoint
-        )
-        .multiplyScalar(
-          0.5
-        )
-
-    );
-
-
-
-    bond.quaternion.setFromUnitVectors(
-
-      new THREE.Vector3(
-        0,
-        1,
-        0
-      ),
-
-      direction
-
-    );
-
-
-    methane.add(
-      bond
-    );
-
-  }
-
-);
-
-
-cubeCenter.add(
-  methane
-);
-
+scene.add(sphere);
 
 
 /* =====================================================
    APRILTAG
    ===================================================== */
 
-let apriltag =
-  null;
+let apriltag = null;
 
+let detectorReady = false;
+let cameraReady = false;
+let detectionRunning = false;
 
-let detectorReady =
-  false;
+let tagDetected = false;
+let poseReceived = false;
 
-
-let cameraReady =
-  false;
-
-
-let detectionRunning =
-  false;
-
-
-let tagDetected =
-  false;
-
-
-let detectionCounter =
-  0;
-
-
-let detectionFPS =
-  0;
-
+let detectionCounter = 0;
+let detectionFPS = 0;
 
 let fpsStart =
   performance.now();
-
 
 
 async function initializeAprilTag() {
@@ -832,68 +341,42 @@ async function initializeAprilTag() {
 
 
   const worker =
-
     new Worker(
       "./libs/apriltag.js"
     );
 
 
   const Apriltag =
-
-    Comlink.wrap(
-      worker
-    );
+    Comlink.wrap(worker);
 
 
   apriltag =
-
     await new Apriltag(
 
       Comlink.proxy(
-
         function() {
-
-          detectorReady =
-            true;
-
+          detectorReady = true;
         }
-
       )
 
     );
-
 
 
   const start =
     performance.now();
 
 
-
-  while (
-    !detectorReady
-  ) {
+  while (!detectorReady) {
 
     await new Promise(
-
-      function(resolve) {
-
-        setTimeout(
-          resolve,
-          20
-        );
-
-      }
-
+      resolve =>
+        setTimeout(resolve, 20)
     );
 
 
     if (
-
-      performance.now() -
-      start >
-
+      performance.now() - start >
       15000
-
     ) {
 
       throw new Error(
@@ -905,34 +388,35 @@ async function initializeAprilTag() {
   }
 
 
+  /*
+   * Diese Konfiguration entspricht
+   * unserem funktionierenden Diagnose-Test.
+   */
 
   await apriltag.set_camera_info(
-
     fx,
     fy,
     cx,
     cy
-
   );
-
 
 
   await apriltag.set_tag_size(
-
-    0,
-
+    TAG_ID,
     TAG_SIZE
-
-  );
-
-
-
-  await apriltag.set_return_solutions(
-    0
   );
 
 
   await apriltag.set_return_pose(
+    1
+  );
+
+
+  /*
+   * Wie im funktionierenden Diagnosetest.
+   */
+
+  await apriltag.set_return_solutions(
     1
   );
 
@@ -944,7 +428,6 @@ async function initializeAprilTag() {
 }
 
 
-
 /* =====================================================
    KAMERA
    ===================================================== */
@@ -952,13 +435,10 @@ async function initializeAprilTag() {
 async function startCamera() {
 
   const stream =
-
     await navigator.mediaDevices
       .getUserMedia({
 
-        audio:
-          false,
-
+        audio: false,
 
         video: {
 
@@ -966,21 +446,17 @@ async function startCamera() {
             ideal: "environment"
           },
 
-
           width: {
             ideal: WIDTH
           },
-
 
           height: {
             ideal: HEIGHT
           },
 
-
           aspectRatio: {
             ideal: 4 / 3
           },
-
 
           frameRate: {
             ideal: 30,
@@ -992,130 +468,92 @@ async function startCamera() {
       });
 
 
-
   video.srcObject =
     stream;
 
 
-
   await new Promise(
-
-    function(resolve) {
+    resolve => {
 
       if (
-
         video.readyState >= 2 &&
         video.videoWidth > 0
-
       ) {
 
         resolve();
 
-        return;
+      }
+
+      else {
+
+        video.addEventListener(
+          "loadedmetadata",
+          resolve,
+          {
+            once: true
+          }
+        );
 
       }
 
-
-      video.addEventListener(
-
-        "loadedmetadata",
-
-        resolve,
-
-        {
-          once: true
-        }
-
-      );
-
     }
-
   );
-
 
 
   await video.play();
 
-
-  cameraReady =
-    true;
+  cameraReady = true;
 
 }
 
 
-
 /* =====================================================
-   GRAUSTUFENBILD
+   GRAUSTUFEN
    ===================================================== */
 
 function createGrayscaleImage() {
 
   analysisCtx.drawImage(
-
     video,
-
     0,
     0,
-
     WIDTH,
     HEIGHT
-
   );
 
 
-
   const imageData =
-
     analysisCtx.getImageData(
-
       0,
       0,
-
       WIDTH,
       HEIGHT
-
     );
-
 
 
   const rgba =
     imageData.data;
 
 
-
   const grayscale =
-
     new Uint8Array(
-
-      WIDTH *
-      HEIGHT
-
+      WIDTH * HEIGHT
     );
 
 
-
   for (
-
     let i = 0, j = 0;
-
     i < rgba.length;
-
     i += 4, j++
-
   ) {
 
     grayscale[j] =
-
       Math.round(
-
         (
           rgba[i] +
           rgba[i + 1] +
           rgba[i + 2]
-        )
-
-        / 3
-
+        ) / 3
       );
 
   }
@@ -1126,184 +564,101 @@ function createGrayscaleImage() {
 }
 
 
-
 /* =====================================================
-   POSE → THREE.JS
+   POSE
 
-   Jetzt exakt für das tatsächlich beobachtete Format:
+   Für diesen Test verwenden wir NUR t.
 
-   pose.R =
-   [
-     [r00,r01,r02],
-     [r10,r11,r12],
-     [r20,r21,r22]
-   ]
+   KEINE Rotationsmatrix.
+   KEINE Quaternion.
+   KEINE Würfeltransformation.
 
-   pose.t =
-   [
-     [tx],
-     [ty],
-     [tz]
-   ]
+   Dadurch testen wir ausschließlich:
+   Kann Three.js die von AprilTag gemessene
+   3D-Position korrekt darstellen?
    ===================================================== */
 
-const aprilMatrix =
-  new THREE.Matrix4();
+function applyTranslation(pose) {
 
+  poseReceived = false;
+  sphere.visible = false;
 
-const coordinateConversion =
-  new THREE.Matrix4().set(
-
-    1,  0,  0, 0,
-    0, -1,  0, 0,
-    0,  0, -1, 0,
-    0,  0,  0, 1
-
-  );
-
-
-const finalMatrix =
-  new THREE.Matrix4();
-
-
-
-function applyPose(pose) {
 
   if (
     !pose ||
-    !pose.R ||
     !pose.t
   ) {
-
-    tagRoot.visible =
-      false;
 
     return;
 
   }
 
 
-
-  const R =
-    pose.R;
-
-
-  const t =
-    pose.t;
-
+  const t = pose.t;
 
 
   /*
-   * Genau das von deinem Detector
-   * gelieferte Format lesen.
+   * Das ist exakt die von dir beobachtete
+   * Datenstruktur:
+   *
+   * [
+   *   [tx],
+   *   [ty],
+   *   [tz]
+   * ]
    */
 
   const tx =
     Number(t[0][0]);
 
-
   const ty =
     Number(t[1][0]);
-
 
   const tz =
     Number(t[2][0]);
 
 
-
   if (
-
     !Number.isFinite(tx) ||
     !Number.isFinite(ty) ||
     !Number.isFinite(tz)
-
   ) {
-
-    tagRoot.visible =
-      false;
 
     return;
 
   }
 
 
-
   /*
-   * AprilTag-Transformationsmatrix
+   * AprilTag:
    *
-   * Tag → Kamera
-   */
-
-  aprilMatrix.set(
-
-    Number(R[0][0]),
-    Number(R[0][1]),
-    Number(R[0][2]),
-    tx,
-
-    Number(R[1][0]),
-    Number(R[1][1]),
-    Number(R[1][2]),
-    ty,
-
-    Number(R[2][0]),
-    Number(R[2][1]),
-    Number(R[2][2]),
-    tz,
-
-    0,
-    0,
-    0,
-    1
-
-  );
-
-
-
-  /*
-   * AprilTag-Kamerakoordinaten:
-   *
-   * +X rechts
-   * +Y unten
-   * +Z vor Kamera
+   * +X = rechts
+   * +Y = unten
+   * +Z = vor der Kamera
    *
    * Three.js:
    *
-   * +X rechts
-   * +Y oben
-   * -Z vor Kamera
-   *
-   * Daher:
-   *
-   * x bleibt
-   * y *= -1
-   * z *= -1
+   * +X = rechts
+   * +Y = oben
+   * -Z = vor der Kamera
    */
 
-  finalMatrix.multiplyMatrices(
+  sphere.position.set(
 
-    coordinateConversion,
+    tx,
 
-    aprilMatrix
+    -ty,
+
+    -tz
 
   );
 
 
+  sphere.visible = true;
 
-  tagRoot.matrix.copy(
-    finalMatrix
-  );
-
-
-  tagRoot.matrixWorldNeedsUpdate =
-    true;
-
-
-  tagRoot.visible =
-    true;
+  poseReceived = true;
 
 }
-
 
 
 /* =====================================================
@@ -1313,11 +668,9 @@ function applyPose(pose) {
 async function detectFrame() {
 
   if (
-
     !detectorReady ||
     !cameraReady ||
     detectionRunning
-
   ) {
 
     return;
@@ -1325,10 +678,7 @@ async function detectFrame() {
   }
 
 
-
-  detectionRunning =
-    true;
-
+  detectionRunning = true;
 
 
   try {
@@ -1337,48 +687,30 @@ async function detectFrame() {
       createGrayscaleImage();
 
 
-
     const result =
-
       await apriltag.detect(
-
         grayscale,
-
         WIDTH,
         HEIGHT
-
       );
 
 
-
     const detection =
-
       Array.isArray(result)
 
         ? result.find(
-
-            function(d) {
-
-              return Number(d.id) === 0;
-
-            }
-
+            d =>
+              Number(d.id) === TAG_ID
           )
 
         : null;
 
 
+    if (detection) {
 
-    if (
-      detection &&
-      detection.pose
-    ) {
+      tagDetected = true;
 
-      tagDetected =
-        true;
-
-
-      applyPose(
+      applyTranslation(
         detection.pose
       );
 
@@ -1386,58 +718,38 @@ async function detectFrame() {
 
     else {
 
-      tagDetected =
-        false;
+      tagDetected = false;
+      poseReceived = false;
 
-
-      tagRoot.visible =
-        false;
+      sphere.visible = false;
 
     }
 
 
-
     detectionCounter++;
-
 
 
     const now =
       performance.now();
 
 
-
     if (
-
-      now -
-      fpsStart >=
+      now - fpsStart >=
       1000
-
     ) {
 
       const seconds =
-
-        (
-          now -
-          fpsStart
-        )
-
-        / 1000;
-
+        (now - fpsStart) / 1000;
 
 
       detectionFPS =
-
         detectionCounter /
         seconds;
 
 
+      detectionCounter = 0;
 
-      detectionCounter =
-        0;
-
-
-      fpsStart =
-        now;
+      fpsStart = now;
 
     }
 
@@ -1451,17 +763,15 @@ async function detectFrame() {
 
   finally {
 
-    detectionRunning =
-      false;
+    detectionRunning = false;
 
   }
 
 }
 
 
-
 /* =====================================================
-   VIDEO / CANVAS-GEOMETRIE
+   VIDEO / RENDERER SYNCHRON
    ===================================================== */
 
 function resize() {
@@ -1469,24 +779,18 @@ function resize() {
   const screenWidth =
     window.innerWidth;
 
-
   const screenHeight =
     window.innerHeight;
-
 
   const videoAspect =
     WIDTH / HEIGHT;
 
-
   const screenAspect =
-    screenWidth /
-    screenHeight;
-
+    screenWidth / screenHeight;
 
 
   let displayWidth;
   let displayHeight;
-
 
 
   if (
@@ -1496,7 +800,6 @@ function resize() {
 
     displayHeight =
       screenHeight;
-
 
     displayWidth =
       displayHeight *
@@ -1509,7 +812,6 @@ function resize() {
     displayWidth =
       screenWidth;
 
-
     displayHeight =
       displayWidth /
       videoAspect;
@@ -1517,55 +819,36 @@ function resize() {
   }
 
 
-
   renderer.setSize(
-
     displayWidth,
     displayHeight,
-
     false
-
   );
 
 
-
   renderer.domElement.style.width =
-    displayWidth +
-    "px";
-
+    displayWidth + "px";
 
   renderer.domElement.style.height =
-    displayHeight +
-    "px";
-
+    displayHeight + "px";
 
 
   renderer.domElement.style.left =
-
     (
       screenWidth -
       displayWidth
-    )
-
-    / 2 +
-
+    ) / 2 +
     "px";
-
 
 
   renderer.domElement.style.top =
-
     (
       screenHeight -
       displayHeight
-    )
-
-    / 2 +
-
+    ) / 2 +
     "px";
 
 }
-
 
 
 window.addEventListener(
@@ -1575,7 +858,6 @@ window.addEventListener(
 
 
 resize();
-
 
 
 /* =====================================================
@@ -1589,52 +871,48 @@ function animate() {
   );
 
 
-
-  if (
-    !detectionRunning
-  ) {
+  if (!detectionRunning) {
 
     detectFrame();
 
   }
 
 
-
   renderer.render(
-
     scene,
     camera
-
   );
-
 
 
   status.textContent =
 
-    "APRILTAG TEST 5b\n\n" +
+    "APRILTAG 5b-1\n\n" +
 
     "Tag 0: " +
-
     (
       tagDetected
         ? "ERKANNT"
         : "nicht erkannt"
     ) +
 
-    "\nPose: " +
-
+    "\nPose-Daten: " +
     (
-      tagRoot.visible
+      poseReceived
         ? "JA"
         : "NEIN"
     ) +
 
-    "\nErkennungen/s: " +
+    "\nRote Kugel: " +
+    (
+      sphere.visible
+        ? "SICHTBAR"
+        : "AUS"
+    ) +
 
+    "\nErkennungen/s: " +
     detectionFPS.toFixed(1);
 
 }
-
 
 
 /* =====================================================
@@ -1647,13 +925,10 @@ async function start() {
 
     await initializeAprilTag();
 
-
     status.textContent =
       "Kamera wird gestartet …";
 
-
     await startCamera();
-
 
     requestAnimationFrame(
       animate
@@ -1668,7 +943,6 @@ async function start() {
   }
 
 }
-
 
 
 start();
