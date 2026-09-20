@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-1c OpenCV PnP</title>
+<title>GeoChemAR – 5c-1d OpenCV PnP</title>
 
 <style>
 html,
@@ -56,13 +56,17 @@ body {
   top: 10px;
   left: 10px;
   z-index: 10;
+
   padding: 9px 12px;
   border-radius: 8px;
+
   background: rgba(0,0,0,0.78);
   color: white;
+
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-line;
+
   pointer-events: none;
 }
 
@@ -72,12 +76,16 @@ body {
   right: 10px;
   bottom: 10px;
   z-index: 20;
+
   padding: 10px;
   border-radius: 8px;
+
   background: rgba(160,0,0,0.92);
   color: white;
+
   font-size: 13px;
   white-space: pre-wrap;
+
   display: none;
 }
 </style>
@@ -117,45 +125,46 @@ Initialisierung …
 <div id="error"></div>
 
 
-<!--
-  WICHTIG:
-  Module wird VOR opencv.js angelegt.
--->
+<!-- ===================================================
+     OPENCV ASYNCHRON LADEN
+     =================================================== -->
+
 <script>
 
-window.openCVRuntimeReady =
+window.openCVScriptReady =
   new Promise(
     (resolve, reject) => {
 
-      window.Module = {
-
-        onRuntimeInitialized() {
+      window.onOpenCvScriptLoaded =
+        function() {
 
           resolve();
 
-        },
+        };
 
-        onAbort(reason) {
+
+      window.onOpenCvScriptError =
+        function() {
 
           reject(
             new Error(
-              "OpenCV wurde abgebrochen: " +
-              String(reason)
+              "libs/opencv.js konnte nicht geladen werden."
             )
           );
 
-        }
-
-      };
+        };
 
     }
   );
 
 </script>
 
-
-<!-- Erst jetzt OpenCV laden -->
-<script src="./libs/opencv.js"></script>
+<script
+  async
+  src="./libs/opencv.js"
+  onload="onOpenCvScriptLoaded()"
+  onerror="onOpenCvScriptError()"
+></script>
 
 
 <script type="module">
@@ -172,7 +181,7 @@ import * as Comlink
    ===================================================== */
 
 const VERSION =
-  "5c-1c";
+  "5c-1d";
 
 
 /* =====================================================
@@ -447,12 +456,14 @@ function createMethane() {
   const bondRadius =
     0.040 * scale;
 
+
   const carbonMaterial =
     new THREE.MeshStandardMaterial({
       color: 0x202020,
       roughness: 0.65,
       metalness: 0
     });
+
 
   const hydrogenMaterial =
     new THREE.MeshStandardMaterial({
@@ -461,12 +472,14 @@ function createMethane() {
       metalness: 0
     });
 
+
   const bondMaterial =
     new THREE.MeshStandardMaterial({
       color: 0xb8bec7,
       roughness: 0.65,
       metalness: 0
     });
+
 
   const carbon =
     new THREE.Mesh(
@@ -481,9 +494,11 @@ function createMethane() {
 
     );
 
+
   group.add(
     carbon
   );
+
 
   const directions = [
 
@@ -513,6 +528,7 @@ function createMethane() {
 
   ];
 
+
   for (
     const direction
     of directions
@@ -531,6 +547,7 @@ function createMethane() {
 
       );
 
+
     hydrogen.position.copy(
       direction
         .clone()
@@ -539,9 +556,11 @@ function createMethane() {
         )
     );
 
+
     group.add(
       hydrogen
     );
+
 
     const startDistance =
       carbonRadius;
@@ -550,12 +569,14 @@ function createMethane() {
       hydrogenDistance -
       hydrogenRadius;
 
+
     const startPoint =
       direction
         .clone()
         .multiplyScalar(
           startDistance
         );
+
 
     const endPoint =
       direction
@@ -564,6 +585,7 @@ function createMethane() {
           endDistance
         );
 
+
     const bondVector =
       endPoint
         .clone()
@@ -571,8 +593,10 @@ function createMethane() {
           startPoint
         );
 
+
     const bondLength =
       bondVector.length();
+
 
     const bondGeometry =
       new THREE.CylinderGeometry(
@@ -584,11 +608,13 @@ function createMethane() {
         false
       );
 
+
     const bond =
       new THREE.Mesh(
         bondGeometry,
         bondMaterial
       );
+
 
     bond.position.copy(
 
@@ -603,6 +629,7 @@ function createMethane() {
 
     );
 
+
     bond.quaternion
       .setFromUnitVectors(
 
@@ -616,11 +643,13 @@ function createMethane() {
 
       );
 
+
     group.add(
       bond
     );
 
   }
+
 
   return group;
 
@@ -630,11 +659,13 @@ function createMethane() {
 const methane =
   createMethane();
 
+
 methane.position.set(
   0,
   0,
   0
 );
+
 
 tagRoot.add(
   methane
@@ -648,15 +679,15 @@ tagRoot.add(
 async function initializeOpenCV() {
 
   status.textContent =
-    "OpenCV-Runtime wird initialisiert …";
+    "OpenCV-Datei wird geladen …";
 
 
   /*
-   * Der Callback wurde bereits VOR dem Laden
-   * von opencv.js registriert.
+   * Zuerst warten wir ausschließlich darauf,
+   * dass opencv.js selbst geladen wurde.
    */
 
-  const timeout =
+  const loadTimeout =
     new Promise(
       (_, reject) => {
 
@@ -665,7 +696,7 @@ async function initializeOpenCV() {
 
             reject(
               new Error(
-                "OpenCV-Runtime wurde nicht innerhalb von 30 Sekunden initialisiert."
+                "opencv.js wurde nach 30 Sekunden noch nicht geladen."
               )
             );
 
@@ -678,15 +709,33 @@ async function initializeOpenCV() {
 
 
   await Promise.race([
-    window.openCVRuntimeReady,
-    timeout
+    window.openCVScriptReady,
+    loadTimeout
   ]);
 
 
+  status.textContent =
+    "OpenCV-Datei geladen ✓\nOpenCV wird gestartet …";
+
+
   /*
-   * Einige OpenCV-Versionen stellen cv zusätzlich
-   * als Promise bereit.
+   * Der aktuelle OpenCV.js-Build kann cv als
+   * Promise bereitstellen.
+   *
+   * Genau dieses Promise warten wir ab.
    */
+
+  if (
+    typeof window.cv ===
+      "undefined"
+  ) {
+
+    throw new Error(
+      "opencv.js wurde geladen, aber window.cv wurde nicht erzeugt."
+    );
+
+  }
+
 
   if (
     window.cv &&
@@ -694,15 +743,38 @@ async function initializeOpenCV() {
       "function"
   ) {
 
+    const cvTimeout =
+      new Promise(
+        (_, reject) => {
+
+          setTimeout(
+            () => {
+
+              reject(
+                new Error(
+                  "Das OpenCV-cv-Promise wurde nach 30 Sekunden nicht aufgelöst."
+                )
+              );
+
+            },
+            30000
+          );
+
+        }
+      );
+
+
     window.cv =
-      await window.cv;
+      await Promise.race([
+        window.cv,
+        cvTimeout
+      ]);
 
   }
 
 
   /*
-   * Jetzt müssen die benötigten Funktionen
-   * tatsächlich vorhanden sein.
+   * Ab hier muss OpenCV vollständig verfügbar sein.
    */
 
   if (
@@ -710,7 +782,7 @@ async function initializeOpenCV() {
   ) {
 
     throw new Error(
-      "OpenCV-Runtime ist bereit, aber window.cv existiert nicht."
+      "OpenCV wurde geladen, aber cv ist leer."
     );
 
   }
@@ -722,7 +794,7 @@ async function initializeOpenCV() {
   ) {
 
     throw new Error(
-      "OpenCV ist bereit, aber solvePnP fehlt."
+      "OpenCV wurde geladen, aber solvePnP ist nicht verfügbar."
     );
 
   }
@@ -734,7 +806,7 @@ async function initializeOpenCV() {
   ) {
 
     throw new Error(
-      "OpenCV ist bereit, aber matFromArray fehlt."
+      "OpenCV wurde geladen, aber matFromArray ist nicht verfügbar."
     );
 
   }
@@ -757,10 +829,12 @@ async function initializeAprilTag() {
       "./libs/apriltag.js"
     );
 
+
   const Apriltag =
     Comlink.wrap(
       worker
     );
+
 
   apriltag =
     await new Apriltag(
@@ -776,8 +850,10 @@ async function initializeAprilTag() {
 
     );
 
+
   const start =
     performance.now();
+
 
   while (
     !detectorReady
@@ -790,6 +866,7 @@ async function initializeAprilTag() {
           20
         )
     );
+
 
     if (
       performance.now() -
@@ -805,9 +882,11 @@ async function initializeAprilTag() {
 
   }
 
+
   await apriltag.set_return_pose(
     0
   );
+
 
   await apriltag.set_max_detections(
     6
@@ -855,8 +934,10 @@ async function startCamera() {
 
       });
 
+
   video.srcObject =
     stream;
+
 
   await new Promise(
     resolve => {
@@ -885,7 +966,9 @@ async function startCamera() {
     }
   );
 
+
   await video.play();
+
 
   cameraReady =
     true;
@@ -907,6 +990,7 @@ function createGrayscaleImage() {
     HEIGHT
   );
 
+
   const imageData =
     analysisCtx.getImageData(
       0,
@@ -915,13 +999,16 @@ function createGrayscaleImage() {
       HEIGHT
     );
 
+
   const rgba =
     imageData.data;
+
 
   const grayscale =
     new Uint8Array(
       WIDTH * HEIGHT
     );
+
 
   for (
     let i = 0, j = 0;
@@ -940,6 +1027,7 @@ function createGrayscaleImage() {
 
   }
 
+
   return grayscale;
 
 }
@@ -955,6 +1043,7 @@ function getPoint(point) {
     return null;
   }
 
+
   if (
     Array.isArray(point)
   ) {
@@ -968,6 +1057,7 @@ function getPoint(point) {
       Number(
         point[1]
       );
+
 
     if (
       Number.isFinite(x) &&
@@ -983,6 +1073,7 @@ function getPoint(point) {
 
   }
 
+
   const x =
     Number(
       point.x
@@ -992,6 +1083,7 @@ function getPoint(point) {
     Number(
       point.y
     );
+
 
   if (
     Number.isFinite(x) &&
@@ -1004,6 +1096,7 @@ function getPoint(point) {
     };
 
   }
+
 
   return null;
 
@@ -1031,12 +1124,14 @@ function calculatePoseWithOpenCV(
 
   }
 
+
   const corners =
     detection.corners
       .slice(0, 4)
       .map(
         getPoint
       );
+
 
   if (
     corners.some(
@@ -1049,11 +1144,14 @@ function calculatePoseWithOpenCV(
 
   }
 
+
   const cv =
     window.cv;
 
+
   const s =
     TAG_SIZE / 2;
+
 
   const objectPoints =
     cv.matFromArray(
@@ -1067,6 +1165,7 @@ function calculatePoseWithOpenCV(
         -s, -s, 0
       ]
     );
+
 
   const imagePoints =
     cv.matFromArray(
@@ -1088,6 +1187,7 @@ function calculatePoseWithOpenCV(
       ]
     );
 
+
   const cameraMatrix =
     cv.matFromArray(
       3,
@@ -1100,6 +1200,7 @@ function calculatePoseWithOpenCV(
       ]
     );
 
+
   const distCoeffs =
     cv.Mat.zeros(
       4,
@@ -1107,14 +1208,17 @@ function calculatePoseWithOpenCV(
       cv.CV_64F
     );
 
+
   const rvec =
     new cv.Mat();
 
   const tvec =
     new cv.Mat();
 
+
   let success =
     false;
+
 
   try {
 
@@ -1130,6 +1234,7 @@ function calculatePoseWithOpenCV(
         cv.SOLVEPNP_ITERATIVE
       );
 
+
     if (!success) {
 
       poseValid =
@@ -1143,6 +1248,7 @@ function calculatePoseWithOpenCV(
     const rotationMatrix =
       new cv.Mat();
 
+
     try {
 
       cv.Rodrigues(
@@ -1150,11 +1256,13 @@ function calculatePoseWithOpenCV(
         rotationMatrix
       );
 
+
       const R =
         rotationMatrix.data64F;
 
       const T =
         tvec.data64F;
+
 
       if (
         R.length < 9 ||
@@ -1189,6 +1297,7 @@ function calculatePoseWithOpenCV(
       const opencvRotation =
         new THREE.Matrix4();
 
+
       opencvRotation.set(
 
         R[0], R[1], R[2], 0,
@@ -1202,6 +1311,7 @@ function calculatePoseWithOpenCV(
       const basisChange =
         new THREE.Matrix4();
 
+
       basisChange.set(
 
         1,  0,  0, 0,
@@ -1214,6 +1324,7 @@ function calculatePoseWithOpenCV(
 
       const convertedRotation =
         new THREE.Matrix4();
+
 
       convertedRotation
         .copy(
@@ -1236,8 +1347,10 @@ function calculatePoseWithOpenCV(
       tagRoot.visible =
         true;
 
+
       poseValid =
         true;
+
 
       return true;
 
@@ -1282,13 +1395,16 @@ async function detectFrame() {
 
   }
 
+
   detectionRunning =
     true;
+
 
   try {
 
     const grayscale =
       createGrayscaleImage();
+
 
     const result =
       await apriltag.detect(
@@ -1297,10 +1413,12 @@ async function detectFrame() {
         HEIGHT
       );
 
+
     const detections =
       Array.isArray(result)
         ? result
         : [];
+
 
     latestDetection =
       detections.find(
@@ -1403,6 +1521,7 @@ function drawOverlay() {
     HEIGHT
   );
 
+
   if (
     !latestDetection ||
     !Array.isArray(
@@ -1437,6 +1556,7 @@ function drawOverlay() {
 
   overlayCtx.beginPath();
 
+
   overlayCtx.moveTo(
     corners[0].x,
     corners[0].y
@@ -1459,11 +1579,14 @@ function drawOverlay() {
 
   overlayCtx.closePath();
 
+
   overlayCtx.lineWidth =
     3;
 
+
   overlayCtx.strokeStyle =
     "#00ff00";
+
 
   overlayCtx.stroke();
 
@@ -1476,6 +1599,7 @@ function drawOverlay() {
 
     overlayCtx.beginPath();
 
+
     overlayCtx.arc(
       corners[i].x,
       corners[i].y,
@@ -1484,24 +1608,31 @@ function drawOverlay() {
       Math.PI * 2
     );
 
+
     overlayCtx.fillStyle =
       i === 0
         ? "#ff3030"
         : "#00ff00";
 
+
     overlayCtx.fill();
+
 
     overlayCtx.font =
       "bold 15px Arial";
 
+
     overlayCtx.fillStyle =
       "#ffffff";
+
 
     overlayCtx.textAlign =
       "center";
 
+
     overlayCtx.textBaseline =
       "middle";
+
 
     overlayCtx.fillText(
       String(i),
@@ -1526,12 +1657,15 @@ function resize() {
   const screenHeight =
     window.innerHeight;
 
+
   const videoAspect =
     WIDTH / HEIGHT;
+
 
   const screenAspect =
     screenWidth /
     screenHeight;
+
 
   let displayWidth;
   let displayHeight;
@@ -1545,6 +1679,7 @@ function resize() {
     displayHeight =
       screenHeight;
 
+
     displayWidth =
       displayHeight *
       videoAspect;
@@ -1555,6 +1690,7 @@ function resize() {
 
     displayWidth =
       screenWidth;
+
 
     displayHeight =
       displayWidth /
@@ -1588,11 +1724,14 @@ function resize() {
     canvas.style.width =
       displayWidth + "px";
 
+
     canvas.style.height =
       displayHeight + "px";
 
+
     canvas.style.left =
       left + "px";
+
 
     canvas.style.top =
       top + "px";
@@ -1606,6 +1745,7 @@ window.addEventListener(
   "resize",
   resize
 );
+
 
 resize();
 
@@ -1680,7 +1820,7 @@ async function start() {
   try {
 
     status.textContent =
-      "OpenCV wird initialisiert …";
+      "OpenCV-Datei wird geladen …";
 
 
     await initializeOpenCV();
