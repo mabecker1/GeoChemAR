@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – 5c-14 Bounded Stabilization + Mobile Face Assist</title>
+<title>GeoChemAR – 5c-15 Mobile Fast-Capture Recovery</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
@@ -24,7 +24,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 import * as THREE from "./libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 
-const VERSION="5c-14";
+const VERSION="5c-15";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -87,6 +87,26 @@ const PROACTIVE_ASSIST_MIN_FRONT=0.18;
 const PROACTIVE_ASSIST_MIN_ANGULAR_SPEED=2.0;
 const PROACTIVE_ASSIST_MAX_FULL_TIME_MS=36;
 
+/* 5c-15: targeted mobile capture/recovery.
+   Desktop stays on the proven 5c-14 path. On phones we prefer a faster
+   camera stream (when supported), mildly bias auto exposure darker to
+   shorten exposure, use native camera pixels for recovery ROIs, and keep
+   recovery to ONE AprilTag pass per fresh camera frame. */
+const IS_MOBILE_DEVICE=(()=>{
+  const ua=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
+  const coarse=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
+  const touch=(navigator.maxTouchPoints||0)>0;
+  return ua||(coarse&&touch);
+})();
+const MOBILE_TARGET_FPS=60;
+const MOBILE_FAST_FPS_MIN=50;
+const MOBILE_CAPTURE_WIDTH=1280;
+const MOBILE_CAPTURE_HEIGHT=960;
+const MOBILE_EXPOSURE_COMPENSATION=-0.5;
+const MOBILE_ROI_MAX_DIM=520;
+const MOBILE_FACE_ROI_MAX_DIM=384;
+const MOBILE_RECOVERY_CYCLE=4; // combined ROI, face 0, face 1, full frame
+
 /* 5c-13: recovery jump guard.
    Recovery detection remains exactly as in 5c-12, but a single
    implausible ROI/reacquisition pose is not allowed to teleport
@@ -125,6 +145,10 @@ let detectorSource="–",roiAttempts=0,roiHits=0,fullFallbacks=0,lastRoiText="�
 let faceRoiAttempts=0,faceRoiHits=0,proactiveAttempts=0,proactiveHits=0,normalFrameSerial=0;
 let fullAttempts=0,fullHits=0,recoveryMode=false,recoveryFrames=0,consecutiveMisses=0;
 let cameraModeText="Standard";
+let mobileFastCapture=false,mobileNativeRoi=false,mobileExposureComp=null;
+let mobileFreshRecoveryDeferrals=0,mobileSinglePassRecovery=0;
+let pendingMobileAssist=false,pendingMobileAssistExcludeIds=[];
+let sourceVideoText="–";
 
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(verticalFovDeg,WIDTH/HEIGHT,0.01,10);
@@ -487,24 +511,112 @@ async function initializeAprilTag(){
 async function optimizeCameraTrack(track){
   try{
     const caps=typeof track.getCapabilities==="function"?track.getCapabilities():{};
-    const advanced=[];
-    if(Array.isArray(caps.focusMode)&&caps.focusMode.includes("continuous"))advanced.push({focusMode:"continuous"});
-    if(Array.isArray(caps.exposureMode)&&caps.exposureMode.includes("continuous"))advanced.push({exposureMode:"continuous"});
-    if(Array.isArray(caps.whiteBalanceMode)&&caps.whiteBalanceMode.includes("continuous"))advanced.push({whiteBalanceMode:"continuous"});
-    const c={width:{ideal:WIDTH},height:{ideal:HEIGHT},aspectRatio:{ideal:4/3},frameRate:{ideal:30,max:30}};
-    if(Array.isArray(caps.resizeMode)&&caps.resizeMode.includes("none"))c.resizeMode="none";
-    if(advanced.length)c.advanced=advanced;
-    await track.applyConstraints(c);
-    const s=track.getSettings?.()||{};
-    cameraModeText=`${s.width||"?"}×${s.height||"?"} / ${Number(s.frameRate||0).toFixed(0)} fps${advanced.some(x=>x.focusMode)?" / AF":""}`;
-  }catch(e){cameraModeText="Standard (Optimierung nicht unterstützt)";console.warn("Kameraoptimierung:",e);}
+    const advanced={};
+
+    if(Array.isArray(caps.focusMode)&&caps.focusMode.includes("continuous"))advanced.focusMode="continuous";
+    if(Array.isArray(caps.exposureMode)&&caps.exposureMode.includes("continuous"))advanced.exposureMode="continuous";
+    if(Array.isArray(caps.whiteBalanceMode)&&caps.whiteBalanceMode.includes("continuous"))advanced.whiteBalanceMode="continuous";
+
+    /* On phones, a mild negative EV bias keeps high-contrast tag edges
+       sharper during motion without forcing a fragile manual exposure. */
+    if(
+      IS_MOBILE_DEVICE&&
+      caps.exposureCompensation&&
+      Number.isFinite(caps.exposureCompensation.min)&&
+      Number.isFinite(caps.exposureCompensation.max)&&
+      advanced.exposureMode==="continuous"
+    ){
+      const target=THREE.MathUtils.clamp(
+        MOBILE_EXPOSURE_COMPENSATION,
+        caps.exposureCompensation.min,
+        caps.exposureCompensation.max
+      );
+      advanced.exposureCompensation=target;
+      mobileExposureComp=target;
+    }
+
+    const maxFps=Number(caps.frameRate?.max||30);
+    const canFast=IS_MOBILE_DEVICE&&maxFps>=MOBILE_FAST_FPS_MIN;
+    const targetFps=canFast?Math.min(MOBILE_TARGET_FPS,maxFps):30;
+    const targetWidth=IS_MOBILE_DEVICE?Math.min(MOBILE_CAPTURE_WIDTH,Number(caps.width?.max||MOBILE_CAPTURE_WIDTH)):WIDTH;
+    const targetHeight=IS_MOBILE_DEVICE?Math.min(MOBILE_CAPTURE_HEIGHT,Number(caps.height?.max||MOBILE_CAPTURE_HEIGHT)):HEIGHT;
+
+    const makeConstraints=(w,h,fast,minFps=true)=>{
+      const c={
+        width:{ideal:w},
+        height:{ideal:h},
+        aspectRatio:{ideal:4/3},
+        frameRate:fast
+          ? {ideal:targetFps,min:minFps?Math.min(MOBILE_FAST_FPS_MIN,targetFps):undefined,max:targetFps}
+          : {ideal:30,max:30}
+      };
+      if(c.frameRate.min===undefined)delete c.frameRate.min;
+      if(Array.isArray(caps.resizeMode)&&caps.resizeMode.includes("none"))c.resizeMode="none";
+      if(Object.keys(advanced).length)c.advanced=[advanced];
+      return c;
+    };
+
+    let constraints=makeConstraints(targetWidth,targetHeight,canFast,true);
+    try{
+      await track.applyConstraints(constraints);
+    }catch(firstError){
+      /* Some mobile camera stacks expose 60 fps as a capability but reject
+         a strict minimum in a specific resolution. Retry as an ideal. */
+      if(canFast){
+        constraints=makeConstraints(targetWidth,targetHeight,true,false);
+        await track.applyConstraints(constraints);
+      }else{
+        throw firstError;
+      }
+    }
+
+    let settings=track.getSettings?.()||{};
+
+    /* Motion sharpness has priority over source resolution. If asking for
+       high-res made the camera fall back to ~30 fps, retry 640x480 at the
+       faster rate. Recovery still gains from shorter exposure. */
+    if(canFast&&Number(settings.frameRate||0)<45){
+      try{
+        await track.applyConstraints(makeConstraints(WIDTH,HEIGHT,true,false));
+        settings=track.getSettings?.()||settings;
+      }catch(e){
+        console.warn("Mobile Fast-FPS Fallback:",e);
+      }
+    }
+
+    mobileFastCapture=IS_MOBILE_DEVICE&&Number(settings.frameRate||0)>=45;
+    sourceVideoText=`${settings.width||"?"}×${settings.height||"?"}`;
+    const evText=mobileExposureComp===null?"":` / EV ${mobileExposureComp.toFixed(1)}`;
+    cameraModeText=`${sourceVideoText} / ${Number(settings.frameRate||0).toFixed(0)} fps${advanced.focusMode?" / AF":""}${IS_MOBILE_DEVICE?" / MOBIL":""}${evText}`;
+  }catch(e){
+    cameraModeText="Standard (Optimierung nicht unterstützt)";
+    console.warn("Kameraoptimierung:",e);
+  }
 }
 async function startCamera(){
-  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:WIDTH},height:{ideal:HEIGHT},aspectRatio:{ideal:4/3},frameRate:{ideal:30,max:30}}});
-  const track=stream.getVideoTracks()[0];if(track)await optimizeCameraTrack(track);
+  const targetWidth=IS_MOBILE_DEVICE?MOBILE_CAPTURE_WIDTH:WIDTH;
+  const targetHeight=IS_MOBILE_DEVICE?MOBILE_CAPTURE_HEIGHT:HEIGHT;
+  const targetFps=IS_MOBILE_DEVICE?MOBILE_TARGET_FPS:30;
+  const stream=await navigator.mediaDevices.getUserMedia({
+    audio:false,
+    video:{
+      facingMode:{ideal:"environment"},
+      width:{ideal:targetWidth},
+      height:{ideal:targetHeight},
+      aspectRatio:{ideal:4/3},
+      frameRate:{ideal:targetFps,max:targetFps}
+    }
+  });
+  const track=stream.getVideoTracks()[0];
+  if(track)await optimizeCameraTrack(track);
   video.srcObject=stream;
-  await new Promise(resolve=>{if(video.readyState>=2&&video.videoWidth>0)resolve();else video.addEventListener("loadedmetadata",resolve,{once:true});});
-  await video.play();cameraReady=true;
+  await new Promise(resolve=>{
+    if(video.readyState>=2&&video.videoWidth>0)resolve();
+    else video.addEventListener("loadedmetadata",resolve,{once:true});
+  });
+  await video.play();
+  sourceVideoText=`${video.videoWidth||"?"}×${video.videoHeight||"?"}`;
+  cameraReady=true;
 }
 
 function createFullGrayscale(){
@@ -646,18 +758,42 @@ function remapRecoveryDetection(d,roi,sx,sy){
   return {...d,corners:Array.isArray(d.corners)?d.corners.map(map):d.corners,center:d.center?map(d.center):d.center};
 }
 
+function drawRecoverySource(roi,rw,rh){
+  recoveryCanvas.width=rw;
+  recoveryCanvas.height=rh;
+
+  if(IS_MOBILE_DEVICE&&video.videoWidth>0&&video.videoHeight>0){
+    /* 5c-15: crop directly from the native phone camera frame instead of
+       from the already downscaled 640×480 analysis canvas. This preserves
+       small tag edge detail exactly where recovery needs it. */
+    const sourceScaleX=video.videoWidth/WIDTH;
+    const sourceScaleY=video.videoHeight/HEIGHT;
+    recoveryCtx.drawImage(
+      video,
+      roi.x*sourceScaleX,
+      roi.y*sourceScaleY,
+      roi.width*sourceScaleX,
+      roi.height*sourceScaleY,
+      0,0,rw,rh
+    );
+    mobileNativeRoi=video.videoWidth>WIDTH||video.videoHeight>HEIGHT;
+  }else{
+    /* Desktop keeps the exact 5c-14 same-frame source. */
+    recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
+  }
+}
+
 async function detectRecoveryROI(frameTime){
   const roi=predictedFaceRecoveryROI(frameTime);
   if(!roi)return [];
 
   roiAttempts++;
-  const scale=Math.min(ROI_MAX_UPSCALE,ROI_MAX_DIM/Math.max(roi.width,roi.height));
+  const roiMaxDim=IS_MOBILE_DEVICE?MOBILE_ROI_MAX_DIM:ROI_MAX_DIM;
+  const scale=Math.min(ROI_MAX_UPSCALE,roiMaxDim/Math.max(roi.width,roi.height));
   const rw=Math.max(80,Math.round(roi.width*scale));
   const rh=Math.max(80,Math.round(roi.height*scale));
 
-  recoveryCanvas.width=rw;
-  recoveryCanvas.height=rh;
-  recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
+  drawRecoverySource(roi,rw,rh);
 
   const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
   const g=new Uint8Array(rw*rh);
@@ -686,13 +822,12 @@ async function detectSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
   if(!roi)return [];
 
   faceRoiAttempts++;
-  const scale=Math.min(FACE_ROI_MAX_UPSCALE,FACE_ROI_MAX_DIM/Math.max(roi.width,roi.height));
+  const faceMaxDim=IS_MOBILE_DEVICE?MOBILE_FACE_ROI_MAX_DIM:FACE_ROI_MAX_DIM;
+  const scale=Math.min(FACE_ROI_MAX_UPSCALE,faceMaxDim/Math.max(roi.width,roi.height));
   const rw=Math.max(96,Math.round(roi.width*scale));
   const rh=Math.max(96,Math.round(roi.height*scale));
 
-  recoveryCanvas.width=rw;
-  recoveryCanvas.height=rh;
-  recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
+  drawRecoverySource(roi,rw,rh);
 
   const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
   const g=new Uint8Array(rw*rh);
@@ -759,11 +894,13 @@ async function detectCurrentVideoFrame(frameTime){
   const pipelineStart=performance.now();
 
   try{
-    /* Capture the native frame exactly once. Full-frame detection remains
-       the stable primary pose source. All extra ROI work is targeted and
-       only used around risky edge transitions or actual misses. */
-    const fullGray=createFullGrayscale();
+    let fullGray=null;
+    const getFullGray=()=>{
+      if(!fullGray)fullGray=createFullGrayscale();
+      return fullGray;
+    };
     let detections=[];
+    let intentionalAssistOnly=false;
 
     const canRecover=
       hasGoodPose&&
@@ -773,68 +910,134 @@ async function detectCurrentVideoFrame(frameTime){
 
     if(!recoveryMode){
       normalFrameSerial++;
-      detections=await detectFullFrame(fullGray);
 
-      if(detections.length){
-        detectorSource="FULL-STABIL";
-        lastRoiTimeMs=0;
-
-        /* Before an edge transition becomes a dropout, occasionally search
-           the most likely NEXT face in a tight magnified ROI. Existing full
-           detections always win; ROI only contributes a new face ID. */
-        if(canRecover&&shouldProactiveAssist(detections,frameTime)){
-          proactiveAttempts++;
-          const existingIds=detections.map(d=>Number(d.id));
-          const assist=await detectSingleFaceROI(frameTime,existingIds,0);
-          if(assist.length){
-            detections=mergeNewDetections(detections,assist);
-            proactiveHits++;
-            detectorSource="FULL+FACE-ASSIST";
-          }else{
-            detectorSource="FULL-STABIL";
-          }
-        }
-      }else if(canRecover){
-        /* Proven 5c-12/13 combined ROI rescue remains first choice. */
-        fullFallbacks++;
-        detections=await detectRecoveryROI(frameTime);
-        detectorSource=detections.length?"FACE-ROI-RESCUE":"NICHTS";
-        if(!detections.length){
-          recoveryMode=true;
-          recoveryFrames=0;
+      /* Mobile: a queued next-face assist gets its OWN fresh camera frame.
+         5c-14 performed it after full detection on the same frame, which is
+         useful on desktop but can make a phone miss the following frame. */
+      if(IS_MOBILE_DEVICE&&pendingMobileAssist&&canRecover){
+        intentionalAssistOnly=true;
+        proactiveAttempts++;
+        detections=await detectSingleFaceROI(frameTime,pendingMobileAssistExcludeIds,0);
+        pendingMobileAssist=false;
+        pendingMobileAssistExcludeIds=[];
+        if(detections.length){
+          proactiveHits++;
+          detectorSource="MOBILE-FRESH-FACE-ASSIST";
+        }else{
+          detectorSource="MOBILE-ASSIST-MISS";
         }
       }else{
-        detectorSource="NICHTS";
-        lastRoiTimeMs=0;
+        detections=await detectFullFrame(getFullGray());
+
+        if(detections.length){
+          detectorSource="FULL-STABIL";
+          lastRoiTimeMs=0;
+
+          if(canRecover&&shouldProactiveAssist(detections,frameTime)){
+            const existingIds=detections.map(d=>Number(d.id));
+            if(IS_MOBILE_DEVICE){
+              /* Do not stack a second detector pass onto an already ~30 ms
+                 phone frame. Schedule it for the next fresh video frame. */
+              pendingMobileAssist=true;
+              pendingMobileAssistExcludeIds=existingIds;
+            }else{
+              proactiveAttempts++;
+              const assist=await detectSingleFaceROI(frameTime,existingIds,0);
+              if(assist.length){
+                detections=mergeNewDetections(detections,assist);
+                proactiveHits++;
+                detectorSource="FULL+FACE-ASSIST";
+              }
+            }
+          }
+        }else if(canRecover){
+          fullFallbacks++;
+
+          if(IS_MOBILE_DEVICE){
+            /* A second detector pass on the SAME blurred/stale frame is a
+               poor trade on phones. Enter recovery immediately and let the
+               next camera frame be searched first. */
+            recoveryMode=true;
+            recoveryFrames=0;
+            pendingMobileAssist=false;
+            pendingMobileAssistExcludeIds=[];
+            mobileFreshRecoveryDeferrals++;
+            detectorSource="MOBILE-WARTE-AUF-FRISCHES-BILD";
+          }else{
+            /* Desktop retains the proven same-frame 5c-14 rescue. */
+            detections=await detectRecoveryROI(frameTime);
+            detectorSource=detections.length?"FACE-ROI-RESCUE":"NICHTS";
+            if(!detections.length){
+              recoveryMode=true;
+              recoveryFrames=0;
+            }
+          }
+        }else{
+          detectorSource="NICHTS";
+          lastRoiTimeMs=0;
+        }
       }
     }else{
       recoveryFrames++;
 
-      /* First retain the highly successful combined predicted-face ROI. */
-      if(canRecover){
-        detections=await detectRecoveryROI(frameTime);
-      }
+      if(IS_MOBILE_DEVICE){
+        /* One AprilTag pass per fresh phone frame. This prevents full+ROI
+           chains from consuming 50–80 ms and feeding stale images back into
+           the tracker. Faster camera capture means the next attempt arrives
+           quickly, often with much less motion blur. */
+        mobileSinglePassRecovery++;
 
-      if(detections.length){
-        detectorSource="FACE-ROI-RECOVERY";
-      }else if(canRecover&&recoveryFrames%RECOVERY_FULL_EVERY_N!==0){
-        /* On the frames that previously used only the combined ROI, add a
-           tighter high-sensitivity search. Cycle through the three most
-           likely faces so a slightly wrong motion prediction cannot lock us
-           onto the wrong side. */
-        const rankOffset=Math.floor(recoveryFrames/RECOVERY_FULL_EVERY_N)%FACE_ROI_CANDIDATES;
-        detections=await detectSingleFaceROI(frameTime,[],rankOffset);
-        detectorSource=detections.length?"FACE-ROI-HIGH-SENS":"ROI-SUCHE";
+        if(!canRecover){
+          detections=await detectFullFrame(getFullGray());
+          detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
+        }else{
+          const phase=(recoveryFrames-1)%MOBILE_RECOVERY_CYCLE;
+
+          if(phase===0){
+            detections=await detectRecoveryROI(frameTime);
+            detectorSource=detections.length?"MOBILE-NATIVE-ROI":"MOBILE-ROI-MISS";
+          }else if(phase===1){
+            detections=await detectSingleFaceROI(frameTime,[],0);
+            detectorSource=detections.length?"MOBILE-FACE-0":"MOBILE-FACE-0-MISS";
+          }else if(phase===2){
+            detections=await detectSingleFaceROI(frameTime,[],1);
+            detectorSource=detections.length?"MOBILE-FACE-1":"MOBILE-FACE-1-MISS";
+          }else{
+            detections=await detectFullFrame(getFullGray());
+            detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
+          }
+        }
       }else{
-        /* Preserve the regular full-frame reacquisition cadence. */
-        detections=await detectFullFrame(fullGray);
-        detectorSource=detections.length?"FULL-REACQUIRE":"NICHTS";
+        /* Exact 5c-14 desktop recovery path. */
+        if(canRecover){
+          detections=await detectRecoveryROI(frameTime);
+        }
+
+        if(detections.length){
+          detectorSource="FACE-ROI-RECOVERY";
+        }else if(canRecover&&recoveryFrames%RECOVERY_FULL_EVERY_N!==0){
+          const rankOffset=Math.floor(recoveryFrames/RECOVERY_FULL_EVERY_N)%FACE_ROI_CANDIDATES;
+          detections=await detectSingleFaceROI(frameTime,[],rankOffset);
+          detectorSource=detections.length?"FACE-ROI-HIGH-SENS":"ROI-SUCHE";
+        }else{
+          detections=await detectFullFrame(getFullGray());
+          detectorSource=detections.length?"FULL-REACQUIRE":"NICHTS";
+        }
       }
     }
 
     const found=processDetections(detections,frameTime);
 
     if(found){
+      consecutiveMisses=0;
+      recoveryMode=false;
+      recoveryFrames=0;
+      pendingMobileAssist=false;
+      pendingMobileAssistExcludeIds=[];
+    }else if(intentionalAssistOnly){
+      /* This frame was intentionally used only to look for an emerging
+         next face. Missing it is NOT a tracking loss; prediction bridges
+         this one camera frame and normal full detection resumes next. */
       consecutiveMisses=0;
       recoveryMode=false;
       recoveryFrames=0;
@@ -1009,6 +1212,7 @@ function updateStatus(now){
     `GeoChemAR ${VERSION}`+
     `\nSichtbare IDs: ${ids}`+
     `\nKamera: ${cameraModeText}`+
+    `\nQuelle: ${sourceVideoText} / ${IS_MOBILE_DEVICE?"Mobilmodus":"Desktopmodus"}`+
     `\nKamera-Frames/s: ${videoFPS.toFixed(1)}`+
     `\nErkennungen/s: ${detectionFPS.toFixed(1)}`+
     `\n\nTracking: ${trackingMode}`+
@@ -1026,6 +1230,10 @@ function updateStatus(now){
     `\nEinzelflächen-ROI: ${faceRoiHits}/${faceRoiAttempts}`+
     `\nProaktiv nächste Seite: ${proactiveHits}/${proactiveAttempts}`+
     `\nFull→ROI-Rettungen: ${fullFallbacks}`+
+    `\nMobile Fast-Capture: ${mobileFastCapture?"JA":"NEIN"}`+
+    `\nMobile Native-ROI: ${mobileNativeRoi?"JA":"NEIN"}`+
+    `\nMobile Fresh-Recovery: ${mobileFreshRecoveryDeferrals}`+
+    `\nMobile Single-Pass: ${mobileSinglePassRecovery}`+
     `\nRecovery-Guard: ${recoveryGuardText}`+
     `\nGuard verworfen/bestätigt: ${recoveryGuardRejected}/${recoveryGuardConfirmed}`+
     `\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}`+
