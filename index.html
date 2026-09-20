@@ -11,144 +11,81 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-9</title>
+<title>GeoChemAR – 5c-10 Joint Cube Pose</title>
 
 <style>
-
 html,
 body {
   margin: 0;
   padding: 0;
-
   width: 100%;
   height: 100%;
-
   overflow: hidden;
-
   background: black;
-
   font-family: Arial, sans-serif;
 }
 
-
 #video {
-
   position: fixed;
-
   inset: 0;
-
   width: 100%;
   height: 100%;
-
   object-fit: contain;
-
   background: black;
-
   z-index: 1;
-
 }
-
 
 #threeCanvas {
-
   position: fixed;
-
   z-index: 2;
-
   pointer-events: none;
-
 }
-
 
 #analysisCanvas {
-
   display: none;
-
 }
-
 
 #status {
-
   position: fixed;
-
   top: 10px;
   left: 10px;
-
   z-index: 10;
 
-
   padding: 9px 12px;
-
   border-radius: 8px;
 
-
-  background:
-    rgba(
-      0,
-      0,
-      0,
-      0.74
-    );
-
-
+  background: rgba(0,0,0,0.74);
   color: white;
 
-
   font-size: 13px;
-
   line-height: 1.4;
-
   white-space: pre-line;
 
-
   pointer-events: none;
-
 }
 
-
 #error {
-
   position: fixed;
-
   left: 10px;
   right: 10px;
   bottom: 10px;
-
   z-index: 20;
 
-
   padding: 10px;
-
   border-radius: 8px;
 
-
-  background:
-    rgba(
-      160,
-      0,
-      0,
-      0.92
-    );
-
-
+  background: rgba(160,0,0,0.92);
   color: white;
 
-
   font-size: 13px;
-
   white-space: pre-wrap;
 
-
   display: none;
-
 }
-
 </style>
 </head>
 
-
 <body>
-
 
 <video
   id="video"
@@ -157,13 +94,11 @@ body {
   playsinline
 ></video>
 
-
 <canvas
   id="analysisCanvas"
   width="640"
   height="480"
 ></canvas>
-
 
 <canvas
   id="threeCanvas"
@@ -171,147 +106,135 @@ body {
   height="480"
 ></canvas>
 
-
 <div id="status">
 AprilTag wird geladen …
 </div>
 
-
 <div id="error"></div>
-
 
 
 <script type="module">
 
-
 import * as THREE
   from "./libs/three.module.min.js";
 
-
 import * as Comlink
   from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
-
 
 
 /* =====================================================
    VERSION
    ===================================================== */
 
-const VERSION =
-  "5c-9";
-
+const VERSION = "5c-10";
 
 
 /* =====================================================
-   STABILE 5c-5 / 5c-4 GRUNDLAGE
+   GRUNDWERTE
    ===================================================== */
 
-const WIDTH =
-  640;
+const WIDTH = 640;
+const HEIGHT = 480;
 
-const HEIGHT =
-  480;
+const TAG_SIZE = 0.0395;
 
-
-const TAG_SIZE =
-  0.0395;
-
-
-const CUBE_SIZE =
-  0.045;
-
-const HALF_CUBE =
-  CUBE_SIZE / 2;
-
+const CUBE_SIZE = 0.045;
+const HALF_CUBE = CUBE_SIZE / 2;
 
 
 /* =====================================================
    5c-5:
-
-   KURZE VORHERSAGE BEI DETEKTIONSLÜCKEN
+   KURZE PRÄDIKTION
    ===================================================== */
 
-const MAX_PREDICTION_TIME_MS =
-  180;
+const MAX_PREDICTION_TIME_MS = 180;
 
+const VELOCITY_BLEND = 0.35;
 
-const VELOCITY_BLEND =
-  0.35;
+const MAX_LINEAR_SPEED = 1.5;
 
-
-const MAX_LINEAR_SPEED =
-  1.5;
-
-
-const MAX_ANGULAR_SPEED =
-  12.0;
-
+const MAX_ANGULAR_SPEED = 12.0;
 
 
 /* =====================================================
-   NEU IN 5c-9
-
-   1.
-   Echte Kamera-Frame-Zeit
-   statt Ergebniszeit.
-
-   2.
-   Haupt-/Alternativpose
-   anhand Würfelkonsistenz wählen.
-
-   3.
-   Rendering extrapoliert
-   von der Messzeit bis "jetzt".
-
-   KEINE zusätzliche Pose-Glättung.
+   5c-9:
+   POSE-AUSWAHL / KONTINUITÄT
    ===================================================== */
 
+const CONTINUITY_MAX_AGE_MS = 260;
 
-const CONTINUITY_MAX_AGE_MS =
-  260;
-
-
-/*
- * Skalen für die Bewertung
- * der verschiedenen Pose-Lösungen.
- */
-
-const POSITION_SCORE_SCALE =
-  0.025;
-
+const POSITION_SCORE_SCALE = 0.025;
 
 const ROTATION_SCORE_SCALE =
-  THREE.MathUtils.degToRad(
-    25
-  );
+  THREE.MathUtils.degToRad(25);
 
-
-const MULTI_POSITION_SCORE_SCALE =
-  0.006;
-
+const MULTI_POSITION_SCORE_SCALE = 0.006;
 
 const MULTI_ROTATION_SCORE_SCALE =
-  THREE.MathUtils.degToRad(
-    7
-  );
+  THREE.MathUtils.degToRad(7);
 
+
+/* =====================================================
+   NEU 5c-10:
+   GEMEINSAME WÜRFELPOSE AUS ALLEN TAG-ECKEN
+   ===================================================== */
+
+const JOINT_MIN_TAGS = 2;
+
+const JOINT_MAX_ITERATIONS = 5;
+
+/*
+ * Reprojektionsfehler oberhalb davon:
+ * Optimierung wird nicht verwendet.
+ */
+
+const JOINT_MAX_RMSE_PX = 8.0;
+
+/*
+ * Sicherheitsgrenzen:
+ * Die Optimierung darf die gute 5c-9-Pose
+ * nicht plötzlich weit weg verschieben.
+ */
+
+const JOINT_MAX_POSITION_SHIFT = 0.020;
+
+const JOINT_MAX_ROTATION_SHIFT =
+  THREE.MathUtils.degToRad(30);
+
+/*
+ * Huber-Grenze für Eckpunkt-Ausreißer.
+ */
+
+const HUBER_THRESHOLD_PX = 3.0;
+
+/*
+ * Parameter-Skalierung für den Optimierer.
+ *
+ * Ein Optimierungsparameter von 1 bedeutet:
+ * 1 mm bzw. 1°.
+ */
+
+const JOINT_TRANSLATION_SCALE = 0.001;
+
+const JOINT_ROTATION_SCALE =
+  THREE.MathUtils.degToRad(1);
+
+const JOINT_FD_STEP = 0.02;
+
+const JOINT_DAMPING = 0.001;
 
 
 /* =====================================================
    KAMERAMODELL
-
-   UNVERÄNDERT
+   UNVERÄNDERT AUS 5c-9
    ===================================================== */
 
-const horizontalFovDeg =
-  60;
-
+const horizontalFovDeg = 60;
 
 const horizontalFovRad =
   THREE.MathUtils.degToRad(
     horizontalFovDeg
   );
-
 
 const fx =
   (WIDTH / 2) /
@@ -319,18 +242,10 @@ const fx =
     horizontalFovRad / 2
   );
 
+const fy = fx;
 
-const fy =
-  fx;
-
-
-const cx =
-  WIDTH / 2;
-
-
-const cy =
-  HEIGHT / 2;
-
+const cx = WIDTH / 2;
+const cy = HEIGHT / 2;
 
 const verticalFovRad =
   2 *
@@ -339,12 +254,10 @@ const verticalFovRad =
     (2 * fy)
   );
 
-
 const verticalFovDeg =
   THREE.MathUtils.radToDeg(
     verticalFovRad
   );
-
 
 
 /* =====================================================
@@ -352,16 +265,12 @@ const verticalFovDeg =
    ===================================================== */
 
 const video =
-  document.getElementById(
-    "video"
-  );
-
+  document.getElementById("video");
 
 const analysisCanvas =
   document.getElementById(
     "analysisCanvas"
   );
-
 
 const analysisCtx =
   analysisCanvas.getContext(
@@ -371,141 +280,80 @@ const analysisCtx =
     }
   );
 
-
 const threeCanvas =
   document.getElementById(
     "threeCanvas"
   );
 
-
 const status =
-  document.getElementById(
-    "status"
-  );
-
+  document.getElementById("status");
 
 const errorBox =
-  document.getElementById(
-    "error"
-  );
-
+  document.getElementById("error");
 
 
 /* =====================================================
-   STATUS / DIAGNOSE
+   APRILTAG / STATUS
    ===================================================== */
 
-let apriltag =
-  null;
+let apriltag = null;
 
+let detectorReady = false;
+let cameraReady = false;
+let detectionRunning = false;
 
-let detectorReady =
-  false;
-
-
-let cameraReady =
-  false;
-
-
-let detectionRunning =
-  false;
-
-
-
-/* =====================================================
-   DETEKTIONSRATE
-   ===================================================== */
-
-let detectionCounter =
-  0;
-
-
-let detectionFPS =
-  0;
-
+let detectionCounter = 0;
+let detectionFPS = 0;
 
 let detectionFpsStart =
   performance.now();
 
-
-
-/* =====================================================
-   KAMERA-FRAMERATE
-   ===================================================== */
-
-let videoFrameCounter =
-  0;
-
-
-let videoFPS =
-  0;
-
+let videoFrameCounter = 0;
+let videoFPS = 0;
 
 let videoFpsStart =
   performance.now();
 
+let lastPresentedFrames = null;
 
-let lastPresentedFrames =
-  null;
+let skippedPresentedFrames = 0;
+let skippedBecauseBusy = 0;
 
+let lastDetectionLatencyMs = 0;
+let lastFrameAgeAtResultMs = 0;
 
-let skippedPresentedFrames =
-  0;
+let frameTimeSource = "–";
 
+let lastFrameTimestamp = null;
 
-let skippedBecauseBusy =
-  0;
+let lastVisibleIDs = [];
 
+let lastCenterSpread = null;
+let lastRotationSpread = null;
 
+let lastAltSelections = 0;
+let totalAltSelections = 0;
 
-/* =====================================================
-   LATENZDIAGNOSE
-   ===================================================== */
-
-let lastDetectionLatencyMs =
-  0;
-
-
-let lastFrameAgeAtResultMs =
-  0;
-
-
-let frameTimeSource =
-  "–";
-
-
-
-/* =====================================================
-   POSEDIAGNOSE
-   ===================================================== */
-
-let lastVisibleIDs =
-  [];
-
-
-let lastCenterSpread =
-  null;
-
-
-let lastRotationSpread =
-  null;
-
-
-let lastAltSelections =
-  0;
-
-
-let totalAltSelections =
-  0;
-
-
-let lastSolutionScore =
-  null;
-
+let lastSolutionScore = null;
 
 let trackingMode =
   "KEINE POSE";
 
+
+/* =====================================================
+   NEU 5c-10:
+   JOINT-DIAGNOSE
+   ===================================================== */
+
+let lastJointUsed = false;
+
+let lastJointTags = 0;
+
+let lastReprojectionBefore = null;
+
+let lastReprojectionAfter = null;
+
+let lastJointTimeMs = 0;
 
 
 /* =====================================================
@@ -515,22 +363,13 @@ let trackingMode =
 const scene =
   new THREE.Scene();
 
-
-
 const camera =
   new THREE.PerspectiveCamera(
-
     verticalFovDeg,
-
-    WIDTH /
-    HEIGHT,
-
+    WIDTH / HEIGHT,
     0.01,
-
     10
-
   );
-
 
 camera.position.set(
   0,
@@ -538,27 +377,14 @@ camera.position.set(
   0
 );
 
-
-
 const renderer =
   new THREE.WebGLRenderer({
-
-    canvas:
-      threeCanvas,
-
-    alpha:
-      true,
-
-    antialias:
-      true
-
+    canvas: threeCanvas,
+    alpha: true,
+    antialias: true
   });
 
-
-renderer.setPixelRatio(
-  1
-);
-
+renderer.setPixelRatio(1);
 
 renderer.setSize(
   WIDTH,
@@ -566,12 +392,10 @@ renderer.setSize(
   false
 );
 
-
 renderer.setClearColor(
   0x000000,
   0
 );
-
 
 
 /* =====================================================
@@ -579,15 +403,11 @@ renderer.setClearColor(
    ===================================================== */
 
 scene.add(
-
   new THREE.AmbientLight(
     0xffffff,
     2
   )
-
 );
-
-
 
 const directionalLight =
   new THREE.DirectionalLight(
@@ -595,92 +415,69 @@ const directionalLight =
     2
   );
 
-
 directionalLight.position.set(
   1,
   2,
   2
 );
 
-
 scene.add(
   directionalLight
 );
 
 
-
 /* =====================================================
-   WÜRFELGEOMETRIE
-
-   EXAKT WIE 5c-4 / 5c-5
-
-   ID 3 IST REFERENZSEITE
+   WÜRFELROTATIONEN
+   STABILER 5c-4-STAND
    ===================================================== */
 
 const relativeFrom3 = {
 
+  0: new THREE.Quaternion(
+     0.5,
+    -0.5,
+     0.5,
+     0.5
+  ),
 
-  0:
-    new THREE.Quaternion(
-       0.5,
-      -0.5,
-       0.5,
-       0.5
-    ),
+  1: new THREE.Quaternion(
+    -0.5,
+    -0.5,
+    -0.5,
+     0.5
+  ),
 
+  2: new THREE.Quaternion(
+    0,
+    Math.SQRT1_2,
+    0,
+    Math.SQRT1_2
+  ),
 
-  1:
-    new THREE.Quaternion(
-      -0.5,
-      -0.5,
-      -0.5,
-       0.5
-    ),
+  3: new THREE.Quaternion(
+    0,
+    0,
+    0,
+    1
+  ),
 
+  4: new THREE.Quaternion(
+    0,
+    -Math.SQRT1_2,
+    0,
+    Math.SQRT1_2
+  ),
 
-  2:
-    new THREE.Quaternion(
-      0,
-      Math.SQRT1_2,
-      0,
-      Math.SQRT1_2
-    ),
-
-
-  3:
-    new THREE.Quaternion(
-      0,
-      0,
-      0,
-      1
-    ),
-
-
-  4:
-    new THREE.Quaternion(
-      0,
-      -Math.SQRT1_2,
-      0,
-      Math.SQRT1_2
-    ),
-
-
-  5:
-    new THREE.Quaternion(
-      0,
-      -1,
-      0,
-      0
-    )
-
+  5: new THREE.Quaternion(
+    0,
+    -1,
+    0,
+    0
+  )
 
 };
 
-
-
-const correctionTo3 =
-  {};
-
+const correctionTo3 = {};
 
 for (
   let id = 0;
@@ -691,7 +488,6 @@ for (
   relativeFrom3[id]
     .normalize();
 
-
   correctionTo3[id] =
     relativeFrom3[id]
       .clone()
@@ -700,92 +496,137 @@ for (
 }
 
 
+/* =====================================================
+   3D-KOORDINATEN DER 24 TAG-ECKEN
+   IM GEMEINSAMEN WÜRFELKOORDINATENSYSTEM
+   ===================================================== */
+
+const tagHalf =
+  TAG_SIZE / 2;
+
+/*
+ * AprilTag p[0..3]:
+ *
+ * p0 unten links
+ * p1 unten rechts
+ * p2 oben rechts
+ * p3 oben links
+ *
+ * Im Three.js-Tagkoordinatensystem:
+ * +Y = oben.
+ */
+
+const localTagCorners = [
+
+  new THREE.Vector3(
+    -tagHalf,
+    -tagHalf,
+    0
+  ),
+
+  new THREE.Vector3(
+     tagHalf,
+    -tagHalf,
+    0
+  ),
+
+  new THREE.Vector3(
+     tagHalf,
+     tagHalf,
+    0
+  ),
+
+  new THREE.Vector3(
+    -tagHalf,
+     tagHalf,
+    0
+  )
+
+];
+
+const cubeTagCorners = {};
+
+for (
+  let id = 0;
+  id <= 5;
+  id++
+) {
+
+  const faceRotation =
+    relativeFrom3[id];
+
+  const faceCenter =
+    new THREE.Vector3(
+      0,
+      0,
+      HALF_CUBE
+    )
+    .applyQuaternion(
+      faceRotation
+    );
+
+  cubeTagCorners[id] =
+    localTagCorners.map(
+      corner =>
+
+        corner
+          .clone()
+          .applyQuaternion(
+            faceRotation
+          )
+          .add(
+            faceCenter
+          )
+    );
+
+}
+
 
 /* =====================================================
    METHAN
-
    UNVERÄNDERT
    ===================================================== */
 
 function createMethane() {
 
-
   const group =
     new THREE.Group();
 
-
-
-  const scale =
-    0.05;
-
+  const scale = 0.05;
 
   const carbonRadius =
-    0.22 *
-    scale;
-
+    0.22 * scale;
 
   const hydrogenRadius =
-    0.14 *
-    scale;
-
+    0.14 * scale;
 
   const hydrogenDistance =
-    0.72 *
-    scale;
-
+    0.72 * scale;
 
   const bondRadius =
-    0.040 *
-    scale;
-
+    0.040 * scale;
 
 
   const carbonMaterial =
     new THREE.MeshStandardMaterial({
-
-      color:
-        0x202020,
-
-      roughness:
-        0.65,
-
-      metalness:
-        0
-
+      color: 0x202020,
+      roughness: 0.65,
+      metalness: 0
     });
-
-
 
   const hydrogenMaterial =
     new THREE.MeshStandardMaterial({
-
-      color:
-        0xffffff,
-
-      roughness:
-        0.55,
-
-      metalness:
-        0
-
+      color: 0xffffff,
+      roughness: 0.55,
+      metalness: 0
     });
-
-
 
   const bondMaterial =
     new THREE.MeshStandardMaterial({
-
-      color:
-        0xb8bec7,
-
-      roughness:
-        0.65,
-
-      metalness:
-        0
-
+      color: 0xb8bec7,
+      roughness: 0.65,
+      metalness: 0
     });
-
 
 
   const carbon =
@@ -801,53 +642,36 @@ function createMethane() {
 
     );
 
-
   group.add(
     carbon
   );
 
 
-
   const directions = [
 
-
     new THREE.Vector3(
-      1,
-      1,
-      1
+      1, 1, 1
     ).normalize(),
 
-
     new THREE.Vector3(
-      1,
-      -1,
-      -1
+      1, -1, -1
     ).normalize(),
 
-
     new THREE.Vector3(
-      -1,
-      1,
-      -1
+      -1, 1, -1
     ).normalize(),
 
-
     new THREE.Vector3(
-      -1,
-      -1,
-      1
+      -1, -1, 1
     ).normalize()
 
-
   ];
-
 
 
   for (
     const direction
     of directions
   ) {
-
 
     const hydrogen =
       new THREE.Mesh(
@@ -862,7 +686,6 @@ function createMethane() {
 
       );
 
-
     hydrogen.position.copy(
 
       direction
@@ -873,22 +696,17 @@ function createMethane() {
 
     );
 
-
     group.add(
       hydrogen
     );
 
 
-
     const startDistance =
       carbonRadius;
-
 
     const endDistance =
       hydrogenDistance -
       hydrogenRadius;
-
-
 
     const startPoint =
       direction
@@ -897,16 +715,12 @@ function createMethane() {
           startDistance
         );
 
-
-
     const endPoint =
       direction
         .clone()
         .multiplyScalar(
           endDistance
         );
-
-
 
     const bondVector =
       endPoint
@@ -915,38 +729,24 @@ function createMethane() {
           startPoint
         );
 
-
-
     const bondLength =
-      bondVector
-        .length();
-
-
+      bondVector.length();
 
     const bond =
       new THREE.Mesh(
 
         new THREE.CylinderGeometry(
-
           bondRadius,
-
           bondRadius,
-
           bondLength,
-
           32,
-
           1,
-
           false
-
         ),
 
         bondMaterial
 
       );
-
-
 
     bond.position.copy(
 
@@ -961,8 +761,6 @@ function createMethane() {
 
     );
 
-
-
     bond.quaternion
       .setFromUnitVectors(
 
@@ -976,147 +774,100 @@ function createMethane() {
 
       );
 
-
-
     group.add(
       bond
     );
 
   }
 
-
-
   return group;
 
 }
 
-
-
 const methane =
   createMethane();
 
-
-methane.visible =
-  false;
-
+methane.visible = false;
 
 scene.add(
   methane
 );
 
 
-
 /* =====================================================
-   BEWÄHRTE 5b-10
-   APRILTAG-POSE-UMRECHNUNG
+   APRILTAG → THREE.JS
+   BEWÄHRTE 5b-10-UMRECHNUNG
    ===================================================== */
 
 const basisChange =
   new THREE.Matrix4();
 
-
 basisChange.set(
 
   1,  0,  0, 0,
-
   0, -1,  0, 0,
-
   0,  0, -1, 0,
-
   0,  0,  0, 1
 
 );
-
 
 
 function convertAprilPose(
   pose
 ) {
 
-
   if (
-
     !pose ||
-
     !Array.isArray(
       pose.t
     ) ||
-
     !Array.isArray(
       pose.R
     ) ||
-
-    pose.t.length <
-      3 ||
-
-    pose.R.length <
-      3 ||
-
+    pose.t.length < 3 ||
+    pose.R.length < 3 ||
     !Array.isArray(
       pose.R[0]
     ) ||
-
     !Array.isArray(
       pose.R[1]
     ) ||
-
     !Array.isArray(
       pose.R[2]
     )
-
   ) {
 
     return null;
 
   }
-
-
 
   const tx =
     Number(
       pose.t[0]
     );
 
-
   const ty =
     Number(
       pose.t[1]
     );
-
 
   const tz =
     Number(
       pose.t[2]
     );
 
-
-
   if (
-
-    !Number.isFinite(
-      tx
-    ) ||
-
-    !Number.isFinite(
-      ty
-    ) ||
-
-    !Number.isFinite(
-      tz
-    )
-
+    !Number.isFinite(tx) ||
+    !Number.isFinite(ty) ||
+    !Number.isFinite(tz)
   ) {
 
     return null;
 
   }
 
-
-
   const aprilRotation =
     new THREE.Matrix4();
-
-
 
   aprilRotation.set(
 
@@ -1142,74 +893,49 @@ function convertAprilPose(
 
   );
 
-
-
   const convertedRotation =
     new THREE.Matrix4();
 
-
-
   convertedRotation
-
     .copy(
       basisChange
     )
-
     .multiply(
       aprilRotation
     )
-
     .multiply(
       basisChange
     );
 
-
-
-  const position =
-    new THREE.Vector3(
-
-      tx,
-
-      -ty,
-
-      -tz
-
-    );
-
-
-
-  const quaternion =
-    new THREE.Quaternion()
-
-      .setFromRotationMatrix(
-        convertedRotation
-      )
-
-      .normalize();
-
-
-
   return {
 
-    position,
+    position:
+      new THREE.Vector3(
+        tx,
+        -ty,
+        -tz
+      ),
 
-    quaternion
+    quaternion:
+      new THREE.Quaternion()
+        .setFromRotationMatrix(
+          convertedRotation
+        )
+        .normalize()
 
   };
 
 }
 
 
-
 /* =====================================================
-   QUATERNION-HILFEN
+   ALLGEMEINE HILFSFUNKTIONEN
    ===================================================== */
 
 function quaternionAngle(
   a,
   b
 ) {
-
 
   let dot =
     Math.abs(
@@ -1218,14 +944,12 @@ function quaternionAngle(
       )
     );
 
-
   dot =
     THREE.MathUtils.clamp(
       dot,
       -1,
       1
     );
-
 
   return (
     2 *
@@ -1237,12 +961,10 @@ function quaternionAngle(
 }
 
 
-
 function quaternionAngleDegrees(
   a,
   b
 ) {
-
 
   return THREE.MathUtils.radToDeg(
 
@@ -1256,30 +978,22 @@ function quaternionAngleDegrees(
 }
 
 
-
 function poseErrorValue(
   pose
 ) {
 
-
   if (
-
     !pose ||
-
     typeof pose.e !==
       "number" ||
-
     !Number.isFinite(
       pose.e
     )
-
   ) {
 
     return null;
 
   }
-
-
 
   return Math.max(
     0,
@@ -1289,28 +1003,177 @@ function poseErrorValue(
 }
 
 
+function getPoint(
+  point
+) {
+
+  if (!point) {
+
+    return null;
+
+  }
+
+  if (
+    Array.isArray(
+      point
+    )
+  ) {
+
+    const x =
+      Number(
+        point[0]
+      );
+
+    const y =
+      Number(
+        point[1]
+      );
+
+    if (
+      Number.isFinite(x) &&
+      Number.isFinite(y)
+    ) {
+
+      return {
+        x,
+        y
+      };
+
+    }
+
+  }
+
+  const x =
+    Number(
+      point.x
+    );
+
+  const y =
+    Number(
+      point.y
+    );
+
+  if (
+    Number.isFinite(x) &&
+    Number.isFinite(y)
+  ) {
+
+    return {
+      x,
+      y
+    };
+
+  }
+
+  return null;
+
+}
+
+
+function getDetectionCorners(
+  detection
+) {
+
+  if (
+    !detection ||
+    !Array.isArray(
+      detection.corners
+    ) ||
+    detection.corners.length < 4
+  ) {
+
+    return null;
+
+  }
+
+  const corners =
+    detection.corners
+      .slice(
+        0,
+        4
+      )
+      .map(
+        getPoint
+      );
+
+  if (
+    corners.some(
+      point =>
+        !point
+    )
+  ) {
+
+    return null;
+
+  }
+
+  return corners;
+
+}
+
+
+function detectionArea(
+  detection
+) {
+
+  const corners =
+    getDetectionCorners(
+      detection
+    );
+
+  if (
+    !corners
+  ) {
+
+    return 1;
+
+  }
+
+  let area = 0;
+
+  for (
+    let i = 0;
+    i < 4;
+    i++
+  ) {
+
+    const a =
+      corners[i];
+
+    const b =
+      corners[
+        (i + 1) % 4
+      ];
+
+    area +=
+      a.x * b.y -
+      b.x * a.y;
+
+  }
+
+  return Math.max(
+    1,
+    Math.abs(area) / 2
+  );
+
+}
+
 
 /* =====================================================
-   AUS EINER TAG-POSE
-   EINE WÜRFELPOSE BERECHNEN
+   EINZELTAG → WÜRFELKANDIDAT
    ===================================================== */
 
 function makeCubeCandidate(
-
   id,
-
   pose,
-
-  solutionName
-
+  solutionName,
+  detection
 ) {
-
 
   const converted =
     convertAprilPose(
       pose
     );
-
 
   if (
     !converted
@@ -1320,22 +1183,12 @@ function makeCubeCandidate(
 
   }
 
-
-
   const tagPosition =
     converted.position;
-
 
   const tagQuaternion =
     converted.quaternion;
 
-
-
-  /*
-   * Bewährtes Würfelzentrum:
-   *
-   * lokales z = -22.5 mm
-   */
 
   const centerOffset =
     new THREE.Vector3(
@@ -1348,7 +1201,6 @@ function makeCubeCandidate(
     );
 
 
-
   const cubePosition =
     tagPosition
       .clone()
@@ -1357,31 +1209,14 @@ function makeCubeCandidate(
       );
 
 
-
-  /*
-   * Tagorientierung in
-   * gemeinsame ID3-Würfelbasis
-   * umrechnen.
-   */
-
   const cubeQuaternion =
     tagQuaternion
-
       .clone()
-
       .multiply(
         correctionTo3[id]
       )
-
       .normalize();
 
-
-
-  /*
-   * Lokales +Z ist nach unseren
-   * Kalibrierungen die nach außen
-   * gerichtete Flächennormale.
-   */
 
   const outwardNormal =
     new THREE.Vector3(
@@ -1389,13 +1224,10 @@ function makeCubeCandidate(
       0,
       1
     )
-
     .applyQuaternion(
       tagQuaternion
     )
-
     .normalize();
-
 
 
   const toCamera =
@@ -1406,11 +1238,7 @@ function makeCubeCandidate(
       );
 
 
-
-  let frontality =
-    0;
-
-
+  let frontality = 0;
 
   if (
     toCamera.lengthSq() >
@@ -1418,7 +1246,6 @@ function makeCubeCandidate(
   ) {
 
     toCamera.normalize();
-
 
     frontality =
       outwardNormal.dot(
@@ -1428,12 +1255,13 @@ function makeCubeCandidate(
   }
 
 
-
   return {
 
     id,
 
     solutionName,
+
+    detection,
 
     cubePosition,
 
@@ -1444,6 +1272,11 @@ function makeCubeCandidate(
     tagQuaternion,
 
     frontality,
+
+    imageArea:
+      detectionArea(
+        detection
+      ),
 
     error:
       poseErrorValue(
@@ -1458,63 +1291,40 @@ function makeCubeCandidate(
 }
 
 
-
 /* =====================================================
    HAUPT- UND ALTERNATIVPOSE
-   EINES TAGS AUFBAUEN
    ===================================================== */
 
 function makeCandidateSet(
   detection
 ) {
 
-
   const id =
     Number(
       detection?.id
     );
 
-
-
   if (
-
-    !Number.isInteger(
-      id
-    ) ||
-
-    id <
-      0 ||
-
-    id >
-      5 ||
-
+    !Number.isInteger(id) ||
+    id < 0 ||
+    id > 5 ||
     !detection.pose
-
   ) {
 
     return null;
 
   }
 
-
-
   const candidates =
     [];
 
-
-
   const main =
     makeCubeCandidate(
-
       id,
-
       detection.pose,
-
-      "main"
-
+      "main",
+      detection
     );
-
-
 
   if (
     main
@@ -1527,30 +1337,13 @@ function makeCandidateSet(
   }
 
 
-
-  /*
-   * Alternative Pose,
-   * die der AprilTag-Detector
-   * bereits liefert.
-   */
-
-  const altPose =
-    detection.pose.asol;
-
-
-
   const alt =
     makeCubeCandidate(
-
       id,
-
-      altPose,
-
-      "alt"
-
+      detection.pose.asol,
+      "alt",
+      detection
     );
-
-
 
   if (
     alt
@@ -1563,10 +1356,8 @@ function makeCandidateSet(
   }
 
 
-
   if (
-    candidates.length ===
-    0
+    candidates.length === 0
   ) {
 
     return null;
@@ -1574,83 +1365,53 @@ function makeCandidateSet(
   }
 
 
-
-  /*
-   * Pose-e nur als schwachen
-   * zusätzlichen Hinweis nutzen.
-   */
-
   const finiteErrors =
     candidates
-
       .map(
         candidate =>
           candidate.error
       )
-
       .filter(
-
-        error =>
-
-          typeof error ===
+        value =>
+          typeof value ===
             "number" &&
-
           Number.isFinite(
-            error
+            value
           )
-
       );
-
 
 
   if (
-    finiteErrors.length >
-    0
+    finiteErrors.length > 0
   ) {
-
 
     const minError =
       Math.max(
-
         1e-9,
-
         Math.min(
           ...finiteErrors
         )
-
       );
-
-
 
     for (
       const candidate
       of candidates
     ) {
 
-
       if (
-
         typeof candidate.error ===
           "number" &&
-
         Number.isFinite(
           candidate.error
         )
-
       ) {
-
 
         const ratio =
           Math.max(
-
             1,
-
             candidate.error /
             minError
-
           );
-
-
 
         candidate.relativeErrorPenalty =
           Math.log(
@@ -1659,9 +1420,7 @@ function makeCandidateSet(
 
       }
 
-
       else {
-
 
         candidate.relativeErrorPenalty =
           0.5;
@@ -1671,7 +1430,6 @@ function makeCandidateSet(
     }
 
   }
-
 
 
   return {
@@ -1685,30 +1443,23 @@ function makeCandidateSet(
 }
 
 
-
 /* =====================================================
-   5c-5 BEWEGUNGSHISTORIE
+   5c-5:
+   POSE- UND GESCHWINDIGKEITSHISTORIE
    ===================================================== */
 
-let hasGoodPose =
-  false;
+let hasGoodPose = false;
 
-
-let lastGoodPoseTime =
-  null;
-
+let lastGoodPoseTime = null;
 
 const lastGoodPosition =
   new THREE.Vector3();
 
-
 const lastGoodQuaternion =
   new THREE.Quaternion();
 
-
 const linearVelocity =
   new THREE.Vector3();
-
 
 const angularVelocityAxis =
   new THREE.Vector3(
@@ -1717,47 +1468,31 @@ const angularVelocityAxis =
     0
   );
 
-
-let angularVelocity =
-  0;
-
+let angularVelocity = 0;
 
 
 /* =====================================================
-   POSE FÜR EINEN BESTIMMTEN
-   ZEITPUNKT VORHERSAGEN
+   POSE FÜR EINEN ZEITPUNKT VORHERSAGEN
    ===================================================== */
 
 function predictedPoseAt(
-
   timeMs,
-
   maxAgeMs =
     MAX_PREDICTION_TIME_MS
-
 ) {
 
-
   if (
-
     !hasGoodPose ||
-
-    lastGoodPoseTime ===
-      null
-
+    lastGoodPoseTime === null
   ) {
 
     return null;
 
   }
 
-
-
   let ageMs =
     timeMs -
     lastGoodPoseTime;
-
-
 
   if (
     !Number.isFinite(
@@ -1769,38 +1504,26 @@ function predictedPoseAt(
 
   }
 
-
-
   ageMs =
     Math.max(
-
       0,
-
       Math.min(
         ageMs,
         maxAgeMs
       )
-
     );
 
-
-
   const dt =
-    ageMs /
-    1000;
-
+    ageMs / 1000;
 
 
   const position =
     lastGoodPosition
-
       .clone()
-
       .addScaledVector(
         linearVelocity,
         dt
       );
-
 
 
   const quaternion =
@@ -1808,11 +1531,9 @@ function predictedPoseAt(
       .clone();
 
 
-
   const angle =
     angularVelocity *
     dt;
-
 
 
   if (
@@ -1822,30 +1543,20 @@ function predictedPoseAt(
     0.00001
   ) {
 
-
     const delta =
       new THREE.Quaternion()
-
         .setFromAxisAngle(
-
           angularVelocityAxis,
-
           angle
-
         );
 
-
-
     quaternion
-
       .multiply(
         delta
       )
-
       .normalize();
 
   }
-
 
 
   return {
@@ -1861,46 +1572,30 @@ function predictedPoseAt(
 }
 
 
-
 /* =====================================================
    GUTE POSE REGISTRIEREN
-
-   WICHTIG:
-   frameTime ist jetzt die Zeit
-   des KAMERABILDES, nicht die Zeit,
-   zu der AprilTag fertig gerechnet hat.
    ===================================================== */
 
 function registerGoodPose(
-
   position,
-
   quaternion,
-
   frameTime
-
 ) {
-
 
   if (
     !hasGoodPose
   ) {
 
-
     lastGoodPosition.copy(
       position
     );
-
 
     lastGoodQuaternion.copy(
       quaternion
     );
 
-
     lastGoodPoseTime =
       frameTime;
-
-
 
     linearVelocity.set(
       0,
@@ -1908,19 +1603,13 @@ function registerGoodPose(
       0
     );
 
+    angularVelocity = 0;
 
-    angularVelocity =
-      0;
-
-
-    hasGoodPose =
-      true;
-
+    hasGoodPose = true;
 
     return;
 
   }
-
 
 
   const dt =
@@ -1931,35 +1620,24 @@ function registerGoodPose(
     1000;
 
 
-
   if (
-
-    dt >
-      0.005 &&
-
-    dt <
-      0.15
-
+    dt > 0.005 &&
+    dt < 0.15
   ) {
 
-
-    /* =================================================
+    /* -----------------------------
        LINEARE GESCHWINDIGKEIT
-       ================================================= */
+       ----------------------------- */
 
     const measuredLinearVelocity =
       position
-
         .clone()
-
         .sub(
           lastGoodPosition
         )
-
         .divideScalar(
           dt
         );
-
 
 
     const linearSpeed =
@@ -1967,12 +1645,10 @@ function registerGoodPose(
         .length();
 
 
-
     if (
       linearSpeed >
       MAX_LINEAR_SPEED
     ) {
-
 
       measuredLinearVelocity
         .multiplyScalar(
@@ -1985,69 +1661,44 @@ function registerGoodPose(
     }
 
 
-
     linearVelocity.lerp(
-
       measuredLinearVelocity,
-
       VELOCITY_BLEND
-
     );
 
 
-
-    /* =================================================
+    /* -----------------------------
        WINKELGESCHWINDIGKEIT
-       ================================================= */
+       ----------------------------- */
 
     const deltaQuaternion =
       lastGoodQuaternion
-
         .clone()
-
         .invert()
-
         .multiply(
           quaternion
         )
-
         .normalize();
 
 
-
     if (
-      deltaQuaternion.w <
-      0
+      deltaQuaternion.w < 0
     ) {
 
-
-      deltaQuaternion.x *=
-        -1;
-
-      deltaQuaternion.y *=
-        -1;
-
-      deltaQuaternion.z *=
-        -1;
-
-      deltaQuaternion.w *=
-        -1;
+      deltaQuaternion.x *= -1;
+      deltaQuaternion.y *= -1;
+      deltaQuaternion.z *= -1;
+      deltaQuaternion.w *= -1;
 
     }
 
 
-
     const clampedW =
       THREE.MathUtils.clamp(
-
         deltaQuaternion.w,
-
         -1,
-
         1
-
       );
-
 
 
     const angle =
@@ -2057,34 +1708,21 @@ function registerGoodPose(
       );
 
 
-
     const sinHalf =
       Math.sqrt(
-
         Math.max(
-
           0,
-
           1 -
           clampedW *
           clampedW
-
         )
-
       );
 
 
-
     if (
-
-      sinHalf >
-        0.00001 &&
-
-      angle >
-        0.00001
-
+      sinHalf > 0.00001 &&
+      angle > 0.00001
     ) {
-
 
       const measuredAxis =
         new THREE.Vector3(
@@ -2101,11 +1739,9 @@ function registerGoodPose(
         );
 
 
-
       let measuredAngularVelocity =
         angle /
         dt;
-
 
 
       if (
@@ -2113,19 +1749,16 @@ function registerGoodPose(
         MAX_ANGULAR_SPEED
       ) {
 
-
         measuredAngularVelocity =
           MAX_ANGULAR_SPEED;
 
       }
 
 
-
       if (
         angularVelocity >
         0.00001
       ) {
-
 
         if (
           angularVelocityAxis.dot(
@@ -2134,12 +1767,10 @@ function registerGoodPose(
           0
         ) {
 
-
           measuredAxis
             .multiplyScalar(
               -1
             );
-
 
           measuredAngularVelocity *=
             -1;
@@ -2147,19 +1778,12 @@ function registerGoodPose(
         }
 
 
-
         angularVelocityAxis
-
           .lerp(
-
             measuredAxis,
-
             VELOCITY_BLEND
-
           )
-
           .normalize();
-
 
 
         angularVelocity =
@@ -2175,14 +1799,11 @@ function registerGoodPose(
 
       }
 
-
       else {
-
 
         angularVelocityAxis.copy(
           measuredAxis
         );
-
 
         angularVelocity =
           measuredAngularVelocity;
@@ -2191,19 +1812,13 @@ function registerGoodPose(
 
     }
 
-
     else {
-
 
       angularVelocity =
         THREE.MathUtils.lerp(
-
           angularVelocity,
-
           0,
-
           VELOCITY_BLEND
-
         );
 
     }
@@ -2211,16 +1826,13 @@ function registerGoodPose(
   }
 
 
-
   lastGoodPosition.copy(
     position
   );
 
-
   lastGoodQuaternion.copy(
     quaternion
   );
-
 
   lastGoodPoseTime =
     frameTime;
@@ -2228,20 +1840,17 @@ function registerGoodPose(
 }
 
 
-
 /* =====================================================
-   KOMBINATION EINER ODER MEHRERER
-   TAG-LÖSUNGEN FUSIONIEREN
+   5c-9:
+   KOMBINATION FUSIONIEREN
    ===================================================== */
 
 function fuseCombination(
   combo
 ) {
 
-
   const position =
     new THREE.Vector3();
-
 
 
   for (
@@ -2256,7 +1865,6 @@ function fuseCombination(
   }
 
 
-
   position.multiplyScalar(
 
     1 /
@@ -2265,32 +1873,21 @@ function fuseCombination(
   );
 
 
-
   const reference =
     combo[0]
       .cubeQuaternion;
 
 
-
-  let qx =
-    0;
-
-  let qy =
-    0;
-
-  let qz =
-    0;
-
-  let qw =
-    0;
-
+  let qx = 0;
+  let qy = 0;
+  let qz = 0;
+  let qw = 0;
 
 
   for (
     const candidate
     of combo
   ) {
-
 
     const q =
       candidate
@@ -2298,88 +1895,47 @@ function fuseCombination(
         .clone();
 
 
-
     if (
-      reference.dot(
-        q
-      ) <
-      0
+      reference.dot(q) < 0
     ) {
 
-
-      q.x *=
-        -1;
-
-      q.y *=
-        -1;
-
-      q.z *=
-        -1;
-
-      q.w *=
-        -1;
+      q.x *= -1;
+      q.y *= -1;
+      q.z *= -1;
+      q.w *= -1;
 
     }
 
 
-
-    qx +=
-      q.x;
-
-
-    qy +=
-      q.y;
-
-
-    qz +=
-      q.z;
-
-
-    qw +=
-      q.w;
+    qx += q.x;
+    qy += q.y;
+    qz += q.z;
+    qw += q.w;
 
   }
 
 
-
   const quaternion =
     new THREE.Quaternion(
-
       qx,
-
       qy,
-
       qz,
-
       qw
-
     )
     .normalize();
 
 
+  let meanPositionSpread = 0;
+  let maxPositionSpread = 0;
 
-  let meanPositionSpread =
-    0;
-
-
-  let maxPositionSpread =
-    0;
-
-
-  let meanRotationSpread =
-    0;
-
-
-  let maxRotationSpread =
-    0;
-
+  let meanRotationSpread = 0;
+  let maxRotationSpread = 0;
 
 
   for (
     const candidate
     of combo
   ) {
-
 
     const positionDifference =
       candidate
@@ -2389,59 +1945,42 @@ function fuseCombination(
         );
 
 
-
     const rotationDifference =
       quaternionAngle(
-
         candidate
           .cubeQuaternion,
-
         quaternion
-
       );
-
 
 
     meanPositionSpread +=
       positionDifference;
 
-
     meanRotationSpread +=
       rotationDifference;
 
 
-
     maxPositionSpread =
       Math.max(
-
         maxPositionSpread,
-
         positionDifference
-
       );
-
 
 
     maxRotationSpread =
       Math.max(
-
         maxRotationSpread,
-
         rotationDifference
-
       );
 
   }
 
 
-
   meanPositionSpread /=
     combo.length;
 
-
   meanRotationSpread /=
     combo.length;
-
 
 
   return {
@@ -2463,19 +2002,14 @@ function fuseCombination(
 }
 
 
-
 /* =====================================================
-   EINE KOMBINATION BEWERTEN
+   KOMBINATION BEWERTEN
    ===================================================== */
 
 function evaluateCombination(
-
   combo,
-
   predictedPose
-
 ) {
-
 
   const fused =
     fuseCombination(
@@ -2483,29 +2017,16 @@ function evaluateCombination(
     );
 
 
+  let score = 0;
 
-  let score =
-    0;
-
-
-
-  /* ===================================================
-     MEHRERE SICHTBARE SEITEN
-
-     Die korrekten Lösungen müssen
-     dieselbe Würfelpose ergeben.
-     =================================================== */
 
   if (
-    combo.length >
-    1
+    combo.length > 1
   ) {
-
 
     score +=
       fused.meanPositionSpread /
       MULTI_POSITION_SCORE_SCALE;
-
 
 
     score +=
@@ -2515,18 +2036,9 @@ function evaluateCombination(
   }
 
 
-
-  /* ===================================================
-     ZEITLICHE KONTINUITÄT
-
-     Nur solange die letzte gute Pose
-     noch frisch genug ist.
-     =================================================== */
-
   if (
     predictedPose
   ) {
-
 
     score +=
 
@@ -2538,15 +2050,11 @@ function evaluateCombination(
       POSITION_SCORE_SCALE;
 
 
-
     score +=
 
       quaternionAngle(
-
         fused.quaternion,
-
         predictedPose.quaternion
-
       ) /
 
       ROTATION_SCORE_SCALE;
@@ -2554,18 +2062,10 @@ function evaluateCombination(
   }
 
 
-
-  /* ===================================================
-     APRILTAG POSE ERROR
-
-     Nur schwacher Tie-Breaker.
-     =================================================== */
-
   for (
     const candidate
     of combo
   ) {
-
 
     score +=
       0.18 *
@@ -2573,23 +2073,12 @@ function evaluateCombination(
         .relativeErrorPenalty;
 
 
-
-    /*
-     * Eine tatsächlich sichtbare
-     * Würfelfläche sollte grundsätzlich
-     * zur Kamera zeigen.
-     */
-
     if (
-      candidate.frontality <
-      0
+      candidate.frontality < 0
     ) {
 
-
       score +=
-
         25 +
-
         Math.abs(
           candidate.frontality
         ) *
@@ -2597,15 +2086,11 @@ function evaluateCombination(
 
     }
 
-
     else if (
-      candidate.frontality <
-      0.08
+      candidate.frontality < 0.08
     ) {
 
-
       score +=
-
         (
           0.08 -
           candidate.frontality
@@ -2615,7 +2100,6 @@ function evaluateCombination(
     }
 
   }
-
 
 
   return {
@@ -2629,27 +2113,17 @@ function evaluateCombination(
 }
 
 
-
 /* =====================================================
-   BESTE KOMBINATION AUS
-   HAUPT- UND ALTERNATIVLÖSUNGEN
-
-   Maximal:
-   2^6 = 64 Kombinationen.
+   BESTE HAUPT-/ALTERNATIVPOSE FINDEN
    ===================================================== */
 
 function chooseBestCubeMeasurement(
-
   candidateSets,
-
   frameTime
-
 ) {
 
-
   if (
-    candidateSets.length ===
-    0
+    candidateSets.length === 0
   ) {
 
     return null;
@@ -2657,84 +2131,54 @@ function chooseBestCubeMeasurement(
   }
 
 
-
-  let predicted =
-    null;
-
+  let predicted = null;
 
 
   if (
-
     hasGoodPose &&
-
-    lastGoodPoseTime !==
-      null &&
-
+    lastGoodPoseTime !== null &&
     frameTime -
-    lastGoodPoseTime >=
-      0 &&
-
+    lastGoodPoseTime >= 0 &&
     frameTime -
     lastGoodPoseTime <=
       CONTINUITY_MAX_AGE_MS
-
   ) {
-
 
     predicted =
       predictedPoseAt(
-
         frameTime,
-
         CONTINUITY_MAX_AGE_MS
-
       );
 
   }
 
 
+  let best = null;
 
-  let best =
-    null;
-
-
-
-  const combo =
-    [];
-
+  const combo = [];
 
 
   function recurse(
     index
   ) {
 
-
     if (
       index ===
       candidateSets.length
     ) {
 
-
       const evaluated =
         evaluateCombination(
-
           combo,
-
           predicted
-
         );
 
 
-
       if (
-
         !best ||
-
         evaluated.score <
         best.score
-
       ) {
-
 
         best = {
 
@@ -2752,11 +2196,9 @@ function chooseBestCubeMeasurement(
       }
 
 
-
       return;
 
     }
-
 
 
     for (
@@ -2765,16 +2207,13 @@ function chooseBestCubeMeasurement(
         .candidates
     ) {
 
-
       combo.push(
         candidate
       );
 
-
       recurse(
         index + 1
       );
-
 
       combo.pop();
 
@@ -2783,11 +2222,9 @@ function chooseBestCubeMeasurement(
   }
 
 
-
   recurse(
     0
   );
-
 
 
   return best;
@@ -2795,28 +2232,1170 @@ function chooseBestCubeMeasurement(
 }
 
 
+/* =====================================================
+   5c-10:
+   3D-PUNKT PROJIZIEREN
+   ===================================================== */
+
+function projectCubePoint(
+  point,
+  position,
+  quaternion
+) {
+
+  const cameraPoint =
+    point
+      .clone()
+      .applyQuaternion(
+        quaternion
+      )
+      .add(
+        position
+      );
+
+
+  /*
+   * Three-Kamera schaut entlang -Z.
+   */
+
+  const depth =
+    -cameraPoint.z;
+
+
+  if (
+    depth <= 0.01
+  ) {
+
+    return null;
+
+  }
+
+
+  return {
+
+    x:
+      fx *
+      cameraPoint.x /
+      depth +
+      cx,
+
+    y:
+      cy -
+      fy *
+      cameraPoint.y /
+      depth
+
+  };
+
+}
+
 
 /* =====================================================
-   DETEKTIONSERGEBNIS
-   IN EINE WÜRFELMESSUNG UMWANDELN
+   JOINT-BEOBACHTUNGEN AUFBAUEN
+   ===================================================== */
+
+function createJointObservations(
+  combo
+) {
+
+  if (
+    combo.length <
+    JOINT_MIN_TAGS
+  ) {
+
+    return [];
+
+  }
+
+
+  let maxArea = 1;
+
+
+  for (
+    const candidate
+    of combo
+  ) {
+
+    maxArea =
+      Math.max(
+        maxArea,
+        candidate.imageArea
+      );
+
+  }
+
+
+  const observations = [];
+
+
+  for (
+    const candidate
+    of combo
+  ) {
+
+    const corners =
+      getDetectionCorners(
+        candidate.detection
+      );
+
+
+    if (
+      !corners
+    ) {
+
+      continue;
+
+    }
+
+
+    /*
+     * Große/frontale Tags bekommen mehr Gewicht,
+     * schräge kleine Tags aber nie Gewicht 0.
+     */
+
+    const areaWeight =
+      THREE.MathUtils.clamp(
+
+        Math.sqrt(
+          candidate.imageArea /
+          maxArea
+        ),
+
+        0.35,
+
+        1.0
+
+      );
+
+
+    const frontalityWeight =
+      0.55 +
+      0.45 *
+      THREE.MathUtils.clamp(
+        candidate.frontality,
+        0,
+        1
+      );
+
+
+    const baseWeight =
+      areaWeight *
+      frontalityWeight;
+
+
+    for (
+      let cornerIndex = 0;
+      cornerIndex < 4;
+      cornerIndex++
+    ) {
+
+      observations.push({
+
+        point:
+          cubeTagCorners[
+            candidate.id
+          ][cornerIndex],
+
+        x:
+          corners[
+            cornerIndex
+          ].x,
+
+        y:
+          corners[
+            cornerIndex
+          ].y,
+
+        baseWeight
+
+      });
+
+    }
+
+  }
+
+
+  return observations;
+
+}
+
+
+/* =====================================================
+   RESIDUEN DER JOINT-POSE
+   ===================================================== */
+
+function calculateResidualState(
+  position,
+  quaternion,
+  observations,
+  fixedWeights = null
+) {
+
+  const weightedResiduals = [];
+
+  const weights = [];
+
+  let rawSquaredError = 0;
+
+
+  for (
+    let i = 0;
+    i <
+    observations.length;
+    i++
+  ) {
+
+    const observation =
+      observations[i];
+
+
+    const projected =
+      projectCubePoint(
+        observation.point,
+        position,
+        quaternion
+      );
+
+
+    if (
+      !projected
+    ) {
+
+      return null;
+
+    }
+
+
+    const dx =
+      projected.x -
+      observation.x;
+
+    const dy =
+      projected.y -
+      observation.y;
+
+
+    rawSquaredError +=
+      dx * dx +
+      dy * dy;
+
+
+    let weight;
+
+
+    if (
+      fixedWeights
+    ) {
+
+      weight =
+        fixedWeights[i];
+
+    }
+
+    else {
+
+      const distance =
+        Math.sqrt(
+          dx * dx +
+          dy * dy
+        );
+
+
+      const huberWeight =
+        distance <=
+        HUBER_THRESHOLD_PX
+
+          ? 1
+
+          : HUBER_THRESHOLD_PX /
+            Math.max(
+              distance,
+              1e-9
+            );
+
+
+      weight =
+        observation.baseWeight *
+        huberWeight;
+
+    }
+
+
+    weights.push(
+      weight
+    );
+
+
+    const sqrtWeight =
+      Math.sqrt(
+        weight
+      );
+
+
+    weightedResiduals.push(
+      dx *
+      sqrtWeight
+    );
+
+    weightedResiduals.push(
+      dy *
+      sqrtWeight
+    );
+
+  }
+
+
+  let cost = 0;
+
+
+  for (
+    const residual
+    of weightedResiduals
+  ) {
+
+    cost +=
+      residual *
+      residual;
+
+  }
+
+
+  const rawRmse =
+    Math.sqrt(
+
+      rawSquaredError /
+      Math.max(
+        1,
+        observations.length *
+        2
+      )
+
+    );
+
+
+  return {
+
+    weightedResiduals,
+
+    weights,
+
+    cost,
+
+    rawRmse
+
+  };
+
+}
+
+
+/* =====================================================
+   POSE UM EINEN KLEINEN
+   6D-SCHRITT VERÄNDERN
+   ===================================================== */
+
+function applyNormalizedPoseDelta(
+  position,
+  quaternion,
+  delta,
+  factor = 1
+) {
+
+  position.x +=
+    delta[0] *
+    JOINT_TRANSLATION_SCALE *
+    factor;
+
+  position.y +=
+    delta[1] *
+    JOINT_TRANSLATION_SCALE *
+    factor;
+
+  position.z +=
+    delta[2] *
+    JOINT_TRANSLATION_SCALE *
+    factor;
+
+
+  const rotationVector =
+    new THREE.Vector3(
+
+      delta[3] *
+      JOINT_ROTATION_SCALE *
+      factor,
+
+      delta[4] *
+      JOINT_ROTATION_SCALE *
+      factor,
+
+      delta[5] *
+      JOINT_ROTATION_SCALE *
+      factor
+
+    );
+
+
+  const angle =
+    rotationVector.length();
+
+
+  if (
+    angle >
+    1e-12
+  ) {
+
+    const axis =
+      rotationVector
+        .clone()
+        .multiplyScalar(
+          1 / angle
+        );
+
+
+    const deltaQuaternion =
+      new THREE.Quaternion()
+        .setFromAxisAngle(
+          axis,
+          angle
+        );
+
+
+    /*
+     * Welt-/Kamerakoordinatenrotation.
+     */
+
+    quaternion
+      .premultiply(
+        deltaQuaternion
+      )
+      .normalize();
+
+  }
+
+}
+
+
+/* =====================================================
+   KLEINES 6×6-LGS LÖSEN
+   ===================================================== */
+
+function solveLinear6(
+  matrix,
+  vector
+) {
+
+  const n = 6;
+
+
+  const a =
+    matrix.map(
+      (
+        row,
+        i
+      ) =>
+        [
+          ...row,
+          vector[i]
+        ]
+    );
+
+
+  for (
+    let column = 0;
+    column < n;
+    column++
+  ) {
+
+    let pivotRow =
+      column;
+
+    let pivotValue =
+      Math.abs(
+        a[column][column]
+      );
+
+
+    for (
+      let row =
+        column + 1;
+
+      row < n;
+
+      row++
+    ) {
+
+      const value =
+        Math.abs(
+          a[row][column]
+        );
+
+
+      if (
+        value >
+        pivotValue
+      ) {
+
+        pivotValue =
+          value;
+
+        pivotRow =
+          row;
+
+      }
+
+    }
+
+
+    if (
+      pivotValue <
+      1e-12
+    ) {
+
+      return null;
+
+    }
+
+
+    if (
+      pivotRow !==
+      column
+    ) {
+
+      const temporary =
+        a[column];
+
+      a[column] =
+        a[pivotRow];
+
+      a[pivotRow] =
+        temporary;
+
+    }
+
+
+    const pivot =
+      a[column][column];
+
+
+    for (
+      let j =
+        column;
+
+      j <= n;
+
+      j++
+    ) {
+
+      a[column][j] /=
+        pivot;
+
+    }
+
+
+    for (
+      let row = 0;
+      row < n;
+      row++
+    ) {
+
+      if (
+        row ===
+        column
+      ) {
+
+        continue;
+
+      }
+
+
+      const factor =
+        a[row][column];
+
+
+      if (
+        Math.abs(
+          factor
+        ) <
+        1e-20
+      ) {
+
+        continue;
+
+      }
+
+
+      for (
+        let j =
+          column;
+
+        j <= n;
+
+        j++
+      ) {
+
+        a[row][j] -=
+          factor *
+          a[column][j];
+
+      }
+
+    }
+
+  }
+
+
+  return a.map(
+    row =>
+      row[n]
+  );
+
+}
+
+
+/* =====================================================
+   JOINT-POSE OPTIMIEREN
+   ===================================================== */
+
+function refineJointCubePose(
+  initialPosition,
+  initialQuaternion,
+  combo
+) {
+
+  const startTime =
+    performance.now();
+
+
+  const observations =
+    createJointObservations(
+      combo
+    );
+
+
+  if (
+    observations.length <
+    JOINT_MIN_TAGS *
+    4
+  ) {
+
+    return {
+
+      accepted:
+        false,
+
+      position:
+        initialPosition.clone(),
+
+      quaternion:
+        initialQuaternion.clone(),
+
+      before:
+        null,
+
+      after:
+        null,
+
+      timeMs:
+        performance.now() -
+        startTime
+
+    };
+
+  }
+
+
+  let position =
+    initialPosition.clone();
+
+  let quaternion =
+    initialQuaternion.clone();
+
+
+  const initialState =
+    calculateResidualState(
+      position,
+      quaternion,
+      observations
+    );
+
+
+  if (
+    !initialState
+  ) {
+
+    return {
+
+      accepted:
+        false,
+
+      position,
+
+      quaternion,
+
+      before:
+        null,
+
+      after:
+        null,
+
+      timeMs:
+        performance.now() -
+        startTime
+
+    };
+
+  }
+
+
+  const before =
+    initialState.rawRmse;
+
+
+  let currentState =
+    initialState;
+
+
+  for (
+    let iteration = 0;
+    iteration <
+    JOINT_MAX_ITERATIONS;
+    iteration++
+  ) {
+
+    const residualCount =
+      currentState
+        .weightedResiduals
+        .length;
+
+
+    const jacobian =
+      Array.from(
+        {
+          length:
+            residualCount
+        },
+        () =>
+          new Array(6)
+            .fill(0)
+      );
+
+
+    /*
+     * Numerische Ableitung der
+     * sechs Poseparameter.
+     */
+
+    for (
+      let parameter = 0;
+      parameter < 6;
+      parameter++
+    ) {
+
+      const testPosition =
+        position.clone();
+
+      const testQuaternion =
+        quaternion.clone();
+
+
+      const delta =
+        [0, 0, 0, 0, 0, 0];
+
+
+      delta[parameter] =
+        JOINT_FD_STEP;
+
+
+      applyNormalizedPoseDelta(
+        testPosition,
+        testQuaternion,
+        delta
+      );
+
+
+      const testState =
+        calculateResidualState(
+
+          testPosition,
+
+          testQuaternion,
+
+          observations,
+
+          currentState.weights
+
+        );
+
+
+      if (
+        !testState
+      ) {
+
+        continue;
+
+      }
+
+
+      for (
+        let residual = 0;
+        residual <
+        residualCount;
+        residual++
+      ) {
+
+        jacobian[residual][parameter] =
+
+          (
+            testState
+              .weightedResiduals[
+                residual
+              ] -
+
+            currentState
+              .weightedResiduals[
+                residual
+              ]
+          ) /
+
+          JOINT_FD_STEP;
+
+      }
+
+    }
+
+
+    /*
+     * Normalgleichungen:
+     *
+     * (JᵀJ + λI) Δ = -Jᵀr
+     */
+
+    const normalMatrix =
+      Array.from(
+        {
+          length:
+            6
+        },
+        () =>
+          new Array(6)
+            .fill(0)
+      );
+
+
+    const normalVector =
+      new Array(6)
+        .fill(0);
+
+
+    for (
+      let residual = 0;
+      residual <
+      residualCount;
+      residual++
+    ) {
+
+      const r =
+        currentState
+          .weightedResiduals[
+            residual
+          ];
+
+
+      for (
+        let a = 0;
+        a < 6;
+        a++
+      ) {
+
+        const ja =
+          jacobian[
+            residual
+          ][a];
+
+
+        normalVector[a] -=
+          ja *
+          r;
+
+
+        for (
+          let b = 0;
+          b < 6;
+          b++
+        ) {
+
+          normalMatrix[a][b] +=
+            ja *
+            jacobian[
+              residual
+            ][b];
+
+        }
+
+      }
+
+    }
+
+
+    for (
+      let parameter = 0;
+      parameter < 6;
+      parameter++
+    ) {
+
+      normalMatrix[
+        parameter
+      ][parameter] +=
+
+        JOINT_DAMPING *
+        (
+          normalMatrix[
+            parameter
+          ][parameter] +
+          1
+        );
+
+    }
+
+
+    const delta =
+      solveLinear6(
+        normalMatrix,
+        normalVector
+      );
+
+
+    if (
+      !delta
+    ) {
+
+      break;
+
+    }
+
+
+    /*
+     * Extrem große Schritte verhindern.
+     */
+
+    const translationLength =
+      Math.hypot(
+        delta[0],
+        delta[1],
+        delta[2]
+      );
+
+
+    if (
+      translationLength >
+      8
+    ) {
+
+      const scale =
+        8 /
+        translationLength;
+
+      delta[0] *= scale;
+      delta[1] *= scale;
+      delta[2] *= scale;
+
+    }
+
+
+    const rotationLength =
+      Math.hypot(
+        delta[3],
+        delta[4],
+        delta[5]
+      );
+
+
+    if (
+      rotationLength >
+      12
+    ) {
+
+      const scale =
+        12 /
+        rotationLength;
+
+      delta[3] *= scale;
+      delta[4] *= scale;
+      delta[5] *= scale;
+
+    }
+
+
+    let acceptedStep =
+      false;
+
+
+    for (
+      const stepFactor
+      of [
+        1,
+        0.5,
+        0.25
+      ]
+    ) {
+
+      const testPosition =
+        position.clone();
+
+      const testQuaternion =
+        quaternion.clone();
+
+
+      applyNormalizedPoseDelta(
+        testPosition,
+        testQuaternion,
+        delta,
+        stepFactor
+      );
+
+
+      const testState =
+        calculateResidualState(
+          testPosition,
+          testQuaternion,
+          observations
+        );
+
+
+      if (
+        testState &&
+        testState.cost <
+        currentState.cost
+      ) {
+
+        position =
+          testPosition;
+
+        quaternion =
+          testQuaternion;
+
+        currentState =
+          testState;
+
+        acceptedStep =
+          true;
+
+        break;
+
+      }
+
+    }
+
+
+    if (
+      !acceptedStep
+    ) {
+
+      break;
+
+    }
+
+
+    const deltaNorm =
+      Math.hypot(
+        ...delta
+      );
+
+
+    if (
+      deltaNorm <
+      0.01
+    ) {
+
+      break;
+
+    }
+
+  }
+
+
+  const finalState =
+    calculateResidualState(
+      position,
+      quaternion,
+      observations
+    );
+
+
+  const after =
+    finalState
+      ? finalState.rawRmse
+      : Infinity;
+
+
+  const positionShift =
+    position.distanceTo(
+      initialPosition
+    );
+
+
+  const rotationShift =
+    quaternionAngle(
+      quaternion,
+      initialQuaternion
+    );
+
+
+  const improved =
+    Number.isFinite(after) &&
+    after <
+    before * 0.995;
+
+
+  const safe =
+    after <=
+      JOINT_MAX_RMSE_PX &&
+
+    positionShift <=
+      JOINT_MAX_POSITION_SHIFT &&
+
+    rotationShift <=
+      JOINT_MAX_ROTATION_SHIFT;
+
+
+  return {
+
+    accepted:
+      improved &&
+      safe,
+
+    position,
+
+    quaternion,
+
+    before,
+
+    after,
+
+    positionShift,
+
+    rotationShift,
+
+    timeMs:
+      performance.now() -
+      startTime
+
+  };
+
+}
+
+
+/* =====================================================
+   DETEKTIONEN → GEMEINSAME WÜRFELMESSUNG
    ===================================================== */
 
 function processDetections(
-
   detections,
-
   frameTime
-
 ) {
 
+  const candidateSets = [];
 
-  const candidateSets =
-    [];
-
-
-  const ids =
-    [];
-
+  const ids = [];
 
 
   for (
@@ -2824,23 +3403,19 @@ function processDetections(
     of detections
   ) {
 
-
     const set =
       makeCandidateSet(
         detection
       );
 
 
-
     if (
       set
     ) {
 
-
       candidateSets.push(
         set
       );
-
 
       ids.push(
         set.id
@@ -2851,49 +3426,37 @@ function processDetections(
   }
 
 
-
   lastVisibleIDs =
     ids;
 
 
-
   if (
-    candidateSets.length ===
-    0
+    candidateSets.length === 0
   ) {
 
+    lastCenterSpread = null;
+    lastRotationSpread = null;
 
-    lastCenterSpread =
-      null;
+    lastAltSelections = 0;
+    lastSolutionScore = null;
 
+    lastJointUsed = false;
+    lastJointTags = 0;
 
-    lastRotationSpread =
-      null;
-
-
-    lastAltSelections =
-      0;
-
-
-    lastSolutionScore =
-      null;
-
+    lastReprojectionBefore = null;
+    lastReprojectionAfter = null;
+    lastJointTimeMs = 0;
 
     return false;
 
   }
 
 
-
   const chosen =
     chooseBestCubeMeasurement(
-
       candidateSets,
-
       frameTime
-
     );
-
 
 
   if (
@@ -2905,12 +3468,10 @@ function processDetections(
   }
 
 
-
   lastCenterSpread =
     chosen
       .fused
       .maxPositionSpread;
-
 
 
   lastRotationSpread =
@@ -2923,59 +3484,128 @@ function processDetections(
     );
 
 
-
   lastSolutionScore =
     chosen.score;
-
 
 
   lastAltSelections =
     chosen.combo
       .filter(
-
         candidate =>
           candidate.solutionName ===
           "alt"
-
       )
       .length;
-
 
 
   totalAltSelections +=
     lastAltSelections;
 
 
+  let finalPosition =
+    chosen
+      .fused
+      .position;
 
-  /*
-   * Ab hier dieselbe Idee
-   * wie 5c-5:
-   *
-   * Eine gute Würfelpose wird
-   * als neuer absoluter Bezug
-   * gespeichert.
-   */
+  let finalQuaternion =
+    chosen
+      .fused
+      .quaternion;
+
+
+  /* ===================================================
+     NEU 5c-10:
+     MINDESTENS ZWEI TAGS →
+     GEMEINSAME REPROJEKTIONSPOSE
+     =================================================== */
+
+  lastJointTags =
+    chosen.combo.length;
+
+
+  if (
+    chosen.combo.length >=
+    JOINT_MIN_TAGS
+  ) {
+
+    const refined =
+      refineJointCubePose(
+
+        finalPosition,
+
+        finalQuaternion,
+
+        chosen.combo
+
+      );
+
+
+    lastReprojectionBefore =
+      refined.before;
+
+    lastReprojectionAfter =
+      refined.after;
+
+    lastJointTimeMs =
+      refined.timeMs;
+
+
+    if (
+      refined.accepted
+    ) {
+
+      finalPosition =
+        refined.position;
+
+      finalQuaternion =
+        refined.quaternion;
+
+      lastJointUsed =
+        true;
+
+    }
+
+    else {
+
+      /*
+       * Automatischer Fallback:
+       * exakt die bewährte 5c-9-Pose.
+       */
+
+      lastJointUsed =
+        false;
+
+    }
+
+  }
+
+  else {
+
+    lastJointUsed =
+      false;
+
+    lastReprojectionBefore =
+      null;
+
+    lastReprojectionAfter =
+      null;
+
+    lastJointTimeMs =
+      0;
+
+  }
+
 
   registerGoodPose(
-
-    chosen
-      .fused
-      .position,
-
-    chosen
-      .fused
-      .quaternion,
-
+    finalPosition,
+    finalQuaternion,
     frameTime
-
   );
-
 
 
   return true;
 
 }
-
 
 
 /* =====================================================
@@ -2984,12 +3614,10 @@ function processDetections(
 
 async function initializeAprilTag() {
 
-
   const worker =
     new Worker(
       "./libs/apriltag.js"
     );
-
 
 
   const Apriltag =
@@ -2998,45 +3626,36 @@ async function initializeAprilTag() {
     );
 
 
-
   apriltag =
     await new Apriltag(
 
       Comlink.proxy(
-
         function() {
 
           detectorReady =
             true;
 
         }
-
       )
 
     );
-
 
 
   const start =
     performance.now();
 
 
-
   while (
     !detectorReady
   ) {
 
-
     await new Promise(
-
       resolve =>
         setTimeout(
           resolve,
           20
         )
-
     );
-
 
 
     if (
@@ -3045,7 +3664,6 @@ async function initializeAprilTag() {
       15000
     ) {
 
-
       throw new Error(
         "AprilTag-WASM wurde nicht bereit."
       );
@@ -3053,7 +3671,6 @@ async function initializeAprilTag() {
     }
 
   }
-
 
 
   await apriltag
@@ -3065,25 +3682,19 @@ async function initializeAprilTag() {
     );
 
 
-
   for (
     let id = 0;
     id <= 5;
     id++
   ) {
 
-
     await apriltag
       .set_tag_size(
-
         id,
-
         TAG_SIZE
-
       );
 
   }
-
 
 
   await apriltag
@@ -3092,19 +3703,10 @@ async function initializeAprilTag() {
     );
 
 
-
-  /*
-   * Wichtig für 5c-9:
-   *
-   * Alternative planare Pose
-   * mit zurückgeben.
-   */
-
   await apriltag
     .set_return_solutions(
       1
     );
-
 
 
   await apriltag
@@ -3115,130 +3717,93 @@ async function initializeAprilTag() {
 }
 
 
-
 /* =====================================================
    KAMERA
-
-   UNVERÄNDERT
    ===================================================== */
 
 async function startCamera() {
-
 
   const stream =
     await navigator
       .mediaDevices
       .getUserMedia({
 
-
         audio:
           false,
 
-
         video: {
-
 
           facingMode: {
             ideal:
               "environment"
           },
 
-
           width: {
             ideal:
               WIDTH
           },
-
 
           height: {
             ideal:
               HEIGHT
           },
 
-
           aspectRatio: {
             ideal:
               4 / 3
           },
 
-
           frameRate: {
-
             ideal:
               30,
-
             max:
               30
-
           }
-
 
         }
 
-
       });
-
 
 
   video.srcObject =
     stream;
 
 
-
   await new Promise(
-
     resolve => {
 
-
       if (
-
-        video.readyState >=
-          2 &&
-
-        video.videoWidth >
-          0
-
+        video.readyState >= 2 &&
+        video.videoWidth > 0
       ) {
-
 
         resolve();
 
       }
 
-
       else {
 
-
         video.addEventListener(
-
           "loadedmetadata",
-
           resolve,
-
           {
             once:
               true
           }
-
         );
 
       }
 
     }
-
   );
 
 
-
   await video.play();
-
-
 
   cameraReady =
     true;
 
 }
-
 
 
 /* =====================================================
@@ -3247,37 +3812,26 @@ async function startCamera() {
 
 function createGrayscaleImage() {
 
-
   analysisCtx.drawImage(
-
     video,
-
     0,
     0,
-
     WIDTH,
     HEIGHT
-
   );
-
 
 
   const imageData =
     analysisCtx.getImageData(
-
       0,
       0,
-
       WIDTH,
       HEIGHT
-
     );
-
 
 
   const rgba =
     imageData.data;
-
 
 
   const grayscale =
@@ -3287,37 +3841,23 @@ function createGrayscaleImage() {
     );
 
 
-
   for (
-
-    let i = 0,
-        j = 0;
-
-    i <
-    rgba.length;
-
-    i += 4,
-    j++
-
+    let i = 0, j = 0;
+    i < rgba.length;
+    i += 4, j++
   ) {
-
 
     grayscale[j] =
       Math.round(
-
         (
           rgba[i] +
-
           rgba[i + 1] +
-
           rgba[i + 2]
         ) /
         3
-
       );
 
   }
-
 
 
   return grayscale;
@@ -3325,54 +3865,40 @@ function createGrayscaleImage() {
 }
 
 
-
 /* =====================================================
-   ECHTEN ZEITSTEMPEL
-   DES VIDEOFRAMES BESTIMMEN
+   ECHTE KAMERA-FRAME-ZEIT
    ===================================================== */
 
 function getFrameTimestamp(
-
   callbackNow,
-
   metadata
-
 ) {
 
-
-  /*
-   * Bei getUserMedia kann captureTime
-   * verfügbar sein.
-   *
-   * Falls nicht:
-   * presentationTime.
-   *
-   * Erst danach Callback-Zeit.
-   */
-
   const candidates = [
-
 
     [
       "captureTime",
       metadata?.captureTime
     ],
 
-
     [
       "presentationTime",
       metadata?.presentationTime
     ],
-
 
     [
       "callback",
       callbackNow
     ]
 
-
   ];
 
+
+  let selected =
+    performance.now();
+
+  frameTimeSource =
+    "performance.now";
 
 
   for (
@@ -3383,100 +3909,98 @@ function getFrameTimestamp(
     of candidates
   ) {
 
-
     if (
-
       typeof value ===
         "number" &&
-
       Number.isFinite(
         value
       ) &&
-
       Math.abs(
         value -
         callbackNow
       ) <
       1500
-
     ) {
 
+      selected =
+        value;
 
       frameTimeSource =
         name;
 
-
-      return value;
+      break;
 
     }
 
   }
 
 
+  /*
+   * Sicherheit:
+   * Zeitstempel dürfen niemals rückwärts laufen.
+   */
 
-  frameTimeSource =
-    "performance.now";
+  if (
+    lastFrameTimestamp !==
+      null &&
+    selected <=
+      lastFrameTimestamp
+  ) {
+
+    selected =
+      Math.max(
+        callbackNow,
+        lastFrameTimestamp +
+        0.1
+      );
+
+    frameTimeSource +=
+      "+monoton";
+
+  }
 
 
+  lastFrameTimestamp =
+    selected;
 
-  return performance.now();
+
+  return selected;
 
 }
 
 
-
 /* =====================================================
-   EINEN KONKRETEN VIDEOFRAME
-   DURCH APRILTAG SCHICKEN
+   EINEN VIDEOFRAME DETEKTIEREN
    ===================================================== */
 
 async function detectCurrentVideoFrame(
   frameTime
 ) {
 
-
   detectionRunning =
     true;
 
 
-
   try {
-
-
-    /*
-     * Das Bild wird SOFORT kopiert.
-     *
-     * Dadurch gehört die Pixelmatrix
-     * zu dem Frame, dessen Zeitstempel
-     * wir oben erhalten haben.
-     */
 
     const grayscale =
       createGrayscaleImage();
-
 
 
     const detectStart =
       performance.now();
 
 
-
     const result =
       await apriltag.detect(
-
         grayscale,
-
         WIDTH,
-
         HEIGHT
-
       );
-
 
 
     const detectEnd =
       performance.now();
-
 
 
     lastDetectionLatencyMs =
@@ -3484,23 +4008,12 @@ async function detectCurrentVideoFrame(
       detectStart;
 
 
-
-    /*
-     * Wie alt war das Kamerabild,
-     * als sein Pose-Ergebnis endlich
-     * verfügbar wurde?
-     */
-
     lastFrameAgeAtResultMs =
       Math.max(
-
         0,
-
         detectEnd -
         frameTime
-
       );
-
 
 
     const detections =
@@ -3511,24 +4024,17 @@ async function detectCurrentVideoFrame(
       : [];
 
 
-
     processDetections(
-
       detections,
-
       frameTime
-
     );
-
 
 
     detectionCounter++;
 
 
-
     const now =
       performance.now();
-
 
 
     if (
@@ -3536,7 +4042,6 @@ async function detectCurrentVideoFrame(
       detectionFpsStart >=
       1000
     ) {
-
 
       const seconds =
         (
@@ -3546,17 +4051,12 @@ async function detectCurrentVideoFrame(
         1000;
 
 
-
       detectionFPS =
         detectionCounter /
         seconds;
 
 
-
-      detectionCounter =
-        0;
-
-
+      detectionCounter = 0;
 
       detectionFpsStart =
         now;
@@ -3565,11 +4065,7 @@ async function detectCurrentVideoFrame(
 
   }
 
-
-  catch(
-    error
-  ) {
-
+  catch(error) {
 
     console.error(
       error
@@ -3577,9 +4073,7 @@ async function detectCurrentVideoFrame(
 
   }
 
-
   finally {
-
 
     detectionRunning =
       false;
@@ -3589,27 +4083,14 @@ async function detectCurrentVideoFrame(
 }
 
 
-
 /* =====================================================
-   NEU 5c-9:
-
-   DETEKTION AN TATSÄCHLICHE
-   VIDEOFRAMES KOPPELN
+   requestVideoFrameCallback
    ===================================================== */
 
 function onVideoFrame(
-
   callbackNow,
-
   metadata
-
 ) {
-
-
-  /*
-   * Sofort den nächsten echten
-   * Kameraframe abonnieren.
-   */
 
   video
     .requestVideoFrameCallback(
@@ -3617,45 +4098,31 @@ function onVideoFrame(
     );
 
 
-
   videoFrameCounter++;
 
 
-
-  /* ===================================================
-     VERPASSTE KAMERA-FRAMES ERKENNEN
-     =================================================== */
-
   if (
-
     typeof metadata
       ?.presentedFrames ===
       "number" &&
-
     Number.isFinite(
       metadata.presentedFrames
     )
-
   ) {
-
 
     if (
       lastPresentedFrames !==
       null
     ) {
 
-
       const delta =
         metadata.presentedFrames -
         lastPresentedFrames;
 
 
-
       if (
-        delta >
-        1
+        delta > 1
       ) {
-
 
         skippedPresentedFrames +=
           delta -
@@ -3666,21 +4133,14 @@ function onVideoFrame(
     }
 
 
-
     lastPresentedFrames =
       metadata.presentedFrames;
 
   }
 
 
-
-  /* ===================================================
-     VIDEO-FPS
-     =================================================== */
-
   const now =
     performance.now();
-
 
 
   if (
@@ -3688,7 +4148,6 @@ function onVideoFrame(
     videoFpsStart >=
     1000
   ) {
-
 
     const seconds =
       (
@@ -3698,17 +4157,12 @@ function onVideoFrame(
       1000;
 
 
-
     videoFPS =
       videoFrameCounter /
       seconds;
 
 
-
-    videoFrameCounter =
-      0;
-
-
+    videoFrameCounter = 0;
 
     videoFpsStart =
       now;
@@ -3716,55 +4170,32 @@ function onVideoFrame(
   }
 
 
-
   if (
-
     !cameraReady ||
-
     !detectorReady
-
   ) {
 
     return;
 
   }
 
-
-
-  /*
-   * Wenn AprilTag noch an einem
-   * älteren Frame arbeitet:
-   *
-   * Nicht noch mehr Arbeit aufstauen.
-   *
-   * Stattdessen den nächsten frischen
-   * Frame nehmen, sobald der Detector
-   * wieder frei ist.
-   */
 
   if (
     detectionRunning
   ) {
 
-
     skippedBecauseBusy++;
-
 
     return;
 
   }
 
 
-
   const frameTime =
     getFrameTimestamp(
-
       callbackNow,
-
       metadata
-
     );
-
 
 
   detectCurrentVideoFrame(
@@ -3772,7 +4203,6 @@ function onVideoFrame(
   );
 
 }
-
 
 
 /* =====================================================
@@ -3783,30 +4213,22 @@ let fallbackLastVideoTime =
   -1;
 
 
-
 function fallbackVideoFrameLoop() {
-
 
   requestAnimationFrame(
     fallbackVideoFrameLoop
   );
 
 
-
   if (
-
     !cameraReady ||
-
     !detectorReady ||
-
     detectionRunning
-
   ) {
 
     return;
 
   }
-
 
 
   if (
@@ -3819,15 +4241,12 @@ function fallbackVideoFrameLoop() {
   }
 
 
-
   fallbackLastVideoTime =
     video.currentTime;
 
 
-
   frameTimeSource =
     "Fallback";
-
 
 
   detectCurrentVideoFrame(
@@ -3837,20 +4256,17 @@ function fallbackVideoFrameLoop() {
 }
 
 
-
 /* =====================================================
    VIDEO-VERARBEITUNG STARTEN
    ===================================================== */
 
 function startVideoProcessing() {
 
-
   if (
     typeof video
       .requestVideoFrameCallback ===
     "function"
   ) {
-
 
     video
       .requestVideoFrameCallback(
@@ -3859,9 +4275,7 @@ function startVideoProcessing() {
 
   }
 
-
   else {
-
 
     requestAnimationFrame(
       fallbackVideoFrameLoop
@@ -3872,106 +4286,74 @@ function startVideoProcessing() {
 }
 
 
-
 /* =====================================================
-   RENDERING
-
-   LETZTE ECHTE WÜRFELMESSUNG
-   BIS ZUM AKTUELLEN DISPLAYFRAME
-   VORHERSAGEN.
-
-   KEIN LERP / SLERP DER POSE.
+   RENDERPOSE
+   5c-9 / 5c-5
+   KEINE ZUSÄTZLICHE GLÄTTUNG
    ===================================================== */
 
 function updateRenderedPose(
   now
 ) {
 
-
   if (
-
     !hasGoodPose ||
-
     lastGoodPoseTime ===
       null
-
   ) {
-
 
     methane.visible =
       false;
 
-
     trackingMode =
       "KEINE POSE";
-
 
     return;
 
   }
 
 
-
   const ageMs =
     Math.max(
-
       0,
-
       now -
       lastGoodPoseTime
-
     );
 
-
-
-  /*
-   * Bewährte Grenze aus 5c-5.
-   */
 
   if (
     ageMs >
     MAX_PREDICTION_TIME_MS
   ) {
 
-
     methane.visible =
       false;
 
-
     trackingMode =
       "VERLOREN";
-
 
     return;
 
   }
 
 
-
   const predicted =
     predictedPoseAt(
-
       now,
-
       MAX_PREDICTION_TIME_MS
-
     );
-
 
 
   if (
     !predicted
   ) {
 
-
     methane.visible =
       false;
-
 
     return;
 
   }
-
 
 
   methane.position.copy(
@@ -3979,51 +4361,32 @@ function updateRenderedPose(
   );
 
 
-
   methane.quaternion.copy(
     predicted.quaternion
   );
-
 
 
   methane.visible =
     true;
 
 
-
-  /*
-   * Wenn das letzte Kamerabild
-   * noch sehr frisch ist,
-   * handelt es sich hauptsächlich
-   * um Latenzkompensation.
-   *
-   * Erst bei längerer Lücke
-   * nennen wir es Prognose.
-   */
-
   if (
-
     ageMs <=
     Math.max(
-
       55,
-
       lastFrameAgeAtResultMs +
       10
-
     )
-
   ) {
 
-
     trackingMode =
-      "APRILTAG + ZEITKOMP.";
+      lastJointUsed
+        ? "JOINT + ZEITKOMP."
+        : "APRILTAG + ZEITKOMP.";
 
   }
 
-
   else {
-
 
     trackingMode =
       "PROGNOSE";
@@ -4033,38 +4396,30 @@ function updateRenderedPose(
 }
 
 
-
 /* =====================================================
    CANVAS-GEOMETRIE
    ===================================================== */
 
 function resize() {
 
-
   const screenWidth =
     window.innerWidth;
 
-
   const screenHeight =
     window.innerHeight;
-
 
 
   const videoAspect =
     WIDTH /
     HEIGHT;
 
-
   const screenAspect =
     screenWidth /
     screenHeight;
 
 
-
   let displayWidth;
-
   let displayHeight;
-
 
 
   if (
@@ -4072,10 +4427,8 @@ function resize() {
     videoAspect
   ) {
 
-
     displayHeight =
       screenHeight;
-
 
     displayWidth =
       displayHeight *
@@ -4083,20 +4436,16 @@ function resize() {
 
   }
 
-
   else {
-
 
     displayWidth =
       screenWidth;
-
 
     displayHeight =
       displayWidth /
       videoAspect;
 
   }
-
 
 
   const left =
@@ -4107,7 +4456,6 @@ function resize() {
     2;
 
 
-
   const top =
     (
       screenHeight -
@@ -4116,21 +4464,17 @@ function resize() {
     2;
 
 
-
   threeCanvas.style.width =
     displayWidth +
     "px";
-
 
   threeCanvas.style.height =
     displayHeight +
     "px";
 
-
   threeCanvas.style.left =
     left +
     "px";
-
 
   threeCanvas.style.top =
     top +
@@ -4139,15 +4483,12 @@ function resize() {
 }
 
 
-
 window.addEventListener(
   "resize",
   resize
 );
 
-
 resize();
-
 
 
 /* =====================================================
@@ -4158,160 +4499,126 @@ function updateStatus(
   now
 ) {
 
-
   const ids =
-    lastVisibleIDs.length >
-    0
-
-      ? lastVisibleIDs.join(
-          ", "
-        )
-
+    lastVisibleIDs.length > 0
+      ? lastVisibleIDs.join(", ")
       : "–";
 
 
-
   const age =
-    lastGoodPoseTime ===
-    null
-
+    lastGoodPoseTime === null
       ? 0
-
       : Math.max(
-
           0,
-
           now -
           lastGoodPoseTime
-
         );
 
 
-
   const posSpread =
-    lastCenterSpread ===
-    null
-
+    lastCenterSpread === null
       ? "–"
-
       : (
           lastCenterSpread *
           1000
-        ).toFixed(
-          1
-        ) +
+        ).toFixed(1) +
         " mm";
 
 
-
   const rotSpread =
-    lastRotationSpread ===
-    null
-
+    lastRotationSpread === null
       ? "–"
-
       : lastRotationSpread
-          .toFixed(
-            2
-          ) +
+          .toFixed(2) +
         "°";
 
 
-
   const scoreText =
-    lastSolutionScore ===
-    null
+    lastSolutionScore === null
+      ? "–"
+      : lastSolutionScore
+          .toFixed(2);
+
+
+  const reprojectionText =
+    lastReprojectionBefore === null ||
+    lastReprojectionAfter === null
 
       ? "–"
 
-      : lastSolutionScore
-          .toFixed(
-            2
-          );
-
+      : lastReprojectionBefore
+          .toFixed(2) +
+        " → " +
+        lastReprojectionAfter
+          .toFixed(2) +
+        " px";
 
 
   status.textContent =
 
-
     "GeoChemAR " +
     VERSION +
-
 
     "\nSichtbare IDs: " +
     ids +
 
-
     "\nKamera-Frames/s: " +
-    videoFPS.toFixed(
-      1
-    ) +
-
+    videoFPS.toFixed(1) +
 
     "\nErkennungen/s: " +
-    detectionFPS.toFixed(
-      1
-    ) +
-
+    detectionFPS.toFixed(1) +
 
     "\n\nTracking: " +
     trackingMode +
 
-
     "\nMessalter: " +
-    age.toFixed(
-      0
-    ) +
+    age.toFixed(0) +
     " ms" +
-
 
     "\nDetektorzeit: " +
-    lastDetectionLatencyMs.toFixed(
-      0
-    ) +
+    lastDetectionLatencyMs.toFixed(0) +
     " ms" +
 
-
-    "\nFramealter bei Ergebnis: " +
-    lastFrameAgeAtResultMs.toFixed(
-      0
-    ) +
+    "\nFramealter: " +
+    lastFrameAgeAtResultMs.toFixed(0) +
     " ms" +
 
+    "\n\nJoint-Pose: " +
+    (
+      lastJointUsed
+        ? "JA"
+        : "NEIN"
+    ) +
 
-    "\nZeitquelle: " +
-    frameTimeSource +
+    "\nJoint-Tags: " +
+    lastJointTags +
 
+    "\nReprojektion: " +
+    reprojectionText +
+
+    "\nJoint-Zeit: " +
+    lastJointTimeMs.toFixed(2) +
+    " ms" +
 
     "\n\nAlt-Pose aktuell: " +
     lastAltSelections +
 
-
-    "\nAlt-Pose gesamt: " +
-    totalAltSelections +
-
-
     "\nLösungsscore: " +
     scoreText +
 
-
-    "\n\nPositionsabw.: " +
+    "\nPositionsabw.: " +
     posSpread +
-
 
     "\nRotationsabw.: " +
     rotSpread +
 
-
     "\nBusy übersprungen: " +
     skippedBecauseBusy +
-
 
     "\nVideo-Frames verpasst: " +
     skippedPresentedFrames;
 
 }
-
 
 
 /* =====================================================
@@ -4322,11 +4629,9 @@ function animate(
   now
 ) {
 
-
   requestAnimationFrame(
     animate
   );
-
 
 
   updateRenderedPose(
@@ -4334,11 +4639,9 @@ function animate(
   );
 
 
-
   updateStatus(
     now
   );
-
 
 
   renderer.render(
@@ -4349,7 +4652,6 @@ function animate(
 }
 
 
-
 /* =====================================================
    FEHLER
    ===================================================== */
@@ -4358,15 +4660,12 @@ function showError(
   error
 ) {
 
-
   console.error(
     error
   );
 
-
   errorBox.style.display =
     "block";
-
 
   errorBox.textContent =
     "FEHLER:\n" +
@@ -4380,37 +4679,29 @@ function showError(
 }
 
 
-
 /* =====================================================
    START
    ===================================================== */
 
 async function start() {
 
-
   try {
-
 
     status.textContent =
       "AprilTag wird geladen …";
 
 
-
     await initializeAprilTag();
-
 
 
     status.textContent =
       "AprilTag bereit ✓\nKamera wird gestartet …";
 
 
-
     await startCamera();
 
 
-
     startVideoProcessing();
-
 
 
     requestAnimationFrame(
@@ -4419,11 +4710,7 @@ async function start() {
 
   }
 
-
-  catch(
-    error
-  ) {
-
+  catch(error) {
 
     showError(
       error
@@ -4434,9 +4721,7 @@ async function start() {
 }
 
 
-
 start();
-
 
 </script>
 
