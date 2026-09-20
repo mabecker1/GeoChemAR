@@ -8,7 +8,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>GeoChemAR – Methan Einzelmarker-Test</title>
+  <title>GeoChemAR – MultiMarker API-Test</title>
 
   <style>
     html, body {
@@ -28,11 +28,12 @@
       z-index: 9999;
       padding: 10px 14px;
       border-radius: 8px;
-      background: rgba(0,0,0,0.75);
+      background: rgba(0,0,0,0.78);
       color: white;
       font-size: 14px;
       line-height: 1.5;
       pointer-events: none;
+      white-space: pre-line;
     }
 
     #error {
@@ -142,21 +143,26 @@ function showError(error) {
 try {
 
   /* =====================================================
-     1. MODULE LADEN
+     1. MODULE
      ===================================================== */
 
-  setStatus("2 – Three.js wird geladen …");
+  setStatus(
+    "2 – Three.js wird geladen …"
+  );
 
   const THREE =
     await import("three");
 
-  setStatus("3 – Three.js geladen");
-
+  setStatus(
+    "3 – Three.js geladen"
+  );
 
   const THREEX =
     await import("threex");
 
-  setStatus("4 – AR.js geladen");
+  setStatus(
+    "4 – AR.js geladen"
+  );
 
 
   const {
@@ -236,19 +242,12 @@ try {
 
 
   /* =====================================================
-     4. METHANMODELL
-
-     Bewährte Geometrie aus unserem bisherigen
-     GeoChemAR-Modell.
+     4. METHAN
      ===================================================== */
 
   const methane =
     new THREE.Group();
 
-
-  /*
-   * Größen
-   */
 
   const carbonRadius =
     0.22;
@@ -262,11 +261,6 @@ try {
   const bondRadius =
     0.040;
 
-
-
-  /*
-   * Materialien
-   */
 
   const carbonMaterial =
     new THREE.MeshBasicMaterial({
@@ -287,9 +281,7 @@ try {
 
 
 
-  /*
-   * Kohlenstoffatom
-   */
+  /* Kohlenstoff */
 
   const carbon =
     new THREE.Mesh(
@@ -311,9 +303,7 @@ try {
 
 
 
-  /*
-   * Exakte Tetraederrichtungen
-   */
+  /* Exakte Tetraederrichtungen */
 
   const directions = [
 
@@ -345,16 +335,10 @@ try {
 
 
 
-  /*
-   * Wasserstoffatome und Bindungen
-   */
-
   directions.forEach(
     function(direction) {
 
-      /* -------------------------
-         Wasserstoffatom
-         ------------------------- */
+      /* Wasserstoff */
 
       const hydrogen =
         new THREE.Mesh(
@@ -387,13 +371,7 @@ try {
 
 
 
-      /* -------------------------
-         Bindung
-
-         exakt von der Oberfläche
-         des C-Atoms bis zur
-         Oberfläche des H-Atoms
-         ------------------------- */
+      /* Bindung */
 
       const startDistance =
         carbonRadius;
@@ -434,23 +412,19 @@ try {
 
       const bondGeometry =
         new THREE.CylinderGeometry(
-
           bondRadius,
           bondRadius,
           bondLength,
           32,
           1,
           false
-
         );
 
 
       const bond =
         new THREE.Mesh(
-
           bondGeometry,
           bondMaterial
-
         );
 
 
@@ -490,13 +464,6 @@ try {
 
 
 
-  /*
-   * Methan etwas über der Markerfläche.
-   *
-   * Die Markerfläche liegt in der X/Z-Ebene.
-   * +Y zeigt aus dem Marker heraus.
-   */
-
   methane.position.set(
     0,
     0.75,
@@ -511,7 +478,7 @@ try {
 
 
   /* =====================================================
-     5. AR SOURCE
+     5. KAMERA
      ===================================================== */
 
   const arToolkitSource =
@@ -534,11 +501,6 @@ try {
 
     });
 
-
-
-  /* =====================================================
-     6. KAMERA ZUERST STARTEN
-     ===================================================== */
 
   setStatus(
     "5 – Kamera wird angefordert …"
@@ -567,10 +529,6 @@ try {
 
 
 
-  /* =====================================================
-     7. VIDEOELEMENT PRÜFEN
-     ===================================================== */
-
   const video =
     arToolkitSource.domElement;
 
@@ -588,7 +546,6 @@ try {
     "playsinline",
     ""
   );
-
 
   video.muted =
     true;
@@ -614,6 +571,10 @@ try {
 
 
 
+  /* =====================================================
+     6. AUF ECHTES VIDEOBILD WARTEN
+     ===================================================== */
+
   if (
     video.readyState < 2 ||
     video.videoWidth === 0
@@ -633,7 +594,7 @@ try {
 
               reject(
                 new Error(
-                  "Die Kamera wurde geöffnet, liefert aber nach 10 Sekunden noch kein Videobild."
+                  "Die Kamera liefert nach 10 Sekunden noch kein Videobild."
                 )
               );
 
@@ -693,17 +654,9 @@ try {
   }
 
 
-  setStatus(
-    "7 – Video bereit: " +
-    video.videoWidth +
-    " × " +
-    video.videoHeight
-  );
-
-
 
   /* =====================================================
-     8. BEWÄHRTE KAMERAEINSTELLUNGEN
+     7. BEWÄHRTE 640×480 / 30 FPS
      ===================================================== */
 
   try {
@@ -750,7 +703,7 @@ try {
   catch(error) {
 
     console.warn(
-      "Kamera-Constraints konnten nicht vollständig angewendet werden.",
+      "Kamera-Constraints:",
       error
     );
 
@@ -759,11 +712,11 @@ try {
 
 
   /* =====================================================
-     9. ARTOOLKIT CONTEXT
+     8. ARTOOLKIT
      ===================================================== */
 
   setStatus(
-    "8 – ARToolKit wird initialisiert …"
+    "7 – ARToolKit wird initialisiert …"
   );
 
 
@@ -831,14 +784,73 @@ try {
   );
 
 
-  setStatus(
-    "9 – ARToolKit bereit"
+
+  /* =====================================================
+     9. MULTIMARKER-API DIAGNOSE
+     ===================================================== */
+
+  const controller =
+    arToolkitContext.arController;
+
+
+  if (!controller) {
+
+    throw new Error(
+      "arToolkitContext.arController ist nicht vorhanden."
+    );
+
+  }
+
+
+  const hasLoadMultiMarker =
+    typeof controller.loadMultiMarker ===
+    "function";
+
+
+  const hasGetMultiMarkerCount =
+    typeof controller.getMultiMarkerCount ===
+    "function";
+
+
+  const hasGetMultiMarkerPatternCount =
+    typeof controller.getMultiMarkerPatternCount ===
+    "function";
+
+
+  const apiText =
+
+    "MultiMarker-API:\n" +
+
+    "loadMultiMarker: " +
+    (
+      hasLoadMultiMarker
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "\ngetMultiMarkerCount: " +
+    (
+      hasGetMultiMarkerCount
+        ? "JA"
+        : "NEIN"
+    ) +
+
+    "\ngetMultiMarkerPatternCount: " +
+    (
+      hasGetMultiMarkerPatternCount
+        ? "JA"
+        : "NEIN"
+    );
+
+
+  console.log(
+    apiText
   );
 
 
 
   /* =====================================================
-     10. BARCODE-MARKER 1
+     10. MARKER 1 – UNVERÄNDERT
      ===================================================== */
 
   const markerControls =
@@ -869,7 +881,7 @@ try {
 
 
   /* =====================================================
-     11. GRÖSSEN SYNCHRONISIEREN
+     11. RESIZE
      ===================================================== */
 
   function onResize() {
@@ -917,14 +929,21 @@ try {
     "2";
 
 
+
+  /* =====================================================
+     12. STATUS
+     ===================================================== */
+
   setStatus(
-    "10 – Kamera läuft – Marker 1 zeigen"
+    "API-Test abgeschlossen\n\n" +
+    apiText +
+    "\n\nMarker 1 zeigen"
   );
 
 
 
   /* =====================================================
-     12. RENDER LOOP
+     13. RENDER LOOP
      ===================================================== */
 
   let previousVisible =
@@ -963,7 +982,8 @@ try {
       ) {
 
         setStatus(
-          "11 – Marker 1 erkannt – Methan"
+          "Marker 1 erkannt – Methan\n\n" +
+          apiText
         );
 
       }
@@ -971,7 +991,8 @@ try {
       else {
 
         setStatus(
-          "10 – Kamera läuft – Marker 1 zeigen"
+          "Marker 1 nicht sichtbar\n\n" +
+          apiText
         );
 
       }
