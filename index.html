@@ -204,7 +204,7 @@ function showError(error) {
 /* =====================================================
    KAMERAMODELL
 
-   UNVERÄNDERT AUS 5b-6
+   UNVERÄNDERT AUS 5b-6 / 5b-7
    ===================================================== */
 
 const cx =
@@ -213,16 +213,13 @@ const cx =
 const cy =
   HEIGHT / 2;
 
-
 const horizontalFovDeg =
   60;
-
 
 const horizontalFovRad =
   THREE.MathUtils.degToRad(
     horizontalFovDeg
   );
-
 
 const fx =
   (WIDTH / 2) /
@@ -230,10 +227,8 @@ const fx =
     horizontalFovRad / 2
   );
 
-
 const fy =
   fx;
-
 
 const verticalFovRad =
   2 *
@@ -241,7 +236,6 @@ const verticalFovRad =
     HEIGHT /
     (2 * fy)
   );
-
 
 const verticalFovDeg =
   THREE.MathUtils.radToDeg(
@@ -256,7 +250,6 @@ const verticalFovDeg =
 const scene =
   new THREE.Scene();
 
-
 const camera =
   new THREE.PerspectiveCamera(
     verticalFovDeg,
@@ -265,13 +258,11 @@ const camera =
     10
   );
 
-
 camera.position.set(
   0,
   0,
   0
 );
-
 
 camera.lookAt(
   0,
@@ -286,16 +277,13 @@ const renderer =
     antialias: true
   });
 
-
 renderer.domElement.id =
   "threeCanvas";
-
 
 renderer.setClearColor(
   0x000000,
   0
 );
-
 
 renderer.setPixelRatio(
   Math.min(
@@ -304,26 +292,20 @@ renderer.setPixelRatio(
   )
 );
 
-
 document.body.appendChild(
   renderer.domElement
 );
 
 
 /* =====================================================
-   TAG-OBJEKT
-
-   Dieses Object3D erhält später sowohl
-   Translation als auch Rotation.
+   TAG-ROOT
    ===================================================== */
 
 const tagRoot =
   new THREE.Group();
 
-
 tagRoot.visible =
   false;
-
 
 scene.add(
   tagRoot
@@ -332,13 +314,6 @@ scene.add(
 
 /* =====================================================
    ACHSEN
-
-   X = rot
-   Y = grün
-   Z = blau
-
-   Unterschiedliche Längen machen die
-   Orientierung eindeutig erkennbar.
    ===================================================== */
 
 function createAxis(
@@ -350,7 +325,6 @@ function createAxis(
   const radius =
     0.0025;
 
-
   const geometry =
     new THREE.CylinderGeometry(
       radius,
@@ -359,12 +333,10 @@ function createAxis(
       16
     );
 
-
   const material =
     new THREE.MeshBasicMaterial({
       color: color
     });
-
 
   const cylinder =
     new THREE.Mesh(
@@ -372,24 +344,20 @@ function createAxis(
       material
     );
 
-
-  /*
-   * CylinderGeometry zeigt standardmäßig
-   * entlang der lokalen Y-Achse.
-   */
-
   const dir =
     direction
       .clone()
       .normalize();
 
-
   cylinder.quaternion
     .setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(
+        0,
+        1,
+        0
+      ),
       dir
     );
-
 
   cylinder.position.copy(
     dir
@@ -399,63 +367,49 @@ function createAxis(
       )
   );
 
-
   return cylinder;
 
 }
 
 
-/*
- * X-Achse:
- * rot, 30 mm
- */
-
 tagRoot.add(
-
   createAxis(
-    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(
+      1,
+      0,
+      0
+    ),
     0.030,
     0xff0000
   )
-
 );
 
 
-/*
- * Y-Achse:
- * grün, 25 mm
- */
-
 tagRoot.add(
-
   createAxis(
-    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(
+      0,
+      1,
+      0
+    ),
     0.025,
     0x00ff00
   )
-
 );
 
 
-/*
- * Z-Achse:
- * blau, 20 mm
- */
-
 tagRoot.add(
-
   createAxis(
-    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(
+      0,
+      0,
+      1
+    ),
     0.020,
     0x0080ff
   )
-
 );
 
-
-/*
- * Kleine weiße Kugel als Ursprung.
- */
 
 const originSphere =
   new THREE.Mesh(
@@ -471,7 +425,6 @@ const originSphere =
     })
 
   );
-
 
 tagRoot.add(
   originSphere
@@ -520,10 +473,8 @@ async function initializeAprilTag() {
       "./libs/apriltag.js"
     );
 
-
   const Apriltag =
     Comlink.wrap(worker);
-
 
   apriltag =
     await new Apriltag(
@@ -548,12 +499,16 @@ async function initializeAprilTag() {
 
     await new Promise(
       resolve =>
-        setTimeout(resolve, 20)
+        setTimeout(
+          resolve,
+          20
+        )
     );
 
 
     if (
-      performance.now() - start >
+      performance.now() -
+      start >
       15000
     ) {
 
@@ -671,7 +626,6 @@ async function startCamera() {
 
   await video.play();
 
-
   cameraReady =
     true;
 
@@ -738,15 +692,60 @@ function createGrayscaleImage() {
 /* =====================================================
    APRILTAG-POSE → THREE.JS
 
-   NEU IN 5b-7:
-   Rotation R wird zusätzlich übernommen.
+   Translation bleibt unverändert.
+
+   In 5b-8 korrigieren wir ausschließlich
+   die Orientierung des lokalen
+   Marker-Koordinatensystems.
    ===================================================== */
+
+const basisChange =
+  new THREE.Matrix4().set(
+
+     1,  0,  0, 0,
+     0, -1,  0, 0,
+     0,  0, -1, 0,
+     0,  0,  0, 1
+
+  );
+
+
+/*
+ * Lokale Korrektur:
+ *
+ * X bleibt X
+ * Y wird -Y
+ * Z wird -Z
+ *
+ * Das entspricht einer Rotation von 180°
+ * um die lokale X-Achse.
+ *
+ * Wichtig:
+ * Das ist eine echte Rotation
+ * (Determinante +1), keine einzelne
+ * Matrix-Spiegelung.
+ */
+
+const localCorrection =
+  new THREE.Matrix4().makeRotationX(
+    Math.PI
+  );
+
+
+const aprilRotation =
+  new THREE.Matrix4();
+
+const convertedRotation =
+  new THREE.Matrix4();
+
+const finalRotation =
+  new THREE.Matrix4();
+
 
 function applyPose(pose) {
 
   poseReceived =
     false;
-
 
   tagRoot.visible =
     false;
@@ -789,7 +788,7 @@ function applyPose(pose) {
   /* -------------------------------------------------
      TRANSLATION
 
-     Bereits in 5b-6 bestätigt.
+     Unverändert und bereits bestätigt.
      ------------------------------------------------- */
 
   tagRoot.position.set(
@@ -800,29 +799,8 @@ function applyPose(pose) {
 
 
   /* -------------------------------------------------
-     ROTATION
-
-     AprilTag-Kamerakoordinaten:
-
-     X rechts
-     Y unten
-     Z nach vorne
-
-     Three.js:
-
-     X rechts
-     Y oben
-     Z nach hinten
-
-     Der Basiswechsel ist:
-
-     C = diag(1, -1, -1)
-
-     Für eine Rotation gilt:
-
-     R_three = C * R_apriltag * C
+     APRILTAG ROTATION EINLESEN
      ------------------------------------------------- */
-
 
   const r00 =
     Number(pose.R[0][0]);
@@ -870,40 +848,53 @@ function applyPose(pose) {
   }
 
 
-  /*
-   * Ergebnis von
-   *
-   * C * R * C
-   *
-   * mit C = diag(1,-1,-1)
-   */
+  aprilRotation.set(
 
-  const rotationMatrix =
-    new THREE.Matrix4();
-
-
-  rotationMatrix.set(
-
-     r00, -r01, -r02, 0,
-
-    -r10,  r11,  r12, 0,
-
-    -r20,  r21,  r22, 0,
-
-     0,     0,     0,   1
+    r00, r01, r02, 0,
+    r10, r11, r12, 0,
+    r20, r21, r22, 0,
+    0,   0,   0,   1
 
   );
 
 
+  /* -------------------------------------------------
+     BASISWECHSEL
+
+     C * R * C
+
+     Genau wie in 5b-7.
+     ------------------------------------------------- */
+
+  convertedRotation
+    .copy(basisChange)
+    .multiply(aprilRotation)
+    .multiply(basisChange);
+
+
+  /* -------------------------------------------------
+     NEU:
+
+     lokale Orientierung des Tag-Objekts
+     korrigieren.
+
+     R_final =
+       R_converted * R_local
+     ------------------------------------------------- */
+
+  finalRotation
+    .copy(convertedRotation)
+    .multiply(localCorrection);
+
+
   tagRoot.quaternion
     .setFromRotationMatrix(
-      rotationMatrix
+      finalRotation
     );
 
 
   tagRoot.visible =
     true;
-
 
   poseReceived =
     true;
@@ -966,7 +957,6 @@ async function detectFrame() {
       tagDetected =
         true;
 
-
       applyPose(
         detection.pose
       );
@@ -1000,7 +990,10 @@ async function detectFrame() {
     ) {
 
       const seconds =
-        (now - fpsStart) / 1000;
+        (
+          now -
+          fpsStart
+        ) / 1000;
 
 
       detectionFPS =
@@ -1010,7 +1003,6 @@ async function detectFrame() {
 
       detectionCounter =
         0;
-
 
       fpsStart =
         now;
@@ -1037,8 +1029,6 @@ async function detectFrame() {
 
 /* =====================================================
    GRÜNER 2D-MITTELPUNKT
-
-   Bleibt als unabhängige Kontrolle erhalten.
    ===================================================== */
 
 function drawOverlay() {
@@ -1110,7 +1100,6 @@ function drawOverlay() {
 
   overlayCtx.beginPath();
 
-
   overlayCtx.arc(
     x,
     y,
@@ -1119,14 +1108,11 @@ function drawOverlay() {
     Math.PI * 2
   );
 
-
   overlayCtx.lineWidth =
     3;
 
-
   overlayCtx.strokeStyle =
     "#00ff00";
-
 
   overlayCtx.stroke();
 
@@ -1234,7 +1220,6 @@ function resize() {
   camera.aspect =
     WIDTH / HEIGHT;
 
-
   camera.updateProjectionMatrix();
 
 }
@@ -1278,7 +1263,7 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-7 – ROTATION\n\n" +
+    "APRILTAG 5b-8 – ROTATIONSTEST\n\n" +
 
     "Rot = X\n" +
     "Grün = Y\n" +
@@ -1314,13 +1299,10 @@ async function start() {
 
     await initializeAprilTag();
 
-
     status.textContent =
       "Kamera wird gestartet …";
 
-
     await startCamera();
-
 
     requestAnimationFrame(
       animate
