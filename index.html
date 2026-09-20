@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – 5c-4 Vollständiges Cube-Tracking</title>
+<title>GeoChemAR – 5c-5 Prädiktives Cube-Tracking</title>
 
 <style>
 html,
@@ -138,7 +138,7 @@ import * as Comlink
    VERSION
    ===================================================== */
 
-const VERSION = "5c-4";
+const VERSION = "5c-5";
 
 
 /* =====================================================
@@ -155,8 +155,44 @@ const HALF_CUBE = CUBE_SIZE / 2;
 
 
 /* =====================================================
+   NEU IN 5c-5:
+   KURZE POSE-VORHERSAGE
+
+   5c-4 bleibt ansonsten unverändert.
+   ===================================================== */
+
+/*
+ * Wie lange darf nach Verlust aller Marker
+ * weiter vorhergesagt werden?
+ */
+
+const MAX_PREDICTION_TIME_MS = 180;
+
+
+/*
+ * Geschwindigkeit wird leicht gemittelt.
+ *
+ * Das glättet NICHT die normale Würfelpose.
+ * Es stabilisiert ausschließlich die für eine
+ * spätere Vorhersage geschätzte Geschwindigkeit.
+ */
+
+const VELOCITY_BLEND = 0.35;
+
+
+/*
+ * Sehr unrealistische Geschwindigkeitsschätzungen
+ * werden begrenzt, damit ein einzelner fehlerhafter
+ * Frame das Molekül nicht wegschießt.
+ */
+
+const MAX_LINEAR_SPEED = 1.5;      // Meter / Sekunde
+const MAX_ANGULAR_SPEED = 12.0;    // Radiant / Sekunde
+
+
+/* =====================================================
    KAMERAMODELL
-   UNVERÄNDERT AUS 5b-10 / 5c-2f
+   UNVERÄNDERT
    ===================================================== */
 
 const horizontalFovDeg = 60;
@@ -249,8 +285,67 @@ let fpsStart =
   performance.now();
 
 let lastVisibleIDs = [];
+
 let lastCenterSpread = null;
 let lastRotationSpread = null;
+
+
+/* =====================================================
+   NEU IN 5c-5:
+   TRACKING-ZUSTAND
+   ===================================================== */
+
+let hasGoodPose = false;
+
+let previousPoseTime = null;
+let lastGoodPoseTime = null;
+
+const previousGoodPosition =
+  new THREE.Vector3();
+
+const lastGoodPosition =
+  new THREE.Vector3();
+
+const previousGoodQuaternion =
+  new THREE.Quaternion();
+
+const lastGoodQuaternion =
+  new THREE.Quaternion();
+
+
+/*
+ * Geschätzte lineare Geschwindigkeit.
+ */
+
+const linearVelocity =
+  new THREE.Vector3();
+
+
+/*
+ * Winkelgeschwindigkeit wird als
+ *
+ * Achse + rad/s
+ *
+ * gespeichert.
+ */
+
+const angularVelocityAxis =
+  new THREE.Vector3(
+    1,
+    0,
+    0
+  );
+
+let angularVelocity = 0;
+
+
+/*
+ * Statusanzeige.
+ */
+
+let trackingMode = "KEINE POSE";
+
+let predictionAgeMs = 0;
 
 
 /* =====================================================
@@ -374,11 +469,7 @@ for (
 /* =====================================================
    WÜRFELZENTREN
 
-   Für jeden Tag:
-   lokales +Z zeigt aus dem Würfel heraus.
-
-   Das Würfelzentrum liegt deshalb
-   22,5 mm in lokaler -Z-Richtung.
+   Bewährte Geometrie aus 5c-4.
    ===================================================== */
 
 const centerObjects = {};
@@ -411,20 +502,12 @@ for (
 /* =====================================================
    IDEALE ROTATIONEN
 
-   qRelative[id] beschreibt:
-
-   ID3 -> ID[id]
-
-   Alle Werte stammen aus den jetzt
-   abgeschlossenen Kalibrierungen,
-   auf ideale Würfelrotationen gerundet.
+   ID 3 ist Referenz.
+   Unverändert aus 5c-4.
    ===================================================== */
 
 const relativeFrom3 = {
 
-  /*
-   * ID 0
-   */
   0: new THREE.Quaternion(
      0.5,
     -0.5,
@@ -432,9 +515,6 @@ const relativeFrom3 = {
      0.5
   ),
 
-  /*
-   * ID 1
-   */
   1: new THREE.Quaternion(
     -0.5,
     -0.5,
@@ -442,9 +522,6 @@ const relativeFrom3 = {
      0.5
   ),
 
-  /*
-   * ID 2
-   */
   2: new THREE.Quaternion(
     0,
     Math.SQRT1_2,
@@ -452,9 +529,6 @@ const relativeFrom3 = {
     Math.SQRT1_2
   ),
 
-  /*
-   * ID 3 = Referenz
-   */
   3: new THREE.Quaternion(
     0,
     0,
@@ -462,9 +536,6 @@ const relativeFrom3 = {
     1
   ),
 
-  /*
-   * ID 4
-   */
   4: new THREE.Quaternion(
     0,
     -Math.SQRT1_2,
@@ -472,9 +543,6 @@ const relativeFrom3 = {
     Math.SQRT1_2
   ),
 
-  /*
-   * ID 5
-   */
   5: new THREE.Quaternion(
     0,
     -1,
@@ -487,17 +555,6 @@ const relativeFrom3 = {
 
 const correctionTo3 = {};
 
-
-/*
- * Gemessen gilt:
- *
- * qTagID = qCube * qRelative
- *
- * daher:
- *
- * qCube =
- * qTagID * inverse(qRelative)
- */
 
 for (
   let id = 0;
@@ -519,6 +576,7 @@ for (
 
 /* =====================================================
    METHAN
+   UNVERÄNDERT
    ===================================================== */
 
 function createMethane() {
@@ -580,10 +638,6 @@ function createMethane() {
     );
 
 
-  /*
-   * C-Atom exakt im Ursprung.
-   */
-
   group.add(carbon);
 
 
@@ -640,11 +694,6 @@ function createMethane() {
 
     group.add(hydrogen);
 
-
-    /*
-     * Bindung exakt Kugeloberfläche
-     * zu Kugeloberfläche.
-     */
 
     const startDistance =
       carbonRadius;
@@ -747,6 +796,7 @@ scene.add(methane);
 
 /* =====================================================
    BEWÄHRTE 5b-10 APRILTAG-POSE
+   UNVERÄNDERT
    ===================================================== */
 
 const basisChange =
@@ -830,20 +880,12 @@ function applyAprilTagPose(
   }
 
 
-  /*
-   * Bewährte Translation.
-   */
-
   root.position.set(
     tx,
     -ty,
     -tz
   );
 
-
-  /*
-   * Bewährte transponierte Rotation.
-   */
 
   const aprilRotation =
     new THREE.Matrix4();
@@ -904,7 +946,6 @@ function applyAprilTagPose(
 
 
 /* =====================================================
-   HILFSFUNKTION:
    ROTATIONSDIFFERENZ
    ===================================================== */
 
@@ -938,7 +979,484 @@ function quaternionAngleDegrees(
 
 
 /* =====================================================
-   WÜRFELPOSE AUS ALLEN SICHTBAREN TAGS
+   NEU IN 5c-5:
+   GUTE POSE SPEICHERN UND
+   GESCHWINDIGKEIT BESTIMMEN
+   ===================================================== */
+
+function registerGoodPose(
+  position,
+  quaternion,
+  time
+) {
+
+  /*
+   * Erste bekannte Pose:
+   * noch keine Geschwindigkeit bestimmbar.
+   */
+
+  if (
+    !hasGoodPose
+  ) {
+
+    previousGoodPosition.copy(
+      position
+    );
+
+    lastGoodPosition.copy(
+      position
+    );
+
+
+    previousGoodQuaternion.copy(
+      quaternion
+    );
+
+    lastGoodQuaternion.copy(
+      quaternion
+    );
+
+
+    previousPoseTime = time;
+    lastGoodPoseTime = time;
+
+
+    linearVelocity.set(
+      0,
+      0,
+      0
+    );
+
+    angularVelocity = 0;
+
+
+    hasGoodPose = true;
+
+    return;
+
+  }
+
+
+  const dt =
+    (
+      time -
+      lastGoodPoseTime
+    ) / 1000;
+
+
+  /*
+   * Nur aufeinanderfolgende, zeitlich
+   * sinnvolle Messungen zur
+   * Geschwindigkeitsbestimmung verwenden.
+   */
+
+  if (
+    dt > 0.005 &&
+    dt < 0.15
+  ) {
+
+    /* =================================================
+       LINEARE GESCHWINDIGKEIT
+       ================================================= */
+
+    const measuredLinearVelocity =
+      position
+        .clone()
+        .sub(
+          lastGoodPosition
+        )
+        .divideScalar(
+          dt
+        );
+
+
+    /*
+     * Sicherheitsbegrenzung.
+     */
+
+    const linearSpeed =
+      measuredLinearVelocity.length();
+
+
+    if (
+      linearSpeed >
+      MAX_LINEAR_SPEED
+    ) {
+
+      measuredLinearVelocity
+        .multiplyScalar(
+          MAX_LINEAR_SPEED /
+          linearSpeed
+        );
+
+    }
+
+
+    /*
+     * Nur die Geschwindigkeit wird geglättet.
+     * Die normale sichtbare Pose nicht.
+     */
+
+    linearVelocity.lerp(
+      measuredLinearVelocity,
+      VELOCITY_BLEND
+    );
+
+
+    /* =================================================
+       WINKELGESCHWINDIGKEIT
+
+       delta =
+       inverse(q_alt) * q_neu
+       ================================================= */
+
+    const oldInverse =
+      lastGoodQuaternion
+        .clone()
+        .invert();
+
+
+    const deltaQuaternion =
+      oldInverse.multiply(
+        quaternion
+      );
+
+
+    deltaQuaternion.normalize();
+
+
+    /*
+     * Kürzesten Quaternion-Weg verwenden.
+     */
+
+    if (
+      deltaQuaternion.w < 0
+    ) {
+
+      deltaQuaternion.x *= -1;
+      deltaQuaternion.y *= -1;
+      deltaQuaternion.z *= -1;
+      deltaQuaternion.w *= -1;
+
+    }
+
+
+    const clampedW =
+      THREE.MathUtils.clamp(
+        deltaQuaternion.w,
+        -1,
+        1
+      );
+
+
+    let angle =
+      2 *
+      Math.acos(
+        clampedW
+      );
+
+
+    const sinHalf =
+      Math.sqrt(
+        Math.max(
+          0,
+          1 -
+          clampedW *
+          clampedW
+        )
+      );
+
+
+    if (
+      sinHalf >
+      0.00001 &&
+      angle >
+      0.00001
+    ) {
+
+      const measuredAxis =
+        new THREE.Vector3(
+
+          deltaQuaternion.x /
+          sinHalf,
+
+          deltaQuaternion.y /
+          sinHalf,
+
+          deltaQuaternion.z /
+          sinHalf
+
+        );
+
+
+      let measuredAngularVelocity =
+        angle / dt;
+
+
+      if (
+        measuredAngularVelocity >
+        MAX_ANGULAR_SPEED
+      ) {
+
+        measuredAngularVelocity =
+          MAX_ANGULAR_SPEED;
+
+      }
+
+
+      /*
+       * Achse in lokaler Würfelbasis.
+       *
+       * Für die kurze Prognose reicht
+       * eine sanfte Mischung der zuletzt
+       * beobachteten Rotationsbewegung.
+       */
+
+      if (
+        angularVelocity >
+        0.00001
+      ) {
+
+        /*
+         * Achsenrichtung vereinheitlichen.
+         */
+
+        if (
+          angularVelocityAxis.dot(
+            measuredAxis
+          ) < 0
+        ) {
+
+          measuredAxis.multiplyScalar(
+            -1
+          );
+
+          measuredAngularVelocity *= -1;
+
+        }
+
+
+        angularVelocityAxis
+          .lerp(
+            measuredAxis,
+            VELOCITY_BLEND
+          )
+          .normalize();
+
+
+        angularVelocity =
+          THREE.MathUtils.lerp(
+            angularVelocity,
+            measuredAngularVelocity,
+            VELOCITY_BLEND
+          );
+
+      }
+
+      else {
+
+        angularVelocityAxis.copy(
+          measuredAxis
+        );
+
+        angularVelocity =
+          measuredAngularVelocity;
+
+      }
+
+    }
+
+    else {
+
+      angularVelocity =
+        THREE.MathUtils.lerp(
+          angularVelocity,
+          0,
+          VELOCITY_BLEND
+        );
+
+    }
+
+  }
+
+
+  /*
+   * Pose-Historie weiterschieben.
+   */
+
+  previousGoodPosition.copy(
+    lastGoodPosition
+  );
+
+  previousGoodQuaternion.copy(
+    lastGoodQuaternion
+  );
+
+  previousPoseTime =
+    lastGoodPoseTime;
+
+
+  lastGoodPosition.copy(
+    position
+  );
+
+  lastGoodQuaternion.copy(
+    quaternion
+  );
+
+  lastGoodPoseTime =
+    time;
+
+}
+
+
+/* =====================================================
+   NEU IN 5c-5:
+   POSE VORHERSAGEN
+   ===================================================== */
+
+const predictedPosition =
+  new THREE.Vector3();
+
+const predictedQuaternion =
+  new THREE.Quaternion();
+
+
+function applyPredictedPose(
+  now
+) {
+
+  if (
+    !hasGoodPose ||
+    lastGoodPoseTime === null
+  ) {
+
+    methane.visible = false;
+
+    trackingMode =
+      "KEINE POSE";
+
+    predictionAgeMs = 0;
+
+    return;
+
+  }
+
+
+  const ageMs =
+    now -
+    lastGoodPoseTime;
+
+
+  predictionAgeMs =
+    ageMs;
+
+
+  /*
+   * Nur sehr kurze Lücken überbrücken.
+   */
+
+  if (
+    ageMs >
+    MAX_PREDICTION_TIME_MS
+  ) {
+
+    methane.visible = false;
+
+    trackingMode =
+      "VERLOREN";
+
+    return;
+
+  }
+
+
+  const dt =
+    ageMs / 1000;
+
+
+  /* ===================================================
+     POSITION EXTRAPOLIEREN
+     =================================================== */
+
+  predictedPosition
+    .copy(
+      lastGoodPosition
+    )
+    .addScaledVector(
+      linearVelocity,
+      dt
+    );
+
+
+  /* ===================================================
+     ROTATION EXTRAPOLIEREN
+     =================================================== */
+
+  predictedQuaternion.copy(
+    lastGoodQuaternion
+  );
+
+
+  const predictedAngle =
+    angularVelocity *
+    dt;
+
+
+  if (
+    Math.abs(
+      predictedAngle
+    ) >
+    0.00001
+  ) {
+
+    const delta =
+      new THREE.Quaternion()
+        .setFromAxisAngle(
+          angularVelocityAxis,
+          predictedAngle
+        );
+
+
+    /*
+     * delta wurde aus
+     *
+     * inverse(q_alt) * q_neu
+     *
+     * bestimmt und beschreibt damit die
+     * lokale Rotationsänderung.
+     */
+
+    predictedQuaternion
+      .multiply(
+        delta
+      )
+      .normalize();
+
+  }
+
+
+  methane.position.copy(
+    predictedPosition
+  );
+
+
+  methane.quaternion.copy(
+    predictedQuaternion
+  );
+
+
+  methane.visible = true;
+
+
+  trackingMode =
+    "PROGNOSE";
+
+}
+
+
+/* =====================================================
+   WÜRFELPOSE AUS SICHTBAREN TAGS
    ===================================================== */
 
 const candidatePositions = [];
@@ -960,17 +1478,14 @@ const fusedQuaternion =
   new THREE.Quaternion();
 
 
-function updateCubePose() {
+function updateCubePose(
+  now
+) {
 
   candidatePositions.length = 0;
   candidateQuaternions.length = 0;
   candidateIDs.length = 0;
 
-
-  /*
-   * Wichtig:
-   * centerObjects sind Kinder der Marker.
-   */
 
   scene.updateMatrixWorld(true);
 
@@ -994,14 +1509,9 @@ function updateCubePose() {
     }
 
 
-    /*
-     * POSITION:
-     *
-     * bereits bestätigte Methode:
-     * lokaler Punkt (0,0,-22.5 mm)
-     * wird direkt über die Marker-Matrix
-     * in Weltkoordinaten transformiert.
-     */
+    /* =================================================
+       POSITION
+       ================================================= */
 
     centerObjects[id]
       .getWorldPosition(
@@ -1014,13 +1524,9 @@ function updateCubePose() {
     );
 
 
-    /*
-     * ORIENTIERUNG:
-     *
-     * qCube =
-     * qTag *
-     * inverse(qRelativeFrom3)
-     */
+    /* =================================================
+       ORIENTIERUNG
+       ================================================= */
 
     tempQuaternion
       .copy(
@@ -1046,24 +1552,26 @@ function updateCubePose() {
     candidateIDs.slice();
 
 
-  /*
-   * Kein Marker sichtbar.
-   *
-   * In dieser Testversion:
-   * Molekül sofort ausblenden.
-   *
-   * Noch KEIN Hold und
-   * KEINE zeitliche Glättung.
-   */
+  /* ===================================================
+     KEIN MARKER:
+
+     NEU:
+     nicht sofort verschwinden,
+     sondern kurz vorhersagen.
+     =================================================== */
 
   if (
     candidatePositions.length === 0
   ) {
 
-    methane.visible = false;
-
     lastCenterSpread = null;
     lastRotationSpread = null;
+
+
+    applyPredictedPose(
+      now
+    );
+
 
     return;
 
@@ -1071,7 +1579,10 @@ function updateCubePose() {
 
 
   /* ===================================================
-     POSITION MITTELN
+     MINDESTENS EIN MARKER:
+
+     Ab hier wieder dieselbe Fusion
+     wie in 5c-4.
      =================================================== */
 
   fusedPosition.set(
@@ -1102,17 +1613,7 @@ function updateCubePose() {
 
 
   /* ===================================================
-     QUATERNIONEN MITTELN
-
-     Vorzeichen zunächst an den ersten
-     Kandidaten angleichen.
-
-     Anschließend normierte lineare
-     Quaternion-Mittelung.
-
-     Für die kleinen Restabweichungen
-     unserer Marker ist das hier
-     ausreichend und symmetrisch.
+     QUATERNION-MITTELUNG
      =================================================== */
 
   const referenceQuaternion =
@@ -1166,9 +1667,7 @@ function updateCubePose() {
 
 
   /* ===================================================
-     DIAGNOSE:
-     maximale Abweichung der Kandidaten
-     von der gemeinsamen Pose.
+     DIAGNOSE
      =================================================== */
 
   let maxPositionDifference = 0;
@@ -1235,8 +1734,7 @@ function updateCubePose() {
 
 
   /* ===================================================
-     METHAN AUF DIE GEMEINSAME
-     WÜRFELPOSE SETZEN
+     ECHTE GEMESSENE POSE ANZEIGEN
      =================================================== */
 
   methane.position.copy(
@@ -1250,6 +1748,26 @@ function updateCubePose() {
 
 
   methane.visible = true;
+
+
+  trackingMode =
+    "APRILTAG";
+
+
+  predictionAgeMs = 0;
+
+
+  /* ===================================================
+     NEU:
+     DIESE GUTE POSE FÜR EINE EVENTUELLE
+     SPÄTERE LÜCKE SPEICHERN
+     =================================================== */
+
+  registerGoodPose(
+    fusedPosition,
+    fusedQuaternion,
+    now
+  );
 
 }
 
@@ -1325,11 +1843,6 @@ async function initializeAprilTag() {
     cy
   );
 
-
-  /*
-   * Alle sechs Tags besitzen
-   * dieselbe physische Größe.
-   */
 
   for (
     let id = 0;
@@ -1538,10 +2051,6 @@ async function detectFrame() {
         : [];
 
 
-    /*
-     * Alle zunächst unsichtbar.
-     */
-
     for (
       let id = 0;
       id <= 5;
@@ -1553,10 +2062,6 @@ async function detectFrame() {
 
     }
 
-
-    /*
-     * Erkannte Marker aktualisieren.
-     */
 
     for (
       const detection
@@ -1585,10 +2090,17 @@ async function detectFrame() {
 
 
     /*
-     * Gemeinsame Würfelpose.
+     * Zeitstempel der tatsächlich
+     * ausgewerteten Kameraaufnahme.
      */
 
-    updateCubePose();
+    const poseTime =
+      performance.now();
+
+
+    updateCubePose(
+      poseTime
+    );
 
 
     detectionCounter++;
@@ -1636,10 +2148,6 @@ async function detectFrame() {
         false;
 
     }
-
-
-    methane.visible =
-      false;
 
 
     showError(error);
@@ -1983,6 +2491,22 @@ function updateStatus() {
       : "–";
 
 
+  let predictionText = "";
+
+
+  if (
+    trackingMode ===
+    "PROGNOSE"
+  ) {
+
+    predictionText =
+      "\nPrognose seit: " +
+      predictionAgeMs.toFixed(0) +
+      " ms";
+
+  }
+
+
   status.textContent =
 
     "GeoChemAR " +
@@ -1997,6 +2521,11 @@ function updateStatus() {
     "\nErkennungen/s: " +
     detectionFPS.toFixed(1) +
 
+    "\n\nTracking: " +
+    trackingMode +
+
+    predictionText +
+
     "\n\nPositionsabweichung: " +
     centerSpreadText +
 
@@ -2005,7 +2534,9 @@ function updateStatus() {
 
     "\n\n6-Seiten-Tracking" +
 
-    "\nGlättung: AUS";
+    "\nKurzzeit-Prognose: " +
+    MAX_PREDICTION_TIME_MS +
+    " ms";
 
 }
 
