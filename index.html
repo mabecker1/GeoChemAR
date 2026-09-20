@@ -1,85 +1,105 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
 
-  <title>GeoChemAR – Kalibrierung Marker 1/2</title>
+<title>GeoChemAR – Native MultiMarker 1+2</title>
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: black;
-      font-family: Arial, sans-serif;
-    }
+<style>
 
-    #status {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      z-index: 9999;
-      max-width: 520px;
-      padding: 10px 14px;
-      border-radius: 8px;
-      background: rgba(0,0,0,0.78);
-      color: white;
-      font-size: 14px;
-      line-height: 1.5;
-      pointer-events: none;
-      white-space: pre-line;
-    }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: black;
+  font-family: Arial, sans-serif;
+}
 
-    #error {
-      position: fixed;
-      left: 10px;
-      right: 10px;
-      bottom: 10px;
-      z-index: 9999;
-      padding: 10px;
-      background: rgba(150,0,0,0.9);
-      color: white;
-      font-size: 13px;
-      white-space: pre-wrap;
-      display: none;
-    }
+#status {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 9999;
 
-    canvas {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      z-index: 2 !important;
-    }
+  padding: 10px 14px;
+  border-radius: 8px;
 
-    video {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      z-index: 1 !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-  </style>
+  background: rgba(0,0,0,0.78);
+  color: white;
+
+  font-size: 14px;
+  line-height: 1.5;
+
+  pointer-events: none;
+  white-space: pre-line;
+}
+
+#error {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 9999;
+
+  padding: 10px;
+
+  background: rgba(150,0,0,0.9);
+  color: white;
+
+  font-size: 13px;
+  white-space: pre-wrap;
+
+  display: none;
+}
+
+canvas {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 2 !important;
+}
+
+video {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 1 !important;
+
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+</style>
 </head>
 
 <body>
 
-<div id="status">Initialisierung …</div>
+<div id="status">
+Initialisierung …
+</div>
+
 <div id="error"></div>
 
 
 <script>
-  window.addEventListener("error", function(event) {
-    const box = document.getElementById("error");
 
-    box.style.display = "block";
+window.addEventListener(
+  "error",
+  function(event) {
+
+    const box =
+      document.getElementById("error");
+
+    box.style.display =
+      "block";
 
     box.textContent =
       "JavaScript-Fehler:\n" +
@@ -88,17 +108,28 @@
       event.filename +
       "\nZeile " +
       event.lineno;
-  });
 
-  window.addEventListener("unhandledrejection", function(event) {
-    const box = document.getElementById("error");
+  }
+);
 
-    box.style.display = "block";
+
+window.addEventListener(
+  "unhandledrejection",
+  function(event) {
+
+    const box =
+      document.getElementById("error");
+
+    box.style.display =
+      "block";
 
     box.textContent =
       "Promise-Fehler:\n" +
       String(event.reason);
-  });
+
+  }
+);
+
 </script>
 
 
@@ -130,7 +161,8 @@ function showError(error) {
 
   console.error(error);
 
-  errorBox.style.display = "block";
+  errorBox.style.display =
+    "block";
 
   errorBox.textContent =
     "FEHLER:\n" +
@@ -159,8 +191,7 @@ try {
 
   const {
     ArToolkitSource,
-    ArToolkitContext,
-    ArMarkerControls
+    ArToolkitContext
   } = THREEX;
 
 
@@ -206,38 +237,293 @@ try {
 
 
   /* =====================================================
-     ZWEI MARKERROOTS
+     MULTIMARKER ROOT
+
+     Dieser Root bekommt direkt die Pose,
+     die ARToolKit für den gesamten
+     MultiMarker berechnet.
      ===================================================== */
 
-  const marker1Root =
+  const cubeRoot =
     new THREE.Group();
 
 
-  const marker2Root =
-    new THREE.Group();
-
-
-  marker1Root.visible =
+  cubeRoot.matrixAutoUpdate =
     false;
 
 
-  marker2Root.visible =
+  cubeRoot.visible =
     false;
 
 
   scene.add(
-    marker1Root
-  );
-
-
-  scene.add(
-    marker2Root
+    cubeRoot
   );
 
 
 
   /* =====================================================
-     AR SOURCE
+     METHAN
+     ===================================================== */
+
+  const methane =
+    new THREE.Group();
+
+
+  const carbonRadius =
+    0.22;
+
+  const hydrogenRadius =
+    0.14;
+
+  const hydrogenDistance =
+    0.72;
+
+  const bondRadius =
+    0.040;
+
+
+
+  const carbonMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0x202020
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xb8bec7
+    });
+
+
+
+  /* Kohlenstoff */
+
+  const carbon =
+    new THREE.Mesh(
+
+      new THREE.SphereGeometry(
+        carbonRadius,
+        48,
+        32
+      ),
+
+      carbonMaterial
+
+    );
+
+
+  methane.add(
+    carbon
+  );
+
+
+
+  /* Tetraederrichtungen */
+
+  const directions = [
+
+    new THREE.Vector3(
+      1,
+      1,
+      1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1,
+      -1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+      1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+      -1,
+      1
+    ).normalize()
+
+  ];
+
+
+
+  directions.forEach(
+    function(direction) {
+
+      /* Wasserstoff */
+
+      const hydrogen =
+        new THREE.Mesh(
+
+          new THREE.SphereGeometry(
+            hydrogenRadius,
+            40,
+            28
+          ),
+
+          hydrogenMaterial
+
+        );
+
+
+      hydrogen.position.copy(
+
+        direction
+          .clone()
+          .multiplyScalar(
+            hydrogenDistance
+          )
+
+      );
+
+
+      methane.add(
+        hydrogen
+      );
+
+
+
+      /* Bindung */
+
+      const startDistance =
+        carbonRadius;
+
+
+      const endDistance =
+        hydrogenDistance -
+        hydrogenRadius;
+
+
+      const startPoint =
+        direction
+          .clone()
+          .multiplyScalar(
+            startDistance
+          );
+
+
+      const endPoint =
+        direction
+          .clone()
+          .multiplyScalar(
+            endDistance
+          );
+
+
+      const bondVector =
+        endPoint
+          .clone()
+          .sub(
+            startPoint
+          );
+
+
+      const bondLength =
+        bondVector.length();
+
+
+      const bondGeometry =
+        new THREE.CylinderGeometry(
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+        );
+
+
+      const bond =
+        new THREE.Mesh(
+          bondGeometry,
+          bondMaterial
+        );
+
+
+      bond.position.copy(
+
+        startPoint
+          .clone()
+          .add(
+            endPoint
+          )
+          .multiplyScalar(
+            0.5
+          )
+
+      );
+
+
+      bond.quaternion.setFromUnitVectors(
+
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+
+        direction
+
+      );
+
+
+      methane.add(
+        bond
+      );
+
+    }
+  );
+
+
+
+  /*
+   * Die .dat-Datei arbeitet in Millimetern.
+   *
+   * Unsere bisherige Molekülgeometrie ist
+   * auf Markerbreite 1 skaliert.
+   *
+   * Deshalb skalieren wir:
+   *
+   * 1 Three.js-Einheit = 40 mm
+   */
+
+  methane.scale.setScalar(
+    40
+  );
+
+
+  /*
+   * Der Ursprung der .dat-Datei liegt
+   * im Würfelzentrum.
+   *
+   * Das Methan sitzt daher direkt dort.
+   */
+
+  methane.position.set(
+    0,
+    0,
+    0
+  );
+
+
+  cubeRoot.add(
+    methane
+  );
+
+
+
+  /* =====================================================
+     KAMERA
      ===================================================== */
 
   const arToolkitSource =
@@ -288,10 +574,6 @@ try {
 
 
 
-  /* =====================================================
-     VIDEO
-     ===================================================== */
-
   const video =
     arToolkitSource.domElement;
 
@@ -336,7 +618,7 @@ try {
 
 
   /* =====================================================
-     AUF VIDEO WARTEN
+     AUF VIDEOBILD WARTEN
      ===================================================== */
 
   if (
@@ -415,7 +697,7 @@ try {
 
 
   /* =====================================================
-     BEWÄHRTE KAMERA-CONSTRAINTS
+     BEWÄHRTE KAMERAEINSTELLUNGEN
      ===================================================== */
 
   try {
@@ -473,6 +755,11 @@ try {
   /* =====================================================
      ARTOOLKIT
      ===================================================== */
+
+  setStatus(
+    "ARToolKit wird initialisiert …"
+  );
+
 
   const arToolkitContext =
     new ArToolkitContext({
@@ -539,65 +826,149 @@ try {
 
 
 
+  const controller =
+    arToolkitContext.arController;
+
+
+  if (!controller) {
+
+    throw new Error(
+      "ARController nicht vorhanden."
+    );
+
+  }
+
+
+
   /* =====================================================
-     MARKER 1
+     MULTIMARKER LADEN
      ===================================================== */
 
-  const marker1Controls =
-    new ArMarkerControls(
+  setStatus(
+    "MultiMarker 1+2 wird geladen …"
+  );
 
-      arToolkitContext,
 
-      marker1Root,
+  const multiMarkerId =
+    await new Promise(
+      (resolve, reject) => {
 
-      {
+        controller.loadMultiMarker(
 
-        type:
-          "barcode",
+          "./data/cube-12.dat",
 
-        barcodeValue:
-          1,
+          function(
+            markerId,
+            markerNum
+          ) {
 
-        size:
-          1,
+            console.log(
+              "MultiMarker geladen:",
+              markerId,
+              markerNum
+            );
 
-        changeMatrixMode:
-          "modelViewMatrix"
+
+            if (
+              markerNum !== 2
+            ) {
+
+              reject(
+                new Error(
+                  "cube-12.dat wurde geladen, enthält laut ARToolKit aber " +
+                  markerNum +
+                  " Marker statt 2."
+                )
+              );
+
+              return;
+
+            }
+
+
+            resolve(
+              markerId
+            );
+
+          },
+
+          function(error) {
+
+            reject(
+              new Error(
+                "cube-12.dat konnte nicht geladen werden: " +
+                String(error)
+              )
+            );
+
+          }
+
+        );
 
       }
-
     );
 
 
 
   /* =====================================================
-     MARKER 2
+     MULTIMARKER EVENT
+
+     ARToolKit liefert hier bereits die robuste
+     gemeinsame Pose des gesamten Marker-Sets.
      ===================================================== */
 
-  const marker2Controls =
-    new ArMarkerControls(
+  let multiSeenThisFrame =
+    false;
 
-      arToolkitContext,
 
-      marker2Root,
+  let lastSeenTime =
+    0;
 
-      {
 
-        type:
-          "barcode",
+  controller.addEventListener(
 
-        barcodeValue:
-          2,
+    "getMultiMarker",
 
-        size:
-          1,
+    function(event) {
 
-        changeMatrixMode:
-          "modelViewMatrix"
+      if (
+        event.data.multiMarkerId !==
+        multiMarkerId
+      ) {
+
+        return;
 
       }
 
-    );
+
+      /*
+       * event.data.matrix ist bereits eine
+       * WebGL-kompatible 4×4-Matrix.
+       */
+
+      cubeRoot.matrix.fromArray(
+        event.data.matrix
+      );
+
+
+      cubeRoot.matrixWorldNeedsUpdate =
+        true;
+
+
+      cubeRoot.visible =
+        true;
+
+
+      multiSeenThisFrame =
+        true;
+
+
+      lastSeenTime =
+        performance.now();
+
+    }
+
+  );
 
 
 
@@ -651,185 +1022,10 @@ try {
     "2";
 
 
-
-  /* =====================================================
-     RELATIVE TRANSFORMATION
-
-     M12 = inverse(W1) * W2
-
-     Damit beschreiben wir Marker 2
-     im Koordinatensystem von Marker 1.
-     ===================================================== */
-
-  const inverse1 =
-    new THREE.Matrix4();
-
-
-  const relative12 =
-    new THREE.Matrix4();
-
-
-  const relativePosition =
-    new THREE.Vector3();
-
-
-  const relativeQuaternion =
-    new THREE.Quaternion();
-
-
-  const relativeScale =
-    new THREE.Vector3();
-
-
-
-  /* =====================================================
-     STABILE MESSUNG
-
-     Wir sammeln nur Frames, in denen
-     BEIDE Marker gleichzeitig erkannt werden.
-     ===================================================== */
-
-  const samples =
-    [];
-
-
-  const REQUIRED_SAMPLES =
-    30;
-
-
-  let finished =
-    false;
-
-
-
-  function quaternionToText(q) {
-
-    return (
-      q.x.toFixed(5) + ", " +
-      q.y.toFixed(5) + ", " +
-      q.z.toFixed(5) + ", " +
-      q.w.toFixed(5)
-    );
-
-  }
-
-
-
-  function positionToText(p) {
-
-    return (
-      p.x.toFixed(4) + ", " +
-      p.y.toFixed(4) + ", " +
-      p.z.toFixed(4)
-    );
-
-  }
-
-
-
-  function calculateAverage() {
-
-    if (
-      samples.length === 0
-    ) {
-      return null;
-    }
-
-
-    /* -------------------------
-       Position mitteln
-       ------------------------- */
-
-    const avgPosition =
-      new THREE.Vector3();
-
-
-    samples.forEach(
-      function(sample) {
-
-        avgPosition.add(
-          sample.position
-        );
-
-      }
-    );
-
-
-    avgPosition.multiplyScalar(
-      1 / samples.length
-    );
-
-
-
-    /* -------------------------
-       Quaternion mitteln
-
-       Alle Quaternions zunächst
-       auf dieselbe Hemisphäre
-       bringen.
-       ------------------------- */
-
-    const reference =
-      samples[0].quaternion;
-
-
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    let w = 0;
-
-
-    samples.forEach(
-      function(sample) {
-
-        const q =
-          sample.quaternion.clone();
-
-
-        if (
-          reference.dot(q) < 0
-        ) {
-
-          q.x *= -1;
-          q.y *= -1;
-          q.z *= -1;
-          q.w *= -1;
-
-        }
-
-
-        x += q.x;
-        y += q.y;
-        z += q.z;
-        w += q.w;
-
-      }
-    );
-
-
-    const avgQuaternion =
-      new THREE.Quaternion(
-        x,
-        y,
-        z,
-        w
-      );
-
-
-    avgQuaternion.normalize();
-
-
-    return {
-
-      position:
-        avgPosition,
-
-      quaternion:
-        avgQuaternion
-
-    };
-
-  }
+  setStatus(
+    "Native MultiMarker 1+2 bereit\n\n" +
+    "Marker 1 oder 2 zeigen."
+  );
 
 
 
@@ -844,6 +1040,10 @@ try {
     );
 
 
+    multiSeenThisFrame =
+      false;
+
+
     if (
       arToolkitSource.ready
     ) {
@@ -856,175 +1056,47 @@ try {
 
 
 
-    if (!finished) {
-
-      if (
-        marker1Root.visible &&
-        marker2Root.visible
-      ) {
-
-        /*
-         * MatrixWorld aktualisieren
-         */
-
-        marker1Root.updateMatrixWorld(
-          true
-        );
-
-
-        marker2Root.updateMatrixWorld(
-          true
-        );
-
-
-        /*
-         * inverse(W1)
-         */
-
-        inverse1
-          .copy(
-            marker1Root.matrixWorld
-          )
-          .invert();
-
-
-        /*
-         * relative12 =
-         * inverse(W1) * W2
-         */
-
-        relative12.multiplyMatrices(
-
-          inverse1,
-
-          marker2Root.matrixWorld
-
-        );
-
-
-        relative12.decompose(
-
-          relativePosition,
-
-          relativeQuaternion,
-
-          relativeScale
-
-        );
-
-
-        samples.push({
-
-          position:
-            relativePosition.clone(),
-
-          quaternion:
-            relativeQuaternion.clone()
-
-        });
-
-
-
-        setStatus(
-
-          "Marker 1 + 2 erkannt\n\n" +
-
-          "Messung: " +
-          samples.length +
-          " / " +
-          REQUIRED_SAMPLES +
-
-          "\n\nWürfel möglichst ruhig halten."
-
-        );
-
-
-
-        if (
-          samples.length >=
-          REQUIRED_SAMPLES
-        ) {
-
-          finished =
-            true;
-
-
-          const result =
-            calculateAverage();
-
-
-          setStatus(
-
-            "MESSUNG FERTIG\n\n" +
-
-            "1 → 2\n\n" +
-
-            "Position:\n" +
-            positionToText(
-              result.position
-            ) +
-
-            "\n\nQuaternion x,y,z,w:\n" +
-            quaternionToText(
-              result.quaternion
-            ) +
-
-            "\n\nDiese Werte bitte an mich schicken."
-
-          );
-
-        }
-
-      }
-
-      else {
-
-        let visibleText =
-          "Keiner";
-
-
-        if (
-          marker1Root.visible &&
-          !marker2Root.visible
-        ) {
-
-          visibleText =
-            "nur Marker 1";
-
-        }
-
-
-        if (
-          !marker1Root.visible &&
-          marker2Root.visible
-        ) {
-
-          visibleText =
-            "nur Marker 2";
-
-        }
-
-
-        setStatus(
-
-          "Kalibrierung Marker 1 ↔ 2\n\n" +
-
-          "Sichtbar: " +
-          visibleText +
-
-          "\n\nBitte Würfel so halten,\n" +
-          "dass Marker 1 UND 2 sichtbar sind." +
-
-          "\n\nMessung: " +
-          samples.length +
-          " / " +
-          REQUIRED_SAMPLES
-
-        );
-
-      }
+    /*
+     * Ein sehr kurzer Hold verhindert nur,
+     * dass das Objekt zwischen zwei
+     * einzelnen Videoframes flackert.
+     *
+     * KEINE Poseglättung.
+     */
+
+    if (
+      performance.now() -
+      lastSeenTime >
+      150
+    ) {
+
+      cubeRoot.visible =
+        false;
 
     }
+
+
+
+    if (
+      cubeRoot.visible
+    ) {
+
+      setStatus(
+        "MultiMarker erkannt\n\n" +
+        "Jetzt langsam von Seite 1 über die Kante zu Seite 2 drehen."
+      );
+
+    }
+
+    else {
+
+      setStatus(
+        "MultiMarker 1+2 bereit\n\n" +
+        "Marker 1 oder 2 zeigen."
+      );
+
+    }
+
 
 
     renderer.render(
