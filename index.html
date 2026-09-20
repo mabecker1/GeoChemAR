@@ -11,7 +11,7 @@
            user-scalable=no"
 >
 
-<title>GeoChemAR – Methan Rotationstest</title>
+<title>GeoChemAR – Methan Rotationstest 5b-10</title>
 
 <style>
 
@@ -204,7 +204,8 @@ function showError(error) {
 /* =====================================================
    KAMERAMODELL
 
-   UNVERÄNDERT AUS 5b-6
+   Unverändert aus dem funktionierenden
+   Stand 5b-6 bis 5b-9.
    ===================================================== */
 
 const cx =
@@ -324,23 +325,7 @@ scene.add(
 /* =====================================================
    METHAN
 
-   Bewährte Geometrie aus unserem bisherigen
-   Methanmodell.
-
-   Die alten AR.js-Einheiten werden lediglich
-   einheitlich auf Meter skaliert.
-
-   Alte Größen:
-   C-Radius          0.22
-   H-Radius          0.14
-   H-Abstand         0.72
-   Bindungsradius    0.040
-
-   Skalierungsfaktor:
-   0.05
-
-   Dadurch hat das Molekül eine sinnvolle
-   Größe für unseren 40-mm-Testmarker.
+   Bewährte tetraedrische Geometrie.
    ===================================================== */
 
 function createMethane() {
@@ -445,14 +430,12 @@ function createMethane() {
 
 
   /* -------------------------------------------------
-     WASSERSTOFFE + BINDUNGEN
+     WASSERSTOFFE UND BINDUNGEN
      ------------------------------------------------- */
 
   for (
     const direction of directions
   ) {
-
-    /* Wasserstoff */
 
     const hydrogen =
       new THREE.Mesh(
@@ -483,8 +466,6 @@ function createMethane() {
       hydrogen
     );
 
-
-    /* Bindung */
 
     const startDistance =
       carbonRadius;
@@ -852,13 +833,21 @@ function createGrayscaleImage() {
 
 
 /* =====================================================
-   ROTATION
+   ROTATION 5b-10
 
-   Zunächst exakt der Stand aus 5b-8.
+   Änderung gegenüber 5b-9:
 
-   Wir verändern ihn bewusst NICHT,
-   damit wir die fehlerhafte Bewegung
-   am Methan beurteilen können.
+   1. pose.R wird transponiert.
+      Für eine Rotationsmatrix entspricht
+      dies der inversen Rotation:
+
+               R^-1 = R^T
+
+   2. Die localCorrection aus 5b-8/5b-9
+      entfällt vollständig.
+
+   3. Der Basiswechsel zwischen AprilTag
+      und Three.js bleibt bestehen.
    ===================================================== */
 
 const basisChange =
@@ -872,22 +861,11 @@ const basisChange =
   );
 
 
-const localCorrection =
-  new THREE.Matrix4()
-    .makeRotationX(
-      Math.PI
-    );
-
-
 const aprilRotation =
   new THREE.Matrix4();
 
 
 const convertedRotation =
-  new THREE.Matrix4();
-
-
-const finalRotation =
   new THREE.Matrix4();
 
 
@@ -942,7 +920,10 @@ function applyPose(pose) {
   /* =================================================
      TRANSLATION
 
-     Bereits bestätigt.
+     UNVERÄNDERT.
+
+     Dieser Teil funktioniert bereits:
+     Das Molekül folgt dem Markerzentrum.
      ================================================= */
 
   tagRoot.position.set(
@@ -953,7 +934,7 @@ function applyPose(pose) {
 
 
   /* =================================================
-     ROTATION EINLESEN
+     APRILTAG-ROTATION EINLESEN
      ================================================= */
 
   const r00 =
@@ -1002,15 +983,37 @@ function applyPose(pose) {
   }
 
 
+  /* =================================================
+     ENTSCHEIDENDE ÄNDERUNG:
+
+     Statt
+
+       r00 r01 r02
+       r10 r11 r12
+       r20 r21 r22
+
+     verwenden wir
+
+       r00 r10 r20
+       r01 r11 r21
+       r02 r12 r22
+
+     also R^T.
+     ================================================= */
+
   aprilRotation.set(
 
-    r00, r01, r02, 0,
-    r10, r11, r12, 0,
-    r20, r21, r22, 0,
+    r00, r10, r20, 0,
+    r01, r11, r21, 0,
+    r02, r12, r22, 0,
     0,   0,   0,   1
 
   );
 
+
+  /* =================================================
+     BASISWECHSEL APRILTAG → THREE.JS
+     ================================================= */
 
   convertedRotation
     .copy(
@@ -1024,18 +1027,13 @@ function applyPose(pose) {
     );
 
 
-  finalRotation
-    .copy(
-      convertedRotation
-    )
-    .multiply(
-      localCorrection
-    );
-
+  /* =================================================
+     KEINE WEITERE ROTATIONSKORREKTUR
+     ================================================= */
 
   tagRoot.quaternion
     .setFromRotationMatrix(
-      finalRotation
+      convertedRotation
     );
 
 
@@ -1179,6 +1177,8 @@ async function detectFrame() {
 
 /* =====================================================
    GRÜNER 2D-MITTELPUNKT
+
+   Bleibt zur Kontrolle erhalten.
    ===================================================== */
 
 function drawOverlay() {
@@ -1418,7 +1418,9 @@ function animate() {
 
   status.textContent =
 
-    "APRILTAG 5b-9 – METHAN\n\n" +
+    "APRILTAG 5b-10 – METHAN\n\n" +
+
+    "Rotation: R⁻¹ = Rᵀ\n\n" +
 
     "Tag 0: " +
     (
