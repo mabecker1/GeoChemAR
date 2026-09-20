@@ -14,76 +14,106 @@
 <title>GeoChemAR – AprilTag 5b</title>
 
 <style>
-html, body {
+
+html,
+body {
   margin: 0;
   padding: 0;
+
   width: 100%;
   height: 100%;
+
   overflow: hidden;
+
   background: black;
+
   font-family: Arial, sans-serif;
 }
 
+
 #video {
   position: fixed;
-  inset: 0;
+
+  left: 0;
+  top: 0;
+
   width: 100%;
   height: 100%;
+
   object-fit: contain;
+
   background: black;
+
   z-index: 1;
 }
 
+
 #threeCanvas {
   position: fixed;
-  inset: 0;
+
   z-index: 2;
+
   pointer-events: none;
 }
+
 
 #analysisCanvas {
   display: none;
 }
 
+
 #status {
   position: fixed;
+
   top: 10px;
   left: 10px;
+
   z-index: 10;
 
   padding: 10px 14px;
+
   border-radius: 8px;
 
   background: rgba(0,0,0,0.80);
+
   color: white;
 
   font-size: 14px;
   line-height: 1.45;
+
   white-space: pre-line;
 
   pointer-events: none;
 }
 
+
 #error {
   position: fixed;
+
   left: 10px;
   right: 10px;
   bottom: 10px;
+
   z-index: 20;
 
   padding: 10px;
+
   border-radius: 8px;
 
   background: rgba(160,0,0,0.90);
+
   color: white;
 
   font-size: 13px;
+
   white-space: pre-wrap;
 
   display: none;
 }
+
 </style>
 </head>
+
 
 <body>
 
@@ -94,17 +124,21 @@ html, body {
   playsinline
 ></video>
 
+
 <canvas
   id="analysisCanvas"
   width="640"
   height="480"
 ></canvas>
 
+
 <div id="status">
 AprilTag wird initialisiert …
 </div>
 
+
 <div id="error"></div>
+
 
 
 <script type="importmap">
@@ -116,39 +150,50 @@ AprilTag wird initialisiert …
 </script>
 
 
+
 <script type="module">
 
 import * as THREE
   from "three";
 
+
 import * as Comlink
   from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+
 
 
 /* =====================================================
    GRUNDWERTE
    ===================================================== */
 
-const ANALYSIS_WIDTH = 640;
-const ANALYSIS_HEIGHT = 480;
+const ANALYSIS_WIDTH =
+  640;
+
+
+const ANALYSIS_HEIGHT =
+  480;
 
 
 /*
- * Reale Taggröße.
+ * Größe des AprilTags in Metern.
  *
- * Für unseren späteren Würfel:
  * 40 mm = 0,040 m
  */
 
-const TAG_SIZE = 0.040;
+const TAG_SIZE =
+  0.040;
 
 
 /*
- * Abstand Markerfläche → Würfelzentrum:
- * 22,5 mm
+ * Abstand Markerfläche → Würfelzentrum
+ *
+ * Würfelkante 45 mm
+ * → halbe Kantenlänge 22,5 mm
  */
 
-const CUBE_CENTER_DEPTH = 0.0225;
+const CUBE_CENTER_DEPTH =
+  0.0225;
+
 
 
 /* =====================================================
@@ -156,10 +201,16 @@ const CUBE_CENTER_DEPTH = 0.0225;
    ===================================================== */
 
 const video =
-  document.getElementById("video");
+  document.getElementById(
+    "video"
+  );
+
 
 const analysisCanvas =
-  document.getElementById("analysisCanvas");
+  document.getElementById(
+    "analysisCanvas"
+  );
+
 
 const analysisCtx =
   analysisCanvas.getContext(
@@ -169,11 +220,18 @@ const analysisCtx =
     }
   );
 
+
 const status =
-  document.getElementById("status");
+  document.getElementById(
+    "status"
+  );
+
 
 const errorBox =
-  document.getElementById("error");
+  document.getElementById(
+    "error"
+  );
+
 
 
 /* =====================================================
@@ -184,38 +242,61 @@ function showError(error) {
 
   console.error(error);
 
+
   errorBox.style.display =
     "block";
 
+
   errorBox.textContent =
+
     "FEHLER:\n" +
+
     (
-      error && error.stack
+      error &&
+      error.stack
+
         ? error.stack
+
         : String(error)
     );
+
 }
 
 
+
 window.addEventListener(
+
   "error",
-  event => {
+
+  function(event) {
+
     showError(
+
       event.error ||
       event.message
+
     );
+
   }
+
 );
 
 
+
 window.addEventListener(
+
   "unhandledrejection",
-  event => {
+
+  function(event) {
+
     showError(
       event.reason
     );
+
   }
+
 );
+
 
 
 /* =====================================================
@@ -224,6 +305,7 @@ window.addEventListener(
 
 const scene =
   new THREE.Scene();
+
 
 
 const camera =
@@ -247,10 +329,14 @@ scene.add(
 );
 
 
+
 const renderer =
   new THREE.WebGLRenderer({
+
     antialias: true,
+
     alpha: true
+
   });
 
 
@@ -269,8 +355,9 @@ document.body.appendChild(
 );
 
 
+
 /* =====================================================
-   TAG-POSE ROOT
+   TAG-ROOT
    ===================================================== */
 
 const tagRoot =
@@ -286,17 +373,10 @@ scene.add(
 );
 
 
+
 /* =====================================================
    WÜRFELZENTRUM
    ===================================================== */
-
-/*
- * Das AprilTag-Koordinatensystem hat seine
- * Z-Achse in den Tag hinein.
- *
- * Deshalb liegt unser Würfelzentrum bei
- * +22,5 mm entlang der Tag-Z-Achse.
- */
 
 const cubeCenter =
   new THREE.Group();
@@ -314,6 +394,7 @@ tagRoot.add(
 );
 
 
+
 /* =====================================================
    METHAN
    ===================================================== */
@@ -322,25 +403,29 @@ const methane =
   new THREE.Group();
 
 
+
 const carbonRadius =
   0.22;
+
 
 const hydrogenRadius =
   0.14;
 
+
 const hydrogenDistance =
   0.72;
+
 
 const bondRadius =
   0.040;
 
 
+
 /*
- * Unser bisheriges Methan war auf
- * Markerbreite = 1 normiert.
+ * Unsere bisherigen Modellkoordinaten
+ * waren auf Markerbreite = 1 normiert.
  *
- * Jetzt arbeiten wir in Metern:
- * 1 alte Einheit = 40 mm.
+ * 1 Einheit entspricht nun 40 mm.
  */
 
 methane.scale.setScalar(
@@ -348,25 +433,37 @@ methane.scale.setScalar(
 );
 
 
+
 const carbonMaterial =
   new THREE.MeshBasicMaterial({
+
     color: 0x202020
+
   });
+
 
 
 const hydrogenMaterial =
   new THREE.MeshBasicMaterial({
+
     color: 0xffffff
+
   });
+
 
 
 const bondMaterial =
   new THREE.MeshBasicMaterial({
+
     color: 0xb8bec7
+
   });
 
 
-/* Kohlenstoff */
+
+/* =====================================================
+   KOHLENSTOFF
+   ===================================================== */
 
 const carbon =
   new THREE.Mesh(
@@ -387,31 +484,50 @@ methane.add(
 );
 
 
-/* Exakte Tetraederrichtungen */
+
+/* =====================================================
+   EXAKTE TETRAEDERRICHTUNGEN
+   ===================================================== */
 
 const directions = [
 
   new THREE.Vector3(
-    1, 1, 1
+    1,
+    1,
+    1
   ).normalize(),
 
-  new THREE.Vector3(
-    1, -1, -1
-  ).normalize(),
 
   new THREE.Vector3(
-    -1, 1, -1
+    1,
+    -1,
+    -1
   ).normalize(),
 
+
   new THREE.Vector3(
-    -1, -1, 1
+    -1,
+    1,
+    -1
+  ).normalize(),
+
+
+  new THREE.Vector3(
+    -1,
+    -1,
+    1
   ).normalize()
 
 ];
 
 
+
 directions.forEach(
-  direction => {
+
+  function(direction) {
+
+
+    /* Wasserstoff */
 
     const hydrogen =
       new THREE.Mesh(
@@ -428,11 +544,13 @@ directions.forEach(
 
 
     hydrogen.position.copy(
+
       direction
         .clone()
         .multiplyScalar(
           hydrogenDistance
         )
+
     );
 
 
@@ -440,6 +558,9 @@ directions.forEach(
       hydrogen
     );
 
+
+
+    /* Bindung */
 
     const startDistance =
       carbonRadius;
@@ -451,6 +572,7 @@ directions.forEach(
 
 
     const startPoint =
+
       direction
         .clone()
         .multiplyScalar(
@@ -459,6 +581,7 @@ directions.forEach(
 
 
     const endPoint =
+
       direction
         .clone()
         .multiplyScalar(
@@ -467,6 +590,7 @@ directions.forEach(
 
 
     const bondVector =
+
       endPoint
         .clone()
         .sub(
@@ -479,20 +603,30 @@ directions.forEach(
 
 
     const bondGeometry =
+
       new THREE.CylinderGeometry(
+
         bondRadius,
         bondRadius,
+
         bondLength,
+
         32,
         1,
+
         false
+
       );
 
 
     const bond =
+
       new THREE.Mesh(
+
         bondGeometry,
+
         bondMaterial
+
       );
 
 
@@ -528,6 +662,7 @@ directions.forEach(
     );
 
   }
+
 );
 
 
@@ -536,213 +671,15 @@ cubeCenter.add(
 );
 
 
-/* =====================================================
-   APRILTAG
-   ===================================================== */
-
-let apriltag =
-  null;
-
-let detectorReady =
-  false;
-
-let detectionRunning =
-  false;
-
-let latestDetection =
-  null;
-
-let detectionCounter =
-  0;
-
-let detectionFPS =
-  0;
-
-let fpsStart =
-  performance.now();
-
-
-async function initializeAprilTag() {
-
-  status.textContent =
-    "AprilTag-Worker wird gestartet …";
-
-
-  const worker =
-    new Worker(
-      "./libs/apriltag.js"
-    );
-
-
-  const Apriltag =
-    Comlink.wrap(
-      worker
-    );
-
-
-  apriltag =
-    await new Apriltag(
-
-      Comlink.proxy(
-        function() {
-
-          detectorReady =
-            true;
-
-        }
-      )
-
-    );
-
-
-  const timeoutStart =
-    performance.now();
-
-
-  while (
-    !detectorReady
-  ) {
-
-    await new Promise(
-      resolve =>
-        setTimeout(
-          resolve,
-          20
-        )
-    );
-
-
-    if (
-      performance.now() -
-      timeoutStart >
-      15000
-    ) {
-
-      throw new Error(
-        "AprilTag-WASM wurde nicht bereit."
-      );
-
-    }
-
-  }
-
-
-  /*
-   * Jetzt brauchen wir die Pose.
-   */
-
-  await apriltag.set_return_pose(
-    1
-  );
-
-
-  await apriltag.set_return_solutions(
-    0
-  );
-
-
-  await apriltag.set_max_detections(
-    1
-  );
-
-}
-
-
-/* =====================================================
-   KAMERA
-   ===================================================== */
-
-let cameraReady =
-  false;
-
-
-async function startCamera() {
-
-  const stream =
-    await navigator.mediaDevices
-      .getUserMedia({
-
-        audio: false,
-
-        video: {
-
-          facingMode: {
-            ideal: "environment"
-          },
-
-          width: {
-            ideal: 640
-          },
-
-          height: {
-            ideal: 480
-          },
-
-          aspectRatio: {
-            ideal: 4 / 3
-          },
-
-          frameRate: {
-            ideal: 30,
-            max: 30
-          }
-
-        }
-
-      });
-
-
-  video.srcObject =
-    stream;
-
-
-  await new Promise(
-    resolve => {
-
-      if (
-        video.readyState >= 2 &&
-        video.videoWidth > 0
-      ) {
-
-        resolve();
-
-        return;
-
-      }
-
-
-      video.addEventListener(
-        "loadedmetadata",
-        resolve,
-        {
-          once: true
-        }
-      );
-
-    }
-  );
-
-
-  await video.play();
-
-
-  cameraReady =
-    true;
-
-}
-
 
 /* =====================================================
    KAMERA-INTRINSICS
    ===================================================== */
 
 /*
- * Für diesen Machbarkeitstest verwenden wir zunächst
- * eine aus dem Bildfeld abgeleitete Näherung.
+ * Für 5b zunächst Näherungswerte.
  *
- * Die exakte Kamerakalibrierung kommt später.
- *
- * cx / cy liegen in der Bildmitte.
+ * Exakte Kalibrierung kommt später.
  */
 
 const cx =
@@ -753,11 +690,9 @@ const cy =
   ANALYSIS_HEIGHT / 2;
 
 
-/*
- * Näherung für ca. 60° horizontales Sichtfeld.
- */
 
 const HORIZONTAL_FOV =
+
   THREE.MathUtils.degToRad(
     60
   );
@@ -780,9 +715,10 @@ const fy =
   fx;
 
 
-/*
- * Three.js-Projektion passend zu fx/fy.
- */
+
+/* =====================================================
+   THREE.JS-PROJEKTIONSMATRIX
+   ===================================================== */
 
 function updateProjectionMatrix() {
 
@@ -831,8 +767,301 @@ function updateProjectionMatrix() {
 updateProjectionMatrix();
 
 
+
 /* =====================================================
-   ANALYSEBILD
+   APRILTAG
+   ===================================================== */
+
+let apriltag =
+  null;
+
+
+let detectorReady =
+  false;
+
+
+let cameraReady =
+  false;
+
+
+let detectionRunning =
+  false;
+
+
+let latestDetection =
+  null;
+
+
+let detectionCounter =
+  0;
+
+
+let detectionFPS =
+  0;
+
+
+let fpsStart =
+  performance.now();
+
+
+
+async function initializeAprilTag() {
+
+  status.textContent =
+    "AprilTag-Worker wird gestartet …";
+
+
+  const worker =
+
+    new Worker(
+      "./libs/apriltag.js"
+    );
+
+
+  const Apriltag =
+
+    Comlink.wrap(
+      worker
+    );
+
+
+  apriltag =
+
+    await new Apriltag(
+
+      Comlink.proxy(
+
+        function() {
+
+          detectorReady =
+            true;
+
+        }
+
+      )
+
+    );
+
+
+
+  const timeoutStart =
+    performance.now();
+
+
+
+  while (
+    !detectorReady
+  ) {
+
+    await new Promise(
+
+      function(resolve) {
+
+        setTimeout(
+          resolve,
+          20
+        );
+
+      }
+
+    );
+
+
+    if (
+
+      performance.now() -
+      timeoutStart >
+
+      15000
+
+    ) {
+
+      throw new Error(
+        "AprilTag-WASM wurde nicht bereit."
+      );
+
+    }
+
+  }
+
+
+
+  /*
+   * ===================================================
+   * WICHTIG:
+   *
+   * ZUERST gültige Kameraparameter und Taggröße setzen.
+   * DANACH Poseberechnung aktivieren.
+   * ===================================================
+   */
+
+
+  await apriltag.set_camera_info(
+
+    fx,
+    fy,
+    cx,
+    cy
+
+  );
+
+
+
+  /*
+   * API:
+   *
+   * set_tag_size(tagid, size)
+   *
+   * Unser Marker:
+   *
+   * ID = 0
+   * Größe = 0,040 m
+   */
+
+  await apriltag.set_tag_size(
+
+    0,
+
+    TAG_SIZE
+
+  );
+
+
+
+  /*
+   * Keine alternativen Pose-Lösungen
+   * zurückgeben.
+   */
+
+  await apriltag.set_return_solutions(
+    0
+  );
+
+
+
+  /*
+   * Poseberechnung aktivieren.
+   */
+
+  await apriltag.set_return_pose(
+    1
+  );
+
+
+
+  /*
+   * Für 5b nur ein Marker.
+   */
+
+  await apriltag.set_max_detections(
+    1
+  );
+
+}
+
+
+
+/* =====================================================
+   KAMERA
+   ===================================================== */
+
+async function startCamera() {
+
+  const stream =
+
+    await navigator.mediaDevices
+      .getUserMedia({
+
+        audio:
+          false,
+
+
+        video: {
+
+          facingMode: {
+            ideal: "environment"
+          },
+
+
+          width: {
+            ideal: 640
+          },
+
+
+          height: {
+            ideal: 480
+          },
+
+
+          aspectRatio: {
+            ideal: 4 / 3
+          },
+
+
+          frameRate: {
+            ideal: 30,
+            max: 30
+          }
+
+        }
+
+      });
+
+
+
+  video.srcObject =
+    stream;
+
+
+
+  await new Promise(
+
+    function(resolve) {
+
+      if (
+
+        video.readyState >= 2 &&
+        video.videoWidth > 0
+
+      ) {
+
+        resolve();
+
+        return;
+
+      }
+
+
+      video.addEventListener(
+
+        "loadedmetadata",
+
+        resolve,
+
+        {
+          once: true
+        }
+
+      );
+
+    }
+
+  );
+
+
+
+  await video.play();
+
+
+  cameraReady =
+    true;
+
+}
+
+
+
+/* =====================================================
+   GRAUSTUFENBILD
    ===================================================== */
 
 function createGrayscaleImage() {
@@ -850,7 +1079,9 @@ function createGrayscaleImage() {
   );
 
 
+
   const imageData =
+
     analysisCtx.getImageData(
 
       0,
@@ -862,11 +1093,14 @@ function createGrayscaleImage() {
     );
 
 
+
   const rgba =
     imageData.data;
 
 
+
   const grayscale =
+
     new Uint8Array(
 
       ANALYSIS_WIDTH *
@@ -875,13 +1109,19 @@ function createGrayscaleImage() {
     );
 
 
+
   for (
+
     let i = 0, j = 0;
+
     i < rgba.length;
+
     i += 4, j++
+
   ) {
 
     grayscale[j] =
+
       Math.round(
 
         (
@@ -902,12 +1142,31 @@ function createGrayscaleImage() {
 }
 
 
+
 /* =====================================================
-   POSE AUS DETEKTION ÜBERNEHMEN
+   APRILTAG-POSE → THREE.JS
    ===================================================== */
+
+const conversionMatrix =
+
+  new THREE.Matrix4().set(
+
+    1,  0,  0, 0,
+    0, -1,  0, 0,
+    0,  0, -1, 0,
+    0,  0,  0, 1
+
+  );
+
+
+
+const aprilMatrix =
+  new THREE.Matrix4();
+
 
 const poseMatrix =
   new THREE.Matrix4();
+
 
 
 function applyDetectionPose(
@@ -927,27 +1186,25 @@ function applyDetectionPose(
   }
 
 
-  /*
-   * Der konkrete WASM-Wrapper liefert die
-   * Pose als Rotationsmatrix + Translation.
-   *
-   * Wir unterstützen hier beide häufigen
-   * Feldbezeichnungen.
-   */
 
   const pose =
     detection.pose;
 
 
+
   const R =
+
     pose.R ||
     pose.r ||
     pose.rotation;
 
 
+
   const t =
+
     pose.t ||
     pose.translation;
+
 
 
   if (
@@ -963,22 +1220,30 @@ function applyDetectionPose(
   }
 
 
-  /*
-   * Werte sicher aus Arrays / TypedArrays /
-   * verschachtelten Arrays lesen.
-   */
 
-  function flatMatrix3(m) {
+  function flattenMatrix3(m) {
 
     if (
+
       Array.isArray(m) &&
       Array.isArray(m[0])
+
     ) {
 
       return [
-        m[0][0], m[0][1], m[0][2],
-        m[1][0], m[1][1], m[1][2],
-        m[2][0], m[2][1], m[2][2]
+
+        m[0][0],
+        m[0][1],
+        m[0][2],
+
+        m[1][0],
+        m[1][1],
+        m[1][2],
+
+        m[2][0],
+        m[2][1],
+        m[2][2]
+
       ];
 
     }
@@ -989,17 +1254,22 @@ function applyDetectionPose(
   }
 
 
-  function flatVector3(v) {
+
+  function flattenVector3(v) {
 
     if (
+
       Array.isArray(v) &&
       Array.isArray(v[0])
+
     ) {
 
       return [
+
         v[0][0],
         v[1][0],
         v[2][0]
+
       ];
 
     }
@@ -1010,17 +1280,21 @@ function applyDetectionPose(
   }
 
 
+
   const r =
-    flatMatrix3(R);
+    flattenMatrix3(R);
 
 
   const tr =
-    flatVector3(t);
+    flattenVector3(t);
+
 
 
   if (
+
     r.length < 9 ||
     tr.length < 3
+
   ) {
 
     tagRoot.visible =
@@ -1031,48 +1305,41 @@ function applyDetectionPose(
   }
 
 
-  /*
-   * AprilTag:
-   *
-   * x = rechts
-   * y = unten
-   * z = von Kamera nach vorne
-   *
-   * Three.js-Kamera:
-   *
-   * x = rechts
-   * y = oben
-   * z = nach hinten
-   *
-   * Deshalb Y und Z spiegeln.
-   */
 
-  const C =
-    new THREE.Matrix4().set(
+  aprilMatrix.set(
 
-      1,  0,  0, 0,
-      0, -1,  0, 0,
-      0,  0, -1, 0,
-      0,  0,  0, 1
+    r[0],
+    r[1],
+    r[2],
+    tr[0],
 
-    );
+    r[3],
+    r[4],
+    r[5],
+    tr[1],
 
+    r[6],
+    r[7],
+    r[8],
+    tr[2],
 
-  const aprilMatrix =
-    new THREE.Matrix4().set(
+    0,
+    0,
+    0,
+    1
 
-      r[0], r[1], r[2], tr[0],
-      r[3], r[4], r[5], tr[1],
-      r[6], r[7], r[8], tr[2],
-      0,    0,    0,    1
+  );
 
-    );
 
 
   poseMatrix.multiplyMatrices(
-    C,
+
+    conversionMatrix,
+
     aprilMatrix
+
   );
+
 
 
   poseMatrix.decompose(
@@ -1086,10 +1353,12 @@ function applyDetectionPose(
   );
 
 
+
   tagRoot.visible =
     true;
 
 }
+
 
 
 /* =====================================================
@@ -1099,9 +1368,11 @@ function applyDetectionPose(
 async function detectFrame() {
 
   if (
+
     !detectorReady ||
     !cameraReady ||
     detectionRunning
+
   ) {
 
     return;
@@ -1109,8 +1380,10 @@ async function detectFrame() {
   }
 
 
+
   detectionRunning =
     true;
+
 
 
   try {
@@ -1119,63 +1392,45 @@ async function detectFrame() {
       createGrayscaleImage();
 
 
-    /*
-     * Poseparameter an die Bibliothek.
-     *
-     * Falls der Wrapper diese Parameter über
-     * Setter erwartet, werden sie einmalig
-     * vor detect gesetzt.
-     */
-
-    if (
-      typeof apriltag.set_camera_info ===
-      "function"
-    ) {
-
-      await apriltag.set_camera_info(
-        fx,
-        fy,
-        cx,
-        cy
-      );
-
-    }
-
-
-    if (
-      typeof apriltag.set_tag_size ===
-      "function"
-    ) {
-
-      await apriltag.set_tag_size(
-        TAG_SIZE
-      );
-
-    }
-
 
     const result =
+
       await apriltag.detect(
 
         grayscale,
 
         ANALYSIS_WIDTH,
-
         ANALYSIS_HEIGHT
 
       );
 
 
+
     if (
+
       Array.isArray(result) &&
       result.length > 0
+
     ) {
 
       latestDetection =
+
         result.find(
-          d =>
-            Number(d.id) === 0
-        ) || result[0];
+
+          function(detection) {
+
+            return Number(
+              detection.id
+            ) === 0;
+
+          }
+
+        )
+
+        ||
+
+        result[0];
+
 
 
       applyDetectionPose(
@@ -1196,17 +1451,22 @@ async function detectFrame() {
     }
 
 
+
     detectionCounter++;
+
 
 
     const now =
       performance.now();
 
 
+
     if (
+
       now -
       fpsStart >=
       1000
+
     ) {
 
       const seconds =
@@ -1219,10 +1479,12 @@ async function detectFrame() {
         / 1000;
 
 
+
       detectionFPS =
 
         detectionCounter /
         seconds;
+
 
 
       detectionCounter =
@@ -1252,8 +1514,9 @@ async function detectFrame() {
 }
 
 
+
 /* =====================================================
-   VIDEO UND THREE-CANVAS GLEICH AUSRICHTEN
+   VIDEO UND RENDERER SYNCHRONISIEREN
    ===================================================== */
 
 function resize() {
@@ -1266,16 +1529,22 @@ function resize() {
     window.innerHeight;
 
 
+
   const videoAspect =
-    4 / 3;
+    ANALYSIS_WIDTH /
+    ANALYSIS_HEIGHT;
+
 
 
   const screenAspect =
-    width / height;
+    width /
+    height;
+
 
 
   let displayWidth;
   let displayHeight;
+
 
 
   if (
@@ -1306,19 +1575,27 @@ function resize() {
   }
 
 
+
   renderer.setSize(
+
     displayWidth,
     displayHeight,
+
     false
+
   );
 
 
+
   renderer.domElement.style.width =
-    displayWidth + "px";
+    displayWidth +
+    "px";
 
 
   renderer.domElement.style.height =
-    displayHeight + "px";
+    displayHeight +
+    "px";
+
 
 
   renderer.domElement.style.left =
@@ -1331,6 +1608,7 @@ function resize() {
     / 2 +
 
     "px";
+
 
 
   renderer.domElement.style.top =
@@ -1347,6 +1625,7 @@ function resize() {
 }
 
 
+
 window.addEventListener(
   "resize",
   resize
@@ -1356,8 +1635,9 @@ window.addEventListener(
 resize();
 
 
+
 /* =====================================================
-   LOOP
+   HAUPTSCHLEIFE
    ===================================================== */
 
 function animate() {
@@ -1365,6 +1645,7 @@ function animate() {
   requestAnimationFrame(
     animate
   );
+
 
 
   if (
@@ -1376,10 +1657,14 @@ function animate() {
   }
 
 
+
   renderer.render(
+
     scene,
     camera
+
   );
+
 
 
   status.textContent =
@@ -1387,6 +1672,7 @@ function animate() {
     "APRILTAG TEST 5b\n\n" +
 
     "Detector: " +
+
     (
       detectorReady
         ? "BEREIT"
@@ -1394,6 +1680,7 @@ function animate() {
     ) +
 
     "\nTag 0: " +
+
     (
       latestDetection
         ? "ERKANNT"
@@ -1401,6 +1688,7 @@ function animate() {
     ) +
 
     "\nPose: " +
+
     (
       tagRoot.visible
         ? "JA"
@@ -1408,12 +1696,15 @@ function animate() {
     ) +
 
     "\nErkennungen/s: " +
+
     detectionFPS.toFixed(1) +
 
-    "\n\nMethanposition:\n" +
-    "22,5 mm hinter Marker";
+    "\n\nTaggröße: 40 mm" +
+
+    "\nWürfelzentrum: 22,5 mm";
 
 }
+
 
 
 /* =====================================================
@@ -1427,36 +1718,10 @@ async function start() {
     await initializeAprilTag();
 
 
-    /*
-     * Poseparameter einmal setzen, sofern
-     * diese API vom Wrapper angeboten wird.
-     */
+    status.textContent =
 
-    if (
-      typeof apriltag.set_camera_info ===
-      "function"
-    ) {
-
-      await apriltag.set_camera_info(
-        fx,
-        fy,
-        cx,
-        cy
-      );
-
-    }
-
-
-    if (
-      typeof apriltag.set_tag_size ===
-      "function"
-    ) {
-
-      await apriltag.set_tag_size(
-        TAG_SIZE
-      );
-
-    }
+      "AprilTag bereit.\n" +
+      "Kamera wird gestartet …";
 
 
     await startCamera();
@@ -1475,6 +1740,7 @@ async function start() {
   }
 
 }
+
 
 
 start();
