@@ -8,7 +8,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>GeoChemAR – Three.js Basistest</title>
+  <title>GeoChemAR – Methan Einzelmarker-Test</title>
 
   <style>
     html, body {
@@ -236,29 +236,276 @@ try {
 
 
   /* =====================================================
-     4. TESTWÜRFEL
+     4. METHANMODELL
+
+     Bewährte Geometrie aus unserem bisherigen
+     GeoChemAR-Modell.
      ===================================================== */
 
-  const cube =
+  const methane =
+    new THREE.Group();
+
+
+  /*
+   * Größen
+   */
+
+  const carbonRadius =
+    0.22;
+
+  const hydrogenRadius =
+    0.14;
+
+  const hydrogenDistance =
+    0.72;
+
+  const bondRadius =
+    0.040;
+
+
+
+  /*
+   * Materialien
+   */
+
+  const carbonMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0x202020
+    });
+
+
+  const hydrogenMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff
+    });
+
+
+  const bondMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xb8bec7
+    });
+
+
+
+  /*
+   * Kohlenstoffatom
+   */
+
+  const carbon =
     new THREE.Mesh(
 
-      new THREE.BoxGeometry(
-        0.6,
-        0.6,
-        0.6
+      new THREE.SphereGeometry(
+        carbonRadius,
+        48,
+        32
       ),
 
-      new THREE.MeshNormalMaterial()
+      carbonMaterial
 
     );
 
 
-  cube.position.y =
-    0.3;
+  methane.add(
+    carbon
+  );
+
+
+
+  /*
+   * Exakte Tetraederrichtungen
+   */
+
+  const directions = [
+
+    new THREE.Vector3(
+      1,
+      1,
+      1
+    ).normalize(),
+
+    new THREE.Vector3(
+      1,
+      -1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+      1,
+      -1
+    ).normalize(),
+
+    new THREE.Vector3(
+      -1,
+      -1,
+      1
+    ).normalize()
+
+  ];
+
+
+
+  /*
+   * Wasserstoffatome und Bindungen
+   */
+
+  directions.forEach(
+    function(direction) {
+
+      /* -------------------------
+         Wasserstoffatom
+         ------------------------- */
+
+      const hydrogen =
+        new THREE.Mesh(
+
+          new THREE.SphereGeometry(
+            hydrogenRadius,
+            40,
+            28
+          ),
+
+          hydrogenMaterial
+
+        );
+
+
+      hydrogen.position.copy(
+
+        direction
+          .clone()
+          .multiplyScalar(
+            hydrogenDistance
+          )
+
+      );
+
+
+      methane.add(
+        hydrogen
+      );
+
+
+
+      /* -------------------------
+         Bindung
+
+         exakt von der Oberfläche
+         des C-Atoms bis zur
+         Oberfläche des H-Atoms
+         ------------------------- */
+
+      const startDistance =
+        carbonRadius;
+
+
+      const endDistance =
+        hydrogenDistance -
+        hydrogenRadius;
+
+
+      const startPoint =
+        direction
+          .clone()
+          .multiplyScalar(
+            startDistance
+          );
+
+
+      const endPoint =
+        direction
+          .clone()
+          .multiplyScalar(
+            endDistance
+          );
+
+
+      const bondVector =
+        endPoint
+          .clone()
+          .sub(
+            startPoint
+          );
+
+
+      const bondLength =
+        bondVector.length();
+
+
+      const bondGeometry =
+        new THREE.CylinderGeometry(
+
+          bondRadius,
+          bondRadius,
+          bondLength,
+          32,
+          1,
+          false
+
+        );
+
+
+      const bond =
+        new THREE.Mesh(
+
+          bondGeometry,
+          bondMaterial
+
+        );
+
+
+      bond.position.copy(
+
+        startPoint
+          .clone()
+          .add(
+            endPoint
+          )
+          .multiplyScalar(
+            0.5
+          )
+
+      );
+
+
+      bond.quaternion.setFromUnitVectors(
+
+        new THREE.Vector3(
+          0,
+          1,
+          0
+        ),
+
+        direction
+
+      );
+
+
+      methane.add(
+        bond
+      );
+
+    }
+  );
+
+
+
+  /*
+   * Methan etwas über der Markerfläche.
+   *
+   * Die Markerfläche liegt in der X/Z-Ebene.
+   * +Y zeigt aus dem Marker heraus.
+   */
+
+  methane.position.set(
+    0,
+    0.75,
+    0
+  );
 
 
   markerRoot.add(
-    cube
+    methane
   );
 
 
@@ -329,9 +576,11 @@ try {
 
 
   if (!video) {
+
     throw new Error(
       "AR.js hat kein Videoelement erzeugt."
     );
+
   }
 
 
@@ -339,6 +588,7 @@ try {
     "playsinline",
     ""
   );
+
 
   video.muted =
     true;
@@ -363,10 +613,6 @@ try {
     "1";
 
 
-  /*
-   * Jetzt warten wir ausdrücklich darauf,
-   * dass echte Videodaten verfügbar sind.
-   */
 
   if (
     video.readyState < 2 ||
@@ -457,7 +703,7 @@ try {
 
 
   /* =====================================================
-     8. MOBIL: BEWÄHRTE KAMERAEINSTELLUNGEN
+     8. BEWÄHRTE KAMERAEINSTELLUNGEN
      ===================================================== */
 
   try {
@@ -502,12 +748,6 @@ try {
   }
 
   catch(error) {
-
-    /*
-     * Kein Abbruch:
-     * Manche Browser akzeptieren nicht
-     * alle Constraints.
-     */
 
     console.warn(
       "Kamera-Constraints konnten nicht vollständig angewendet werden.",
@@ -598,7 +838,7 @@ try {
 
 
   /* =====================================================
-     10. MARKER 1
+     10. BARCODE-MARKER 1
      ===================================================== */
 
   const markerControls =
@@ -670,16 +910,11 @@ try {
   onResize();
 
 
-  /*
-   * Video bleibt ausdrücklich sichtbar.
-   */
-
   video.style.zIndex =
     "1";
 
   renderer.domElement.style.zIndex =
     "2";
-
 
 
   setStatus(
@@ -728,7 +963,7 @@ try {
       ) {
 
         setStatus(
-          "11 – Marker 1 erkannt"
+          "11 – Marker 1 erkannt – Methan"
         );
 
       }
