@@ -228,8 +228,8 @@ export async function createEspSurfaceOverlay(data){
     throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
   }
 
-  // Lazy Loading: die große Oberflächendatei wird erst geladen,
-  // wenn die ESP-Oberfläche wirklich eingeblendet wird.
+  // Lazy Loading: die quantenchemisch berechnete Oberflächendatei
+  // wird erst beim Einblenden geladen.
   const surfaceModule = await import("./ethanolSurfaceData.js");
   const { ETHANOL_ESP_POSITIONS, ETHANOL_ESP_INDICES, ETHANOL_ESP_COLORS } = surfaceModule;
 
@@ -248,7 +248,7 @@ export async function createEspSurfaceOverlay(data){
   const material=new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
-    opacity:0.56,
+    opacity:0.74,
     shininess:72,
     specular:0x555555,
     side:THREE.DoubleSide,

@@ -266,7 +266,7 @@ html.debug-mode #status{display:block}
 <div id="espLegend" aria-hidden="true">
   <div>
     <div class="legendTitle">Elektronendichte</div>
-    <div style="font-size:11px;color:var(--ui-muted);margin-top:1px;">hoch / niedrig</div>
+    <div style="font-size:11px;color:var(--ui-muted);margin-top:1px;">ESP-Färbung</div>
   </div>
   <div class="legendBar"></div>
   <div class="legendLabels">
@@ -282,7 +282,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, createEspSurfaceOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="ETH-2a ESP-Oberfläche mit Skala / Core EPA-6a";
+const VERSION="ETH-3 RHF-ESP / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
