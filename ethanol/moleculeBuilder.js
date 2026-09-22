@@ -248,7 +248,7 @@ export async function createEspSurfaceOverlay(data){
   const material=new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
-    opacity:0.74,
+    opacity:0.88,
     shininess:72,
     specular:0x555555,
     side:THREE.FrontSide,

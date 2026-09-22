@@ -282,7 +282,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, createEspSurfaceOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="ETH-3a RHF-ESP FrontSurface / Core EPA-6a";
+const VERSION="ETH-3b RHF-ESP optimierte Sichtbarkeit / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -583,6 +583,40 @@ function applyMoleculeZoom(value){
   zoomInButton.disabled=moleculeZoom>=selectedMolecule.zoom.max-1e-9;
 }
 
+function applyMoleculeSurfaceView(enabled){
+  if(!currentMoleculeObject)return;
+
+  currentMoleculeObject.traverse(obj=>{
+    if(!obj.material)return;
+
+    const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+
+    for(const material of materials){
+      if(!material)continue;
+
+      if(enabled){
+        material.transparent=true;
+
+        if(obj.userData?.kind==="bond"){
+          material.opacity=0.10;
+        }else if(obj.userData?.kind==="atom"){
+          material.opacity=0.18;
+        }else{
+          material.opacity=0.15;
+        }
+
+        material.depthWrite=false;
+      }else{
+        material.transparent=false;
+        material.opacity=1.0;
+        material.depthWrite=true;
+      }
+
+      material.needsUpdate=true;
+    }
+  });
+}
+
 async function setEspVisible(visible){
   espVisible=!!visible;
   espToggleButton.classList.toggle("active",espVisible);
@@ -591,6 +625,7 @@ async function setEspVisible(visible){
 
   if(!espVisible){
     if(currentEspSurface)currentEspSurface.visible=false;
+    applyMoleculeSurfaceView(false);
     return;
   }
 
@@ -607,6 +642,7 @@ async function setEspVisible(visible){
     }
   }
   currentEspSurface.visible=true;
+  applyMoleculeSurfaceView(true);
 }
 
 function showMolecule(resetZoom=true){
@@ -623,6 +659,7 @@ function showMolecule(resetZoom=true){
 
   currentMoleculeObject=buildMolecule(selectedMolecule);
   contentRoot.add(currentMoleculeObject);
+  applyMoleculeSurfaceView(false);
 
   if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
   applyMoleculeZoom(moleculeZoom);
