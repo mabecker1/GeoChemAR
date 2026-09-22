@@ -1,0 +1,324 @@
+import * as THREE from "../libs/three.module.min.js";
+
+/*
+  GeoChemAR – Wasser-Version 1
+
+  Didaktisch idealisierte Wasserprobe:
+  - ca. 40 H2O-Moleküle
+  - jedes H2O-Molekül mit korrekter lokaler Geometrie:
+      O–H = 0.9572 Å
+      H–O–H = 104.5°
+  - Sauerstoffatome in einer kompakten, räumlichen Probe mit lokaler
+    tetraedrischer Nachbarschaft (repräsentativer Ausschnitt)
+  - Wasserstoffbrücken als O···O-Verbindungen zwischen nahen Nachbarn
+
+  Ziel ist hier keine MD-Simulation, sondern eine fachlich sinnvolle,
+  räumlich gut lesbare Unterrichtsdarstellung eines Wasser-Ausschnitts.
+*/
+
+const ANGSTROM_TO_SCENE = 0.0060;
+const O_H = 0.9572;
+const H_O_H_DEG = 104.5;
+const O_O_TARGET = 2.76;
+
+const DISPLAY = Object.freeze({
+  atomRadius: Object.freeze({
+    H: 0.0049,
+    O: 0.0088
+  }),
+  color: Object.freeze({
+    H: 0xffffff,
+    O: 0xd93636,
+    bond: 0xbcc4ce,
+    hbond: 0x7fb8ff
+  }),
+  bondRadius: 0.00155,
+  hBondRadius: 0.00075
+});
+
+function v(x,y,z){ return new THREE.Vector3(x,y,z); }
+
+function materialForElement(element){
+  return new THREE.MeshStandardMaterial({
+    color: DISPLAY.color[element],
+    roughness: element === "H" ? 0.46 : 0.60,
+    metalness: 0
+  });
+}
+
+function createAtom(element, position){
+  const radius = DISPLAY.atomRadius[element];
+  const geometry = new THREE.SphereGeometry(
+    radius,
+    element === "H" ? 32 : 42,
+    element === "H" ? 22 : 28
+  );
+  const mesh = new THREE.Mesh(geometry, materialForElement(element));
+  mesh.position.copy(position);
+  mesh.userData.kind = "atom";
+  mesh.userData.element = element;
+  return mesh;
+}
+
+function createCylinder(start, end, radius, material){
+  const delta = end.clone().sub(start);
+  const length = delta.length();
+  const direction = delta.clone().normalize();
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 22, 1, false);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(start).add(end).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(v(0,1,0), direction);
+  return mesh;
+}
+
+function addBond(group, atomA, atomB, elementA, elementB){
+  const axis = atomB.clone().sub(atomA);
+  if(axis.lengthSq() <= 1e-12) return;
+  const direction = axis.clone().normalize();
+  const start = atomA.clone().addScaledVector(direction, DISPLAY.atomRadius[elementA]);
+  const end = atomB.clone().addScaledVector(direction, -DISPLAY.atomRadius[elementB]);
+  const material = new THREE.MeshStandardMaterial({
+    color: DISPLAY.color.bond,
+    roughness: 0.65,
+    metalness: 0
+  });
+  const mesh = createCylinder(start, end, DISPLAY.bondRadius, material);
+  mesh.userData.kind = "bond";
+  group.add(mesh);
+}
+
+function addDashedHydrogenBond(group, oxygenA, oxygenB){
+  const axis = oxygenB.clone().sub(oxygenA);
+  const length = axis.length();
+  if(length <= 1e-9) return;
+
+  const direction = axis.clone().normalize();
+  const start = oxygenA.clone().addScaledVector(direction, DISPLAY.atomRadius.O + 0.0006);
+  const end = oxygenB.clone().addScaledVector(direction, -(DISPLAY.atomRadius.O + 0.0006));
+  const usable = end.clone().sub(start);
+  const usableLength = usable.length();
+  if(usableLength <= 1e-9) return;
+
+  const dashCount = Math.max(3, Math.min(7, Math.round(usableLength / 0.010)));
+  const gapFactor = 0.38;
+  const segment = usableLength / dashCount;
+  const dashLength = segment * (1 - gapFactor);
+
+  const material = new THREE.MeshStandardMaterial({
+    color: DISPLAY.color.hbond,
+    transparent: true,
+    opacity: 0.86,
+    roughness: 0.55,
+    metalness: 0
+  });
+
+  for(let i=0;i<dashCount;i++){
+    const a = start.clone().addScaledVector(direction, i * segment + segment * gapFactor * 0.5);
+    const b = a.clone().addScaledVector(direction, dashLength);
+    const dash = createCylinder(a, b, DISPLAY.hBondRadius, material.clone());
+    dash.userData.kind = "hbond";
+    group.add(dash);
+  }
+}
+
+let cachedCluster = null;
+
+function chooseDonorDirections(position, neighborDirections){
+  if(neighborDirections.length < 2){
+    return [v(1,0,0), v(-0.25,0.96,0).normalize()];
+  }
+
+  const outward = position.lengthSq() > 1e-12
+    ? position.clone().normalize()
+    : v(0,0,1);
+
+  let bestPair = [neighborDirections[0], neighborDirections[1]];
+  let bestScore = -Infinity;
+
+  for(let i=0;i<neighborDirections.length;i++){
+    for(let j=i+1;j<neighborDirections.length;j++){
+      const a = neighborDirections[i];
+      const b = neighborDirections[j];
+      const radialScore = a.dot(outward) + b.dot(outward);
+      const separationScore = -Math.abs(a.dot(b) + 1/3); // tetrahedral pair preferred
+      const score = radialScore + 0.65 * separationScore;
+      if(score > bestScore){
+        bestScore = score;
+        bestPair = [a,b];
+      }
+    }
+  }
+  return bestPair;
+}
+
+function computeHydrogenDirections(position, neighborDirections){
+  const [d1,d2] = chooseDonorDirections(position, neighborDirections);
+
+  const bisector = d1.clone().add(d2);
+  if(bisector.lengthSq() < 1e-10){
+    return [d1.clone(), d2.clone()];
+  }
+  bisector.normalize();
+
+  let planeAxis = d1.clone().sub(d2);
+  if(planeAxis.lengthSq() < 1e-10){
+    planeAxis = new THREE.Vector3(1,0,0).cross(bisector);
+    if(planeAxis.lengthSq() < 1e-10) planeAxis = new THREE.Vector3(0,1,0).cross(bisector);
+  }
+  planeAxis.normalize();
+
+  const halfAngle = THREE.MathUtils.degToRad(H_O_H_DEG * 0.5);
+  const c = Math.cos(halfAngle);
+  const s = Math.sin(halfAngle);
+
+  const h1 = bisector.clone().multiplyScalar(c).add(planeAxis.clone().multiplyScalar(s)).normalize();
+  const h2 = bisector.clone().multiplyScalar(c).add(planeAxis.clone().multiplyScalar(-s)).normalize();
+  return [h1,h2];
+}
+
+function generateDiamondPoints(targetCount = 40){
+  const a = O_O_TARGET * 4 / Math.sqrt(3); // diamond nearest-neighbor distance -> target O···O
+  const basis = [
+    [0,0,0], [0.25,0.25,0.25],
+    [0,0.5,0.5], [0.25,0.75,0.75],
+    [0.5,0,0.5], [0.75,0.25,0.75],
+    [0.5,0.5,0], [0.75,0.75,0.25]
+  ];
+
+  const points = [];
+  for(let i=-2;i<=2;i++){
+    for(let j=-2;j<=2;j++){
+      for(let k=-2;k<=2;k++){
+        for(const b of basis){
+          points.push(v((i+b[0])*a,(j+b[1])*a,(k+b[2])*a));
+        }
+      }
+    }
+  }
+
+  points.sort((p,q)=>p.lengthSq()-q.lengthSq());
+  const selected = points.slice(0, targetCount).map(p=>p.clone());
+
+  // Leichte deterministische Verzerrung, damit die Probe natürlicher wirkt,
+  // ohne die lokale tetraedrische Ordnung zu verlieren.
+  for(let idx=0; idx<selected.length; idx++){
+    const p = selected[idx];
+    const r = p.length();
+    if(r < 1e-9) continue;
+    const n = p.clone().normalize();
+    const tangent = new THREE.Vector3(-n.y, n.x, 0);
+    if(tangent.lengthSq() < 1e-10) tangent.set(1,0,0);
+    tangent.normalize();
+    const bitangent = new THREE.Vector3().crossVectors(n, tangent).normalize();
+    const wobble1 = Math.sin(idx * 1.73) * 0.09;
+    const wobble2 = Math.cos(idx * 1.11) * 0.07;
+    p.addScaledVector(tangent, wobble1);
+    p.addScaledVector(bitangent, wobble2);
+  }
+
+  // Auf Schwerpunkt zentrieren.
+  const center = selected.reduce((acc,p)=>acc.add(p), new THREE.Vector3()).multiplyScalar(1/selected.length);
+  for(const p of selected) p.sub(center);
+
+  return selected;
+}
+
+function buildClusterData(){
+  if(cachedCluster) return cachedCluster;
+
+  const oxygenPositions = generateDiamondPoints(40);
+  const moleculeInfos = oxygenPositions.map((p,index)=>({ index, O: p.clone(), H1: null, H2: null }));
+
+  const neighborThreshold = 3.18; // Å – near first O···O shell
+  const edges = [];
+  const neighbors = Array.from({length: oxygenPositions.length}, ()=>[]);
+
+  for(let i=0;i<oxygenPositions.length;i++){
+    for(let j=i+1;j<oxygenPositions.length;j++){
+      const d = oxygenPositions[i].distanceTo(oxygenPositions[j]);
+      if(d <= neighborThreshold){
+        edges.push([i,j,d]);
+        neighbors[i].push({index:j, distance:d, dir:oxygenPositions[j].clone().sub(oxygenPositions[i]).normalize()});
+        neighbors[j].push({index:i, distance:d, dir:oxygenPositions[i].clone().sub(oxygenPositions[j]).normalize()});
+      }
+    }
+  }
+
+  for(const arr of neighbors) arr.sort((a,b)=>a.distance-b.distance);
+
+  for(let i=0;i<moleculeInfos.length;i++){
+    const info = moleculeInfos[i];
+    const neighborDirs = neighbors[i].slice(0,4).map(n=>n.dir.clone());
+    const [hDir1,hDir2] = computeHydrogenDirections(info.O, neighborDirs);
+    info.H1 = info.O.clone().addScaledVector(hDir1, O_H);
+    info.H2 = info.O.clone().addScaledVector(hDir2, O_H);
+  }
+
+  // Skalierung in die AR-Szene.
+  for(const m of moleculeInfos){
+    m.O.multiplyScalar(ANGSTROM_TO_SCENE);
+    m.H1.multiplyScalar(ANGSTROM_TO_SCENE);
+    m.H2.multiplyScalar(ANGSTROM_TO_SCENE);
+  }
+
+  const scaledEdges = edges.map(([i,j,d])=>({ i, j, distance: d * ANGSTROM_TO_SCENE }));
+
+  cachedCluster = { moleculeInfos, hydrogenBondEdges: scaledEdges };
+  return cachedCluster;
+}
+
+export function buildMolecule(data){
+  if(data?.key !== "WATER_CLUSTER"){
+    throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
+  }
+
+  const { moleculeInfos } = buildClusterData();
+  const root = new THREE.Group();
+  root.name = "WATER_CLUSTER";
+
+  for(const info of moleculeInfos){
+    addBond(root, info.O, info.H1, "O", "H");
+    addBond(root, info.O, info.H2, "O", "H");
+    root.add(createAtom("O", info.O));
+    root.add(createAtom("H", info.H1));
+    root.add(createAtom("H", info.H2));
+  }
+
+  return root;
+}
+
+export async function createHydrogenBondOverlay(data){
+  if(data?.key !== "WATER_CLUSTER"){
+    throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
+  }
+
+  const { moleculeInfos, hydrogenBondEdges } = buildClusterData();
+  const group = new THREE.Group();
+  group.name = "WATER_HBONDS";
+
+  for(const edge of hydrogenBondEdges){
+    const a = moleculeInfos[edge.i].O;
+    const b = moleculeInfos[edge.j].O;
+    addDashedHydrogenBond(group, a, b);
+  }
+
+  return group;
+}
+
+export function disposeObject3D(root){
+  if(!root) return;
+  root.traverse(obj=>{
+    if(obj.geometry) obj.geometry.dispose();
+    if(obj.material){
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for(const m of mats){
+        if(m?.map) m.map.dispose?.();
+        m?.dispose?.();
+      }
+    }
+  });
+}
+
+export function disposeMolecule(root){
+  disposeObject3D(root);
+}

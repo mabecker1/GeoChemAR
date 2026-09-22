@@ -1,0 +1,2474 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>GeoChemAR – Wasser-Ausschnitt mit Wasserstoffbrücken</title>
+<style>
+:root{
+  --ui-green:#2fac16;
+  --ui-green-dark:#258c12;
+  --ui-panel:rgba(18,22,27,.82);
+  --ui-panel-border:rgba(255,255,255,.14);
+  --ui-text:#f8fafc;
+  --ui-text-dark:#1f2937;
+  --ui-muted:#d0d5dd;
+  --ui-button:#ffffff;
+  --ui-disabled:#e5e7eb;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;padding:0;width:100%;height:100%;overflow:hidden;
+  background:#000;font-family:Arial,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+button,select{font-family:inherit}
+#video{
+  position:fixed;inset:0;width:100%;height:100%;
+  object-fit:contain;background:#000;z-index:1;
+}
+#threeCanvas{position:fixed;z-index:2;pointer-events:none}
+#analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
+
+/* Im Unterricht bleiben die technischen Tracking-Diagnosen unsichtbar.
+   Für Tests: URL einfach um ?debug=1 ergänzen. */
+#status{
+  display:none;
+  position:fixed;top:10px;left:10px;z-index:30;
+  max-width:min(520px,calc(100vw - 20px));
+  padding:9px 12px;border-radius:9px;
+  background:rgba(0,0,0,.78);color:#fff;
+  font-size:12px;line-height:1.4;white-space:pre-line;
+  pointer-events:none;
+}
+html.debug-mode #status{display:block}
+
+#error{
+  position:fixed;left:10px;right:10px;bottom:10px;z-index:40;
+  padding:10px 12px;border-radius:9px;
+  background:rgba(160,0,0,.94);color:#fff;
+  font-size:13px;white-space:pre-wrap;display:none;
+}
+
+/* Hauptbedienfeld */
+#epaControls{
+  position:fixed;top:12px;right:12px;z-index:20;
+  display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;
+  gap:9px;
+  max-width:calc(100vw - 24px);
+  padding:8px;
+  border:1px solid var(--ui-panel-border);
+  border-radius:14px;
+  background:var(--ui-panel);
+  color:var(--ui-text);
+  box-shadow:0 5px 22px rgba(0,0,0,.28);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  user-select:none;
+}
+#epaControls .controlGroup{
+  display:flex;align-items:center;gap:6px;
+}
+#epaControls .overlayGroup,
+#epaControls .zoomGroup{
+  padding-left:8px;
+  border-left:1px solid rgba(255,255,255,.16);
+}
+#epaControls label{
+  font-size:12px;font-weight:700;
+  color:var(--ui-muted);white-space:nowrap;
+}
+#epaControls select{
+  height:40px;min-width:196px;
+  border:1px solid rgba(255,255,255,.23);
+  border-radius:10px;
+  background:#fff;color:var(--ui-text-dark);
+  font-size:14px;font-weight:700;
+  padding:0 34px 0 11px;
+  cursor:pointer;outline:none;
+}
+#epaControls select:focus-visible,
+#epaControls button:focus-visible{
+  outline:3px solid rgba(47,172,22,.42);
+  outline-offset:2px;
+}
+#epaControls button{
+  min-width:40px;height:40px;
+  border:1px solid rgba(255,255,255,.23);
+  border-radius:10px;
+  background:var(--ui-button);
+  color:var(--ui-text-dark);
+  font-size:20px;font-weight:700;
+  cursor:pointer;touch-action:manipulation;
+  transition:background .14s ease,color .14s ease,border-color .14s ease,transform .06s ease;
+}
+#epaControls button:hover:not(:disabled){background:#f3f4f6}
+#epaControls button:active:not(:disabled){transform:translateY(1px)}
+#epaControls button:disabled{
+  opacity:.48;cursor:default;
+  background:var(--ui-disabled);color:#7b8491;
+}
+#epaControls .toggleControl{
+  min-width:auto;
+  padding:0 11px;
+  font-size:13px;
+  font-weight:700;
+}
+#epaControls .moleculeGroup > div{min-width:196px}
+#epaControls .toggleControl.active{
+  background:var(--ui-green);
+  color:#fff;
+  border-color:var(--ui-green);
+}
+#epaControls .toggleControl.active:hover{
+  background:var(--ui-green-dark);
+  border-color:var(--ui-green-dark);
+}
+#zoomValue{
+  min-width:52px;text-align:center;
+  color:#fff;font-size:13px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+#zoomReset{
+  min-width:40px!important;
+  padding:0 10px!important;
+  font-size:17px!important;
+}
+
+
+#espLegend{
+  position:fixed;
+  top:86px;
+  right:16px;
+  z-index:19;
+  display:none;
+  align-items:flex-start;
+  gap:10px;
+  padding:10px 11px;
+  border:1px solid var(--ui-panel-border);
+  border-radius:12px;
+  background:var(--ui-panel);
+  color:var(--ui-text);
+  box-shadow:0 5px 22px rgba(0,0,0,.28);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+#espLegend.visible{display:flex}
+#espLegend .legendTitle{
+  font-size:12px;
+  font-weight:700;
+  color:var(--ui-muted);
+  margin-bottom:2px;
+  white-space:nowrap;
+}
+#espLegend .legendBar{
+  width:18px;
+  height:136px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.22);
+  background:linear-gradient(to top,
+    #1a59f2 0%,
+    #18c9ff 24%,
+    #35d14f 50%,
+    #ffe234 76%,
+    #e53020 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+#espLegend .legendLabels{
+  height:136px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+}
+#espLegend .legendLabels span:last-child{
+  color:var(--ui-muted);
+}
+
+/* Smartphone: kompakt unten, trotzdem gut antippbar */
+@media (max-width:760px){
+  #epaControls{
+    top:auto;
+    left:max(8px,env(safe-area-inset-left));
+    right:max(8px,env(safe-area-inset-right));
+    bottom:max(8px,env(safe-area-inset-bottom));
+    max-width:none;
+    flex-direction:column;
+    align-items:stretch;
+    gap:7px;
+    padding:8px;
+    border-radius:13px;
+  }
+  #epaControls .controlGroup{justify-content:center}
+  #epaControls .moleculeGroup{justify-content:stretch}
+  #epaControls .moleculeGroup label{display:none}
+  #epaControls .overlayGroup,
+  #epaControls .zoomGroup{
+    padding-left:0;border-left:none;
+  }
+  #epaControls .overlayGroup{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+  }
+  #epaControls select{width:100%;min-width:0;height:42px}
+  #epaControls button{height:42px;min-width:42px}
+  #epaControls .toggleControl{width:100%;padding:0 8px}
+  #espLegend{
+    top:12px;
+    left:max(8px,env(safe-area-inset-left));
+    right:auto;
+    padding:9px 10px;
+  }
+  #espLegend .legendBar{height:116px}
+  #espLegend .legendLabels{height:116px;font-size:11px}
+  #error{
+    bottom:154px;
+    left:max(8px,env(safe-area-inset-left));
+    right:max(8px,env(safe-area-inset-right));
+  }
+}
+
+/* Sehr schmale Geräte: Bezeichnungen etwas kompakter */
+@media (max-width:390px){
+  #epaControls .toggleControl{font-size:12px}
+  #epaControls{gap:6px;padding:7px}
+}
+</style>
+</head>
+<body>
+<video id="video" autoplay muted playsinline></video>
+<canvas id="analysisCanvas" width="640" height="480"></canvas>
+<canvas id="recoveryCanvas" width="320" height="320"></canvas>
+<canvas id="flowCanvas" width="320" height="240"></canvas>
+<canvas id="threeCanvas" width="640" height="480"></canvas>
+<div id="status">Wasser-Version wird geladen …</div>
+<div id="epaControls" aria-label="Wasser-Werkzeuge">
+  <div class="controlGroup moleculeGroup">
+    <label>Wasser</label>
+    <div style="height:40px;display:flex;align-items:center;padding:0 12px;border:1px solid rgba(255,255,255,.23);border-radius:10px;background:#fff;color:#1f2937;font-size:14px;font-weight:700;white-space:nowrap;">
+      (H₂O)₄₀ – Wasser-Ausschnitt
+    </div>
+  </div>
+  <div class="controlGroup overlayGroup" aria-label="Wasserstoffbrücken">
+    <button id="espToggle" class="toggleControl" type="button" aria-pressed="false" title="Wasserstoffbrücken ein- oder ausblenden">Wasserstoffbrücken</button>
+  </div>
+  <div class="controlGroup zoomGroup" aria-label="Molekül-Zoom">
+    <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
+    <span id="zoomValue">100 %</span>
+    <button id="zoomIn" type="button" aria-label="Vergrößern">+</button>
+    <button id="zoomReset" type="button" aria-label="Zoom zurücksetzen" title="Zoom zurücksetzen">↺</button>
+  </div>
+</div>
+
+<div id="error"></div>
+<script type="module">
+import * as THREE from "../libs/three.module.min.js";
+import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
+import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
+import { buildMolecule, createHydrogenBondOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
+
+const VERSION="WATER-1 didaktischer H2O-Ausschnitt / H-Brücken / Core EPA-6a";
+const WIDTH=640, HEIGHT=480;
+const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
+const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
+const VELOCITY_BLEND=0.35, MAX_LINEAR_SPEED=1.5, MAX_ANGULAR_SPEED=12.0;
+const CONTINUITY_MAX_AGE_MS=260;
+const POSITION_SCORE_SCALE=0.025;
+const ROTATION_SCORE_SCALE=THREE.MathUtils.degToRad(25);
+const MULTI_POSITION_SCORE_SCALE=0.006;
+const MULTI_ROTATION_SCORE_SCALE=THREE.MathUtils.degToRad(7);
+
+/* 5c-10 joint pose */
+const JOINT_MIN_TAGS=2, JOINT_MAX_ITERATIONS=5, JOINT_MAX_RMSE_PX=8.0;
+const JOINT_MAX_POSITION_SHIFT=0.020;
+const JOINT_MAX_ROTATION_SHIFT=THREE.MathUtils.degToRad(30);
+const HUBER_THRESHOLD_PX=3.0;
+const JOINT_TRANSLATION_SCALE=0.001;
+const JOINT_ROTATION_SCALE=THREE.MathUtils.degToRad(1);
+const JOINT_FD_STEP=0.02, JOINT_DAMPING=0.001;
+
+/* 5c-12 recovery pipeline retained unchanged in 5c-13 */
+const ROI_RECOVERY_MAX_AGE_MS=420;
+const ROI_MAX_DIM=480;
+const ROI_MAX_UPSCALE=3.2;
+const ROI_PADDING_FACTOR=0.35;
+const ROI_MIN_PADDING_PX=22;
+const ROI_MIN_SIZE_PX=64;
+const ROI_MAX_FACES=3;
+const RECOVERY_FULL_EVERY_N=2;
+
+/* 5c-14: bounded micro-jitter stabilizer.
+   Stronger suppression while nearly still, but the rendered pose is
+   never allowed to lag more than a tiny spatial/angular amount.
+   This removes residual desktop jitter without reintroducing trailing. */
+const MICRO_ALPHA_STILL=0.08;
+const MICRO_POS_START=0.00018;       // 0.18 mm
+const MICRO_POS_DIRECT=0.00100;      // >= 1.00 mm -> direct
+const MICRO_ROT_START=THREE.MathUtils.degToRad(0.12);
+const MICRO_ROT_DIRECT=THREE.MathUtils.degToRad(0.80);
+const MICRO_MAX_LAG_POS=0.00035;     // max 0.35 mm visible lag
+const MICRO_MAX_LAG_ROT=THREE.MathUtils.degToRad(0.25);
+const MICRO_RESET_DT=0.18;
+
+/* EPA-6 JitterGuard – Desktop:
+   Kein zusätzlicher zeitlicher Low-Pass. Kleine Pose-Schwankungen bleiben
+   innerhalb einer räumlich begrenzten Sticky Sphere unsichtbar. Sobald die
+   echte Bewegung größer wird, schrumpft diese Grenze schnell. */
+const DESKTOP_STICKY_POS_STILL=0.00045;      // 0.45 mm
+const DESKTOP_STICKY_POS_MOVING=0.00007;     // 0.07 mm
+const DESKTOP_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.32);
+const DESKTOP_STICKY_ROT_MOVING=THREE.MathUtils.degToRad(0.05);
+const DESKTOP_STICKY_POS_DIRECT=0.00135;      // 1.35 mm
+const DESKTOP_STICKY_ROT_DIRECT=THREE.MathUtils.degToRad(0.95);
+
+/* Do not convert sub-pixel pose noise into prediction velocity. */
+const VELOCITY_NOISE_POS=0.00020;
+const VELOCITY_NOISE_ROT=THREE.MathUtils.degToRad(0.15);
+const VELOCITY_NOISE_DECAY=0.45;
+
+/* 5c-14: high-sensitivity single-face recovery for mobile.
+   The proven combined face ROI remains. If that fails, a much tighter
+   ROI magnifies one predicted face strongly. During risky edge turns a
+   throttled assist can discover the next face before the old one vanishes. */
+const FACE_ROI_MAX_DIM=320;
+const FACE_ROI_MAX_UPSCALE=5.0;
+const FACE_ROI_PADDING_FACTOR=0.28;
+const FACE_ROI_MIN_PADDING_PX=16;
+const FACE_ROI_MIN_SIZE_PX=48;
+const FACE_ROI_CANDIDATES=3;
+const PROACTIVE_ASSIST_EVERY_N=3;
+const PROACTIVE_ASSIST_MIN_FRONT=0.18;
+const PROACTIVE_ASSIST_MIN_ANGULAR_SPEED=2.0;
+const PROACTIVE_ASSIST_MAX_FULL_TIME_MS=36;
+
+/* 5c-15: targeted mobile capture/recovery.
+   Desktop stays on the proven 5c-14 path. On phones we prefer a faster
+   camera stream (when supported), mildly bias auto exposure darker to
+   shorten exposure, use native camera pixels for recovery ROIs, and keep
+   recovery to ONE AprilTag pass per fresh camera frame. */
+const IS_MOBILE_DEVICE=(()=>{
+  const ua=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"");
+  const coarse=typeof matchMedia==="function"&&matchMedia("(pointer: coarse)").matches;
+  const touch=(navigator.maxTouchPoints||0)>0;
+  return ua||(coarse&&touch);
+})();
+const MOBILE_TARGET_FPS=60;
+const MOBILE_FAST_FPS_MIN=50;
+const MOBILE_CAPTURE_WIDTH=1280;
+const MOBILE_CAPTURE_HEIGHT=960;
+const MOBILE_EXPOSURE_COMPENSATION=-0.5;
+const MOBILE_ROI_MAX_DIM=520;
+const MOBILE_FACE_ROI_MAX_DIM=384;
+const MOBILE_RECOVERY_CYCLE=4; // combined ROI, face 0, face 1, full frame
+
+/* 5c-17: mobile jitter is attacked at its source instead of by adding
+   another slow pose filter. The rendered pose stays direct, while only
+   the short-latency prediction velocity is estimated robustly from several
+   accepted stable full-frame poses. */
+const MOBILE_MOTION_HISTORY_MS=150;
+const MOBILE_MOTION_HISTORY_MAX=6;
+const MOBILE_MOTION_MIN_SEGMENT_MS=12;
+const MOBILE_MOTION_MAX_SEGMENT_MS=90;
+const MOBILE_MOTION_BLEND=0.58;
+
+/* 5c-17: speed-adaptive spatial deadband. This is NOT a temporal low-pass.
+   When the cube is nearly still, sub-mm / sub-degree noise remains inside a
+   small "sticky" sphere. As soon as real motion starts, that sphere shrinks
+   almost to zero. Therefore the maximum error is spatially bounded instead
+   of accumulating as visible trailing. */
+const MOBILE_STICKY_POS_STILL=0.00085;      // 0.85 mm – EPA-6 JitterGuard
+const MOBILE_STICKY_POS_MOVING=0.00010;     // 0.10 mm
+const MOBILE_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.65); // EPA-6 JitterGuard
+const MOBILE_STICKY_ROT_MOVING=THREE.MathUtils.degToRad(0.08);
+const MOBILE_STICKY_LINEAR_FULL=0.10;       // m/s => essentially direct
+const MOBILE_STICKY_ANGULAR_FULL=1.8;       // rad/s => essentially direct
+const MOBILE_STICKY_FORCE_DIRECT_POS=0.0018;
+const MOBILE_STICKY_FORCE_DIRECT_ROT=THREE.MathUtils.degToRad(1.35);
+
+/* A proactive high-resolution face measurement comes from a different crop
+   and is often strongly oblique. It may help prevent a dropout, but on a
+   phone it is only allowed to move the object when it agrees with the
+   predicted rigid-cube pose. This removes source-switch twitches without
+   discarding the useful next-face search. */
+const MOBILE_ASSIST_MAX_POSITION_ERROR=0.006;
+const MOBILE_ASSIST_MAX_ROTATION_ERROR=THREE.MathUtils.degToRad(8);
+
+/* 5c-19: hybrid optical-flow bridge.
+   AprilTag remains the absolute reference and detector/recovery scheduling
+   stays exactly as in 5c-17. A lightweight pyramidal Lucas-Kanade tracker
+   follows known points on the currently visible cube faces between tag
+   detections. It is used only as a short bridge and as a better ROI guide;
+   every new AprilTag pose re-anchors it, so drift cannot accumulate. */
+const FLOW_WIDTH=320;
+const FLOW_HEIGHT=240;
+const FLOW_SCALE_X=FLOW_WIDTH/WIDTH;
+const FLOW_SCALE_Y=FLOW_HEIGHT/HEIGHT;
+const FLOW_LEVELS=3;
+const FLOW_PATCH_RADIUS=3;
+const FLOW_ITERATIONS=4;
+const FLOW_MAX_POINTS=28;
+const FLOW_MIN_POINTS=7;
+const FLOW_GRID_STEPS=5;
+const FLOW_GRID_EXTENT=0.78;
+const FLOW_MIN_FEATURE_SCORE=8.0;
+const FLOW_MIN_POINT_SEPARATION=5.5;
+const FLOW_MAX_PHOTOMETRIC_ERROR=34;
+const FLOW_MAX_FB_ERROR=1.6;
+const FLOW_RENDER_AFTER_MS=48;
+const FLOW_MAX_RENDER_AGE_MS=90;
+const FLOW_MAX_BRIDGE_FROM_TAG_MS=650;
+const FLOW_POSE_MAX_RMSE_PX=4.2;
+const FLOW_POSE_MAX_POSITION_STEP=0.030;
+const FLOW_POSE_MAX_ROTATION_STEP=THREE.MathUtils.degToRad(26);
+const FLOW_POSE_MAX_POSITION_FROM_SEED=0.045;
+const FLOW_POSE_MAX_ROTATION_FROM_SEED=THREE.MathUtils.degToRad(38);
+const FLOW_MAX_REPROJECTION_OUTLIER_PX=7.0;
+
+/* 5c-13: recovery jump guard.
+   Recovery detection remains exactly as in 5c-12, but a single
+   implausible ROI/reacquisition pose is not allowed to teleport
+   the molecule. A second consistent pose confirms a real fast move. */
+const RECOVERY_GUARD_TRIGGER_MS=55;
+const RECOVERY_GUARD_BASE_POSITION=0.025;
+const RECOVERY_GUARD_MAX_POSITION=0.060;
+const RECOVERY_GUARD_BASE_ROTATION=THREE.MathUtils.degToRad(28);
+const RECOVERY_GUARD_MAX_ROTATION=THREE.MathUtils.degToRad(65);
+const RECOVERY_CONFIRM_POSITION=0.018;
+const RECOVERY_CONFIRM_ROTATION=THREE.MathUtils.degToRad(18);
+const RECOVERY_CONFIRM_FRAMES=2;
+
+/* camera model, unchanged */
+const horizontalFovRad=THREE.MathUtils.degToRad(60);
+const fx=(WIDTH/2)/Math.tan(horizontalFovRad/2), fy=fx, cx=WIDTH/2, cy=HEIGHT/2;
+const verticalFovDeg=THREE.MathUtils.radToDeg(2*Math.atan(HEIGHT/(2*fy)));
+
+const video=document.getElementById("video");
+const analysisCanvas=document.getElementById("analysisCanvas");
+const analysisCtx=analysisCanvas.getContext("2d",{willReadFrequently:true});
+const recoveryCanvas=document.getElementById("recoveryCanvas");
+const recoveryCtx=recoveryCanvas.getContext("2d",{willReadFrequently:true});
+const flowCanvas=document.getElementById("flowCanvas");
+const flowCtx=flowCanvas.getContext("2d",{willReadFrequently:true});
+const threeCanvas=document.getElementById("threeCanvas");
+const status=document.getElementById("status");
+const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
+if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
+const errorBox=document.getElementById("error");
+const espToggleButton=document.getElementById("espToggle");
+const espLegend=document.getElementById("espLegend");
+const zoomOutButton=document.getElementById("zoomOut");
+const zoomInButton=document.getElementById("zoomIn");
+const zoomResetButton=document.getElementById("zoomReset");
+const zoomValue=document.getElementById("zoomValue");
+
+let apriltag=null, detectorReady=false, cameraReady=false, detectionRunning=false;
+let detectionCounter=0,detectionFPS=0,detectionFpsStart=performance.now();
+let videoFrameCounter=0,videoFPS=0,videoFpsStart=performance.now();
+let lastPresentedFrames=null,skippedPresentedFrames=0,skippedBecauseBusy=0;
+let lastDetectionLatencyMs=0,lastMainTimeMs=0,lastRoiTimeMs=0,lastFrameAgeAtResultMs=0,frameTimeSource="–",lastFrameTimestamp=null;
+let lastVisibleIDs=[],lastCenterSpread=null,lastRotationSpread=null,lastAltSelections=0,totalAltSelections=0,lastSolutionScore=null,trackingMode="KEINE POSE";
+let lastJointUsed=false,lastJointTags=0,lastReprojectionBefore=null,lastReprojectionAfter=null,lastJointTimeMs=0;
+let detectorSource="–",roiAttempts=0,roiHits=0,fullFallbacks=0,lastRoiText="–";
+let faceRoiAttempts=0,faceRoiHits=0,proactiveAttempts=0,proactiveHits=0,normalFrameSerial=0;
+let fullAttempts=0,fullHits=0,recoveryMode=false,recoveryFrames=0,consecutiveMisses=0;
+let cameraModeText="Standard";
+let mobileFastCapture=false,mobileNativeRoi=false,mobileExposureComp=null;
+let mobileFreshRecoveryDeferrals=0,mobileSinglePassRecovery=0;
+let pendingMobileAssist=false,pendingMobileAssistExcludeIds=[];
+let mobileAssistPoseRejected=0;
+let mobileRobustSegments=0;
+let mobileStickyRadiusPos=0,mobileStickyRadiusRot=0;
+let sourceVideoText="–";
+
+let flowPrevPyramid=null,flowPrevTime=null,flowNeedsReseed=true;
+let flowPoints=[];
+let flowValid=false,flowPoseTime=null,flowPoseRmse=null,flowInliers=0;
+const flowPosePosition=new THREE.Vector3();
+const flowPoseQuaternion=new THREE.Quaternion();
+let flowFrames=0,flowAccepted=0,flowRejected=0,flowReseeds=0;
+let flowLastText="–";
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(verticalFovDeg,WIDTH/HEIGHT,0.01,10);
+const renderer=new THREE.WebGLRenderer({canvas:threeCanvas,alpha:true,antialias:true});
+renderer.setPixelRatio(1); renderer.setSize(WIDTH,HEIGHT,false); renderer.setClearColor(0x000000,0);
+scene.add(new THREE.AmbientLight(0xffffff,2));
+const dl=new THREE.DirectionalLight(0xffffff,2); dl.position.set(1,2,2); scene.add(dl);
+
+const relativeFrom3={
+  0:new THREE.Quaternion( .5,-.5, .5,.5),
+  1:new THREE.Quaternion(-.5,-.5,-.5,.5),
+  2:new THREE.Quaternion(0, Math.SQRT1_2,0,Math.SQRT1_2),
+  3:new THREE.Quaternion(0,0,0,1),
+  4:new THREE.Quaternion(0,-Math.SQRT1_2,0,Math.SQRT1_2),
+  5:new THREE.Quaternion(0,-1,0,0)
+};
+const correctionTo3={};
+for(let id=0;id<=5;id++){relativeFrom3[id].normalize();correctionTo3[id]=relativeFrom3[id].clone().invert();}
+
+const tagHalf=TAG_SIZE/2;
+const localTagCorners=[
+  new THREE.Vector3(-tagHalf,-tagHalf,0), new THREE.Vector3(tagHalf,-tagHalf,0),
+  new THREE.Vector3(tagHalf,tagHalf,0), new THREE.Vector3(-tagHalf,tagHalf,0)
+];
+const cubeTagCorners={};
+for(let id=0;id<=5;id++){
+  const r=relativeFrom3[id];
+  const c=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(r);
+  cubeTagCorners[id]=localTagCorners.map(p=>p.clone().applyQuaternion(r).add(c));
+}
+const cubeVertices=[];
+for(const x of [-HALF_CUBE,HALF_CUBE]) for(const y of [-HALF_CUBE,HALF_CUBE]) for(const z of [-HALF_CUBE,HALF_CUBE]) cubeVertices.push(new THREE.Vector3(x,y,z));
+
+/* Dense known surface points used by the optical-flow bridge.
+   Their 3D position is exact because every point lies on a known cube face.
+   At seeding time only patches with enough image gradient are retained. */
+const flowFacePoints={};
+for(let id=0;id<=5;id++){
+  const faceRotation=relativeFrom3[id];
+  const faceCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(faceRotation);
+  const points=[];
+  for(let gy=0;gy<FLOW_GRID_STEPS;gy++){
+    for(let gx=0;gx<FLOW_GRID_STEPS;gx++){
+      const u=((gx/(FLOW_GRID_STEPS-1))*2-1)*tagHalf*FLOW_GRID_EXTENT;
+      const v=((gy/(FLOW_GRID_STEPS-1))*2-1)*tagHalf*FLOW_GRID_EXTENT;
+      const p=new THREE.Vector3(u,v,0).applyQuaternion(faceRotation).add(faceCenter);
+      points.push(p);
+    }
+  }
+  flowFacePoints[id]=points;
+}
+
+/* =====================================================
+   Wasser-Fachinhalt – getrennt vom Tracking-Core
+   ===================================================== */
+
+let selectedMolecule=getMoleculeData(DEFAULT_MOLECULE);
+
+const trackedCubeRoot=new THREE.Group();
+const contentRoot=new THREE.Group();
+trackedCubeRoot.add(contentRoot);
+trackedCubeRoot.visible=false;
+scene.add(trackedCubeRoot);
+
+let currentMoleculeObject=null;
+let currentEspSurface=null;
+let espVisible=false;
+let moleculeZoom=selectedMolecule.zoom.default;
+
+function clampZoom(value){
+  return THREE.MathUtils.clamp(value,selectedMolecule.zoom.min,selectedMolecule.zoom.max);
+}
+
+function applyMoleculeZoom(value){
+  moleculeZoom=clampZoom(value);
+  contentRoot.scale.setScalar(moleculeZoom);
+  zoomValue.textContent=`${Math.round(moleculeZoom*100)} %`;
+  zoomOutButton.disabled=moleculeZoom<=selectedMolecule.zoom.min+1e-9;
+  zoomInButton.disabled=moleculeZoom>=selectedMolecule.zoom.max-1e-9;
+}
+
+function applyMoleculeSurfaceView(enabled){
+  if(!currentMoleculeObject)return;
+
+  currentMoleculeObject.traverse(obj=>{
+    if(!obj.material)return;
+
+    const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+
+    for(const material of materials){
+      if(!material)continue;
+
+      if(enabled){
+        material.transparent=false;
+
+        if(obj.userData?.kind==="bond"){
+          material.opacity=1.0;
+        }else if(obj.userData?.kind==="atom"){
+          material.opacity=1.0;
+        }else{
+          material.opacity=1.0;
+        }
+
+        material.depthWrite=true;
+      }else{
+        material.transparent=false;
+        material.opacity=1.0;
+        material.depthWrite=true;
+      }
+
+      material.needsUpdate=true;
+    }
+  });
+}
+
+async function setEspVisible(visible){
+  espVisible=!!visible;
+  espToggleButton.classList.toggle("active",espVisible);
+  espToggleButton.setAttribute("aria-pressed",espVisible?"true":"false");
+  if(espLegend)espLegend.classList.toggle("visible",espVisible);
+
+  if(!espVisible){
+    if(currentEspSurface)currentEspSurface.visible=false;
+    applyMoleculeSurfaceView(false);
+    return;
+  }
+
+  if(!currentEspSurface){
+    espToggleButton.disabled=true;
+    const oldText=espToggleButton.textContent;
+    espToggleButton.textContent="Lädt …";
+    try{
+      currentEspSurface=await createHydrogenBondOverlay(selectedMolecule);
+      contentRoot.add(currentEspSurface);
+    }finally{
+      espToggleButton.disabled=false;
+      espToggleButton.textContent=oldText;
+    }
+  }
+  currentEspSurface.visible=true;
+  applyMoleculeSurfaceView(true);
+}
+
+function showMolecule(resetZoom=true){
+  if(currentMoleculeObject){
+    contentRoot.remove(currentMoleculeObject);
+    disposeMolecule(currentMoleculeObject);
+    currentMoleculeObject=null;
+  }
+  if(currentEspSurface){
+    contentRoot.remove(currentEspSurface);
+    disposeObject3D(currentEspSurface);
+    currentEspSurface=null;
+  }
+
+  currentMoleculeObject=buildMolecule(selectedMolecule);
+  contentRoot.add(currentMoleculeObject);
+  applyMoleculeSurfaceView(false);
+
+  if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
+  applyMoleculeZoom(moleculeZoom);
+  void setEspVisible(espVisible);
+}
+
+zoomOutButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom-selectedMolecule.zoom.step));
+zoomInButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom+selectedMolecule.zoom.step));
+zoomResetButton.addEventListener("click",()=>applyMoleculeZoom(selectedMolecule.zoom.default));
+espToggleButton.addEventListener("click",()=>{ void setEspVisible(!espVisible); });
+
+showMolecule(true);
+
+const basisChange=new THREE.Matrix4().set(1,0,0,0, 0,-1,0,0, 0,0,-1,0, 0,0,0,1);
+function convertAprilPose(pose){
+  if(!pose||!Array.isArray(pose.t)||!Array.isArray(pose.R)||pose.t.length<3||pose.R.length<3||!Array.isArray(pose.R[0])||!Array.isArray(pose.R[1])||!Array.isArray(pose.R[2])) return null;
+  const tx=Number(pose.t[0]),ty=Number(pose.t[1]),tz=Number(pose.t[2]);
+  if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz)) return null;
+  const ar=new THREE.Matrix4().set(
+    pose.R[0][0],pose.R[1][0],pose.R[2][0],0,
+    pose.R[0][1],pose.R[1][1],pose.R[2][1],0,
+    pose.R[0][2],pose.R[1][2],pose.R[2][2],0,
+    0,0,0,1
+  );
+  const m=new THREE.Matrix4().copy(basisChange).multiply(ar).multiply(basisChange);
+  return {position:new THREE.Vector3(tx,-ty,-tz),quaternion:new THREE.Quaternion().setFromRotationMatrix(m).normalize()};
+}
+function quaternionAngle(a,b){let d=Math.abs(a.dot(b));d=THREE.MathUtils.clamp(d,-1,1);return 2*Math.acos(d);}
+function quaternionAngleDegrees(a,b){return THREE.MathUtils.radToDeg(quaternionAngle(a,b));}
+function poseErrorValue(p){return p&&typeof p.e==="number"&&Number.isFinite(p.e)?Math.max(0,p.e):null;}
+function getPoint(p){
+  if(!p)return null;
+  if(Array.isArray(p)){const x=Number(p[0]),y=Number(p[1]);return Number.isFinite(x)&&Number.isFinite(y)?{x,y}:null;}
+  const x=Number(p.x),y=Number(p.y); return Number.isFinite(x)&&Number.isFinite(y)?{x,y}:null;
+}
+function getDetectionCorners(d){
+  if(!d||!Array.isArray(d.corners)||d.corners.length<4)return null;
+  const c=d.corners.slice(0,4).map(getPoint); return c.some(p=>!p)?null:c;
+}
+function detectionArea(d){
+  const c=getDetectionCorners(d); if(!c)return 1; let a=0;
+  for(let i=0;i<4;i++){const p=c[i],q=c[(i+1)%4];a+=p.x*q.y-q.x*p.y;}
+  return Math.max(1,Math.abs(a)/2);
+}
+function isRelevantDetection(d){const id=Number(d?.id);return Number.isInteger(id)&&id>=0&&id<=5&&d.pose;}
+
+function makeCubeCandidate(id,pose,solutionName,detection){
+  const cv=convertAprilPose(pose); if(!cv)return null;
+  const tagPosition=cv.position,tagQuaternion=cv.quaternion;
+  const cubePosition=tagPosition.clone().add(new THREE.Vector3(0,0,-HALF_CUBE).applyQuaternion(tagQuaternion));
+  const cubeQuaternion=tagQuaternion.clone().multiply(correctionTo3[id]).normalize();
+  const n=new THREE.Vector3(0,0,1).applyQuaternion(tagQuaternion).normalize();
+  const toCamera=tagPosition.clone().multiplyScalar(-1); let frontality=0;
+  if(toCamera.lengthSq()>1e-12){toCamera.normalize();frontality=n.dot(toCamera);}
+  return {id,solutionName,detection,cubePosition,cubeQuaternion,tagPosition,tagQuaternion,frontality,imageArea:detectionArea(detection),error:poseErrorValue(pose),relativeErrorPenalty:0};
+}
+function makeCandidateSet(d){
+  const id=Number(d?.id); if(!Number.isInteger(id)||id<0||id>5||!d.pose)return null;
+  const candidates=[];
+  const main=makeCubeCandidate(id,d.pose,"main",d); if(main)candidates.push(main);
+  const alt=makeCubeCandidate(id,d.pose.asol,"alt",d); if(alt)candidates.push(alt);
+  if(!candidates.length)return null;
+  const es=candidates.map(c=>c.error).filter(Number.isFinite);
+  if(es.length){const min=Math.max(1e-9,Math.min(...es));for(const c of candidates)c.relativeErrorPenalty=Number.isFinite(c.error)?Math.log(Math.max(1,c.error/min)):.5;}
+  return {id,candidates};
+}
+
+let hasGoodPose=false,lastGoodPoseTime=null;
+const lastGoodPosition=new THREE.Vector3(),lastGoodQuaternion=new THREE.Quaternion(),linearVelocity=new THREE.Vector3(),angularVelocityAxis=new THREE.Vector3(1,0,0);
+let angularVelocity=0;
+
+/* Stable mobile measurements used only to estimate prediction velocity.
+   The absolute pose itself is still accepted directly, so this history
+   cannot create display lag. */
+const mobileMotionHistory=[];
+
+function medianNumber(values){
+  if(!values.length)return 0;
+  const a=values.slice().sort((x,y)=>x-y);
+  const m=Math.floor(a.length/2);
+  return a.length%2?a[m]:(a[m-1]+a[m])/2;
+}
+
+function isStableMobileMotionSource(source){
+  return source==="FULL-STABIL"||source==="FULL+FACE-ASSIST";
+}
+
+function clearMobileMotionHistory(){
+  mobileMotionHistory.length=0;
+  mobileRobustSegments=0;
+}
+
+function pushMobileMotionSample(position,quaternion,timeMs){
+  mobileMotionHistory.push({
+    position:position.clone(),
+    quaternion:quaternion.clone(),
+    time:timeMs
+  });
+
+  while(
+    mobileMotionHistory.length>MOBILE_MOTION_HISTORY_MAX||
+    (mobileMotionHistory.length>1&&timeMs-mobileMotionHistory[0].time>MOBILE_MOTION_HISTORY_MS)
+  ){
+    mobileMotionHistory.shift();
+  }
+
+  const linearSegments=[];
+  const angularSegments=[];
+
+  for(let i=1;i<mobileMotionHistory.length;i++){
+    const a=mobileMotionHistory[i-1],b=mobileMotionHistory[i];
+    const dtMs=b.time-a.time;
+    if(dtMs<MOBILE_MOTION_MIN_SEGMENT_MS||dtMs>MOBILE_MOTION_MAX_SEGMENT_MS)continue;
+    const dt=dtMs/1000;
+
+    const lv=b.position.clone().sub(a.position).divideScalar(dt);
+    const sp=lv.length();
+    if(sp>MAX_LINEAR_SPEED)lv.multiplyScalar(MAX_LINEAR_SPEED/sp);
+    linearSegments.push(lv);
+
+    const dq=a.quaternion.clone().invert().multiply(b.quaternion).normalize();
+    if(dq.w<0){dq.x*=-1;dq.y*=-1;dq.z*=-1;dq.w*=-1;}
+    const w=THREE.MathUtils.clamp(dq.w,-1,1);
+    const angle=2*Math.acos(w);
+    const sinHalf=Math.sqrt(Math.max(0,1-w*w));
+    if(sinHalf>1e-6&&angle>1e-6){
+      const axis=new THREE.Vector3(dq.x/sinHalf,dq.y/sinHalf,dq.z/sinHalf);
+      const speed=Math.min(angle/dt,MAX_ANGULAR_SPEED);
+      angularSegments.push(axis.multiplyScalar(speed));
+    }else{
+      angularSegments.push(new THREE.Vector3());
+    }
+  }
+
+  mobileRobustSegments=linearSegments.length;
+  if(!linearSegments.length)return;
+
+  const robustLinear=new THREE.Vector3(
+    medianNumber(linearSegments.map(v=>v.x)),
+    medianNumber(linearSegments.map(v=>v.y)),
+    medianNumber(linearSegments.map(v=>v.z))
+  );
+  const robustLinearSpeed=robustLinear.length();
+  if(robustLinearSpeed>MAX_LINEAR_SPEED)robustLinear.multiplyScalar(MAX_LINEAR_SPEED/robustLinearSpeed);
+  linearVelocity.lerp(robustLinear,MOBILE_MOTION_BLEND);
+
+  if(angularSegments.length){
+    const robustAngularVector=new THREE.Vector3(
+      medianNumber(angularSegments.map(v=>v.x)),
+      medianNumber(angularSegments.map(v=>v.y)),
+      medianNumber(angularSegments.map(v=>v.z))
+    );
+    const previousAngularVector=angularVelocityAxis.clone().multiplyScalar(angularVelocity);
+    previousAngularVector.lerp(robustAngularVector,MOBILE_MOTION_BLEND);
+    const av=previousAngularVector.length();
+    if(av<0.03){
+      angularVelocity=0;
+    }else{
+      angularVelocityAxis.copy(previousAngularVector).multiplyScalar(1/av);
+      angularVelocity=Math.min(av,MAX_ANGULAR_SPEED);
+    }
+  }
+
+  /* Residual tiny speeds are measurement noise, not intentional motion. */
+  if(linearVelocity.length()<0.006)linearVelocity.set(0,0,0);
+  if(Math.abs(angularVelocity)<0.08)angularVelocity=0;
+}
+
+function predictedPoseAt(timeMs,maxAgeMs=MAX_PREDICTION_TIME_MS){
+  if(!hasGoodPose||lastGoodPoseTime===null)return null;
+  let age=timeMs-lastGoodPoseTime;if(!Number.isFinite(age))return null;age=Math.max(0,Math.min(age,maxAgeMs));const dt=age/1000;
+  const position=lastGoodPosition.clone().addScaledVector(linearVelocity,dt), quaternion=lastGoodQuaternion.clone();
+  const angle=angularVelocity*dt;if(Math.abs(angle)>1e-5)quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
+  return {position,quaternion,ageMs:age};
+}
+
+function registerGoodPose(position,quaternion,frameTime,source=detectorSource){
+  if(!hasGoodPose){
+    lastGoodPosition.copy(position);
+    lastGoodQuaternion.copy(quaternion);
+    lastGoodPoseTime=frameTime;
+    linearVelocity.set(0,0,0);
+    angularVelocity=0;
+    hasGoodPose=true;
+    if(isStableMobileMotionSource(source))pushMobileMotionSample(position,quaternion,frameTime);
+    return;
+  }
+
+  const dt=(frameTime-lastGoodPoseTime)/1000;
+
+  if(IS_MOBILE_DEVICE){
+    /* On the phone, do NOT differentiate two adjacent noisy poses. The
+       derivative is exactly where sub-pixel corner noise became visible
+       jitter after 30–40 ms of latency compensation. Only stable full-frame
+       measurements feed a short robust median history. Recovery/ROI poses
+       update the absolute pose but never inject a velocity spike. */
+    if(dt>=.15){
+      linearVelocity.set(0,0,0);
+      angularVelocity=0;
+      clearMobileMotionHistory();
+    }
+    if(isStableMobileMotionSource(source)){
+      pushMobileMotionSample(position,quaternion,frameTime);
+    }
+  }else{
+    /* EPA-6a: Desktop nutzt jetzt dieselbe robuste Bewegungsabschätzung
+       wie der bereits sehr ruhige Mobilmodus. Keine Ableitung mehr aus
+       nur zwei direkt aufeinanderfolgenden, leicht verrauschten Posen. */
+    if(dt>=.15){
+      linearVelocity.set(0,0,0);
+      angularVelocity=0;
+      clearMobileMotionHistory();
+    }
+    if(isStableMobileMotionSource(source)){
+      pushMobileMotionSample(position,quaternion,frameTime);
+    }
+  }
+
+  lastGoodPosition.copy(position);
+  lastGoodQuaternion.copy(quaternion);
+  lastGoodPoseTime=frameTime;
+}
+
+function fuseCombination(combo){
+  const position=new THREE.Vector3();for(const c of combo)position.add(c.cubePosition);position.multiplyScalar(1/combo.length);
+  const ref=combo[0].cubeQuaternion;let qx=0,qy=0,qz=0,qw=0;
+  for(const c of combo){const q=c.cubeQuaternion.clone();if(ref.dot(q)<0){q.x*=-1;q.y*=-1;q.z*=-1;q.w*=-1;}qx+=q.x;qy+=q.y;qz+=q.z;qw+=q.w;}
+  const quaternion=new THREE.Quaternion(qx,qy,qz,qw).normalize();let mps=0,xps=0,mrs=0,xrs=0;
+  for(const c of combo){const pd=c.cubePosition.distanceTo(position),rd=quaternionAngle(c.cubeQuaternion,quaternion);mps+=pd;mrs+=rd;xps=Math.max(xps,pd);xrs=Math.max(xrs,rd);}
+  return {position,quaternion,meanPositionSpread:mps/combo.length,maxPositionSpread:xps,meanRotationSpread:mrs/combo.length,maxRotationSpread:xrs};
+}
+function evaluateCombination(combo,pred){
+  const f=fuseCombination(combo);let score=0;
+  if(combo.length>1){score+=f.meanPositionSpread/MULTI_POSITION_SCORE_SCALE;score+=f.meanRotationSpread/MULTI_ROTATION_SCORE_SCALE;}
+  if(pred){score+=f.position.distanceTo(pred.position)/POSITION_SCORE_SCALE;score+=quaternionAngle(f.quaternion,pred.quaternion)/ROTATION_SCORE_SCALE;}
+  for(const c of combo){score+=.18*c.relativeErrorPenalty;if(c.frontality<0)score+=25+Math.abs(c.frontality)*10;else if(c.frontality<.08)score+=(.08-c.frontality)*2;}
+  return {score,fused:f};
+}
+function chooseBestCubeMeasurement(sets,frameTime){
+  if(!sets.length)return null;let pred=null;
+  if(hasGoodPose&&lastGoodPoseTime!==null&&frameTime-lastGoodPoseTime>=0&&frameTime-lastGoodPoseTime<=CONTINUITY_MAX_AGE_MS)pred=predictedPoseAt(frameTime,CONTINUITY_MAX_AGE_MS);
+  let best=null;const combo=[];
+  function rec(i){if(i===sets.length){const e=evaluateCombination(combo,pred);if(!best||e.score<best.score)best={score:e.score,fused:e.fused,combo:combo.slice()};return;}for(const c of sets[i].candidates){combo.push(c);rec(i+1);combo.pop();}}
+  rec(0);return best;
+}
+
+function projectCubePoint(point,position,quaternion){
+  const p=point.clone().applyQuaternion(quaternion).add(position),depth=-p.z;if(depth<=.01)return null;
+  return {x:fx*p.x/depth+cx,y:cy-fy*p.y/depth};
+}
+function createJointObservations(combo){
+  if(combo.length<JOINT_MIN_TAGS)return [];
+  let maxArea=1;for(const c of combo)maxArea=Math.max(maxArea,c.imageArea);const obs=[];
+  for(const c of combo){const corners=getDetectionCorners(c.detection);if(!corners)continue;const aw=THREE.MathUtils.clamp(Math.sqrt(c.imageArea/maxArea),.35,1),fw=.55+.45*THREE.MathUtils.clamp(c.frontality,0,1),bw=aw*fw;
+    for(let i=0;i<4;i++)obs.push({point:cubeTagCorners[c.id][i],x:corners[i].x,y:corners[i].y,baseWeight:bw});}
+  return obs;
+}
+function calculateResidualState(position,quaternion,observations,fixedWeights=null){
+  const wr=[],weights=[];let raw=0;
+  for(let i=0;i<observations.length;i++){const o=observations[i],p=projectCubePoint(o.point,position,quaternion);if(!p)return null;const dx=p.x-o.x,dy=p.y-o.y;raw+=dx*dx+dy*dy;
+    let w;if(fixedWeights)w=fixedWeights[i];else{const d=Math.hypot(dx,dy),hw=d<=HUBER_THRESHOLD_PX?1:HUBER_THRESHOLD_PX/Math.max(d,1e-9);w=o.baseWeight*hw;}weights.push(w);const sw=Math.sqrt(w);wr.push(dx*sw,dy*sw);}
+  let cost=0;for(const r of wr)cost+=r*r;return {weightedResiduals:wr,weights,cost,rawRmse:Math.sqrt(raw/Math.max(1,observations.length*2))};
+}
+function applyNormalizedPoseDelta(position,quaternion,delta,factor=1){
+  position.x+=delta[0]*JOINT_TRANSLATION_SCALE*factor;position.y+=delta[1]*JOINT_TRANSLATION_SCALE*factor;position.z+=delta[2]*JOINT_TRANSLATION_SCALE*factor;
+  const rv=new THREE.Vector3(delta[3]*JOINT_ROTATION_SCALE*factor,delta[4]*JOINT_ROTATION_SCALE*factor,delta[5]*JOINT_ROTATION_SCALE*factor),a=rv.length();
+  if(a>1e-12)quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(rv.clone().multiplyScalar(1/a),a)).normalize();
+}
+function solveLinear6(matrix,vector){
+  const n=6,a=matrix.map((r,i)=>[...r,vector[i]]);
+  for(let c=0;c<n;c++){let pr=c,pv=Math.abs(a[c][c]);for(let r=c+1;r<n;r++){const v=Math.abs(a[r][c]);if(v>pv){pv=v;pr=r;}}if(pv<1e-12)return null;if(pr!==c){const t=a[c];a[c]=a[pr];a[pr]=t;}const p=a[c][c];for(let j=c;j<=n;j++)a[c][j]/=p;for(let r=0;r<n;r++){if(r===c)continue;const f=a[r][c];if(Math.abs(f)<1e-20)continue;for(let j=c;j<=n;j++)a[r][j]-=f*a[c][j];}}
+  return a.map(r=>r[n]);
+}
+function refineJointCubePose(initialPosition,initialQuaternion,combo){
+  const t0=performance.now(),obs=createJointObservations(combo);
+  if(obs.length<JOINT_MIN_TAGS*4)return {accepted:false,position:initialPosition.clone(),quaternion:initialQuaternion.clone(),before:null,after:null,timeMs:performance.now()-t0};
+  let position=initialPosition.clone(),quaternion=initialQuaternion.clone(),state=calculateResidualState(position,quaternion,obs);if(!state)return {accepted:false,position,quaternion,before:null,after:null,timeMs:performance.now()-t0};
+  const before=state.rawRmse;
+  for(let iter=0;iter<JOINT_MAX_ITERATIONS;iter++){
+    const m=state.weightedResiduals.length,J=Array.from({length:m},()=>new Array(6).fill(0));
+    for(let k=0;k<6;k++){const tp=position.clone(),tq=quaternion.clone(),d=[0,0,0,0,0,0];d[k]=JOINT_FD_STEP;applyNormalizedPoseDelta(tp,tq,d);const ts=calculateResidualState(tp,tq,obs,state.weights);if(!ts)continue;for(let r=0;r<m;r++)J[r][k]=(ts.weightedResiduals[r]-state.weightedResiduals[r])/JOINT_FD_STEP;}
+    const A=Array.from({length:6},()=>new Array(6).fill(0)),b=new Array(6).fill(0);
+    for(let r=0;r<m;r++){const rr=state.weightedResiduals[r];for(let a=0;a<6;a++){const ja=J[r][a];b[a]-=ja*rr;for(let bb=0;bb<6;bb++)A[a][bb]+=ja*J[r][bb];}}
+    for(let k=0;k<6;k++)A[k][k]+=JOINT_DAMPING*(A[k][k]+1);
+    const d=solveLinear6(A,b);if(!d)break;
+    let tl=Math.hypot(d[0],d[1],d[2]);if(tl>8){const s=8/tl;d[0]*=s;d[1]*=s;d[2]*=s;}let rl=Math.hypot(d[3],d[4],d[5]);if(rl>12){const s=12/rl;d[3]*=s;d[4]*=s;d[5]*=s;}
+    let ok=false;for(const sf of [1,.5,.25]){const tp=position.clone(),tq=quaternion.clone();applyNormalizedPoseDelta(tp,tq,d,sf);const ts=calculateResidualState(tp,tq,obs);if(ts&&ts.cost<state.cost){position=tp;quaternion=tq;state=ts;ok=true;break;}}if(!ok)break;if(Math.hypot(...d)<.01)break;
+  }
+  const fs=calculateResidualState(position,quaternion,obs),after=fs?fs.rawRmse:Infinity,ps=position.distanceTo(initialPosition),rs=quaternionAngle(quaternion,initialQuaternion);
+  return {accepted:Number.isFinite(after)&&after<before*.995&&after<=JOINT_MAX_RMSE_PX&&ps<=JOINT_MAX_POSITION_SHIFT&&rs<=JOINT_MAX_ROTATION_SHIFT,position,quaternion,before,after,timeMs:performance.now()-t0};
+}
+
+
+function refinePoseFromObservations(initialPosition,initialQuaternion,observations,maxIterations=4){
+  if(!observations||observations.length<FLOW_MIN_POINTS)return null;
+
+  let position=initialPosition.clone();
+  let quaternion=initialQuaternion.clone();
+  let state=calculateResidualState(position,quaternion,observations);
+  if(!state)return null;
+
+  for(let iter=0;iter<maxIterations;iter++){
+    const m=state.weightedResiduals.length;
+    const J=Array.from({length:m},()=>new Array(6).fill(0));
+
+    for(let k=0;k<6;k++){
+      const tp=position.clone(),tq=quaternion.clone(),d=[0,0,0,0,0,0];
+      d[k]=JOINT_FD_STEP;
+      applyNormalizedPoseDelta(tp,tq,d);
+      const ts=calculateResidualState(tp,tq,observations,state.weights);
+      if(!ts)continue;
+      for(let r=0;r<m;r++){
+        J[r][k]=(ts.weightedResiduals[r]-state.weightedResiduals[r])/JOINT_FD_STEP;
+      }
+    }
+
+    const A=Array.from({length:6},()=>new Array(6).fill(0));
+    const b=new Array(6).fill(0);
+    for(let r=0;r<m;r++){
+      const rr=state.weightedResiduals[r];
+      for(let a=0;a<6;a++){
+        const ja=J[r][a];
+        b[a]-=ja*rr;
+        for(let bb=0;bb<6;bb++)A[a][bb]+=ja*J[r][bb];
+      }
+    }
+    for(let k=0;k<6;k++)A[k][k]+=JOINT_DAMPING*(A[k][k]+1);
+
+    const d=solveLinear6(A,b);
+    if(!d)break;
+
+    let tl=Math.hypot(d[0],d[1],d[2]);
+    if(tl>8){
+      const s=8/tl;
+      d[0]*=s;d[1]*=s;d[2]*=s;
+    }
+    let rl=Math.hypot(d[3],d[4],d[5]);
+    if(rl>12){
+      const s=12/rl;
+      d[3]*=s;d[4]*=s;d[5]*=s;
+    }
+
+    let improved=false;
+    for(const sf of [1,.5,.25]){
+      const tp=position.clone(),tq=quaternion.clone();
+      applyNormalizedPoseDelta(tp,tq,d,sf);
+      const ts=calculateResidualState(tp,tq,observations);
+      if(ts&&ts.cost<state.cost){
+        position=tp;
+        quaternion=tq;
+        state=ts;
+        improved=true;
+        break;
+      }
+    }
+    if(!improved||Math.hypot(...d)<.01)break;
+  }
+
+  const finalState=calculateResidualState(position,quaternion,observations);
+  if(!finalState)return null;
+  return {position,quaternion,rmse:finalState.rawRmse,cost:finalState.cost};
+}
+
+let recoveryGuardPending=false,recoveryGuardPendingCount=0,recoveryGuardRejected=0,recoveryGuardConfirmed=0;
+const recoveryGuardPosition=new THREE.Vector3();
+const recoveryGuardQuaternion=new THREE.Quaternion();
+let recoveryGuardText="–";
+
+function clearRecoveryGuard(){
+  recoveryGuardPending=false;
+  recoveryGuardPendingCount=0;
+  recoveryGuardText="–";
+}
+
+function guardRecoveryMeasurement(position,quaternion,frameTime,gapBefore,source,jointUsed,tagCount){
+  const isRecoverySource=
+    source==="FACE-ROI-RESCUE"||
+    source==="FACE-ROI-RECOVERY"||
+    source==="FACE-ROI-HIGH-SENS"||
+    source==="FULL-REACQUIRE"||
+    source==="MOBILE-NATIVE-ROI"||
+    source==="MOBILE-FACE-0"||
+    source==="MOBILE-FACE-1"||
+    source==="MOBILE-FULL-REACQUIRE";
+
+  /* Stable native full-frame measurements stay completely direct.
+     Multi-tag joint poses are also already strongly constrained. */
+  if(!isRecoverySource||gapBefore<RECOVERY_GUARD_TRIGGER_MS||(jointUsed&&tagCount>=2)){
+    clearRecoveryGuard();
+    return {accept:true,confirmed:false};
+  }
+
+  const predicted=predictedPoseAt(frameTime,ROI_RECOVERY_MAX_AGE_MS);
+  if(!predicted){
+    clearRecoveryGuard();
+    return {accept:true,confirmed:false};
+  }
+
+  const posError=position.distanceTo(predicted.position);
+  const rotError=quaternionAngle(quaternion,predicted.quaternion);
+  const ageFraction=THREE.MathUtils.clamp(gapBefore/ROI_RECOVERY_MAX_AGE_MS,0,1);
+  const motionFraction=THREE.MathUtils.clamp(
+    0.45*Math.min(1,linearVelocity.length()/MAX_LINEAR_SPEED)+
+    0.55*Math.min(1,Math.abs(angularVelocity)/MAX_ANGULAR_SPEED),
+    0,1
+  );
+  const freedom=Math.max(ageFraction,motionFraction);
+  const posLimit=THREE.MathUtils.lerp(RECOVERY_GUARD_BASE_POSITION,RECOVERY_GUARD_MAX_POSITION,freedom);
+  const rotLimit=THREE.MathUtils.lerp(RECOVERY_GUARD_BASE_ROTATION,RECOVERY_GUARD_MAX_ROTATION,freedom);
+
+  if(posError<=posLimit&&rotError<=rotLimit){
+    clearRecoveryGuard();
+    recoveryGuardText=`plausibel ${Math.round(posError*1000)} mm / ${THREE.MathUtils.radToDeg(rotError).toFixed(0)}°`;
+    return {accept:true,confirmed:false};
+  }
+
+  if(recoveryGuardPending){
+    const pendingPosError=position.distanceTo(recoveryGuardPosition);
+    const pendingRotError=quaternionAngle(quaternion,recoveryGuardQuaternion);
+    if(pendingPosError<=RECOVERY_CONFIRM_POSITION&&pendingRotError<=RECOVERY_CONFIRM_ROTATION){
+      recoveryGuardPendingCount++;
+      recoveryGuardPosition.copy(position);
+      recoveryGuardQuaternion.copy(quaternion);
+      if(recoveryGuardPendingCount>=RECOVERY_CONFIRM_FRAMES){
+        recoveryGuardConfirmed++;
+        recoveryGuardPending=false;
+        recoveryGuardPendingCount=0;
+        recoveryGuardText=`bestätigt ${Math.round(posError*1000)} mm / ${THREE.MathUtils.radToDeg(rotError).toFixed(0)}°`;
+        return {accept:true,confirmed:true};
+      }
+    }else{
+      recoveryGuardPendingCount=1;
+      recoveryGuardPosition.copy(position);
+      recoveryGuardQuaternion.copy(quaternion);
+    }
+  }else{
+    recoveryGuardPending=true;
+    recoveryGuardPendingCount=1;
+    recoveryGuardPosition.copy(position);
+    recoveryGuardQuaternion.copy(quaternion);
+  }
+
+  recoveryGuardRejected++;
+  recoveryGuardText=`warte ${recoveryGuardPendingCount}/${RECOVERY_CONFIRM_FRAMES} | ${Math.round(posError*1000)} mm / ${THREE.MathUtils.radToDeg(rotError).toFixed(0)}°`;
+  return {accept:false,confirmed:false};
+}
+
+function processDetections(detections,frameTime){
+  const sets=[],ids=[];for(const d of detections){const s=makeCandidateSet(d);if(s){sets.push(s);ids.push(s.id);}}
+  lastVisibleIDs=ids;
+  if(!sets.length){lastCenterSpread=null;lastRotationSpread=null;lastAltSelections=0;lastSolutionScore=null;lastJointUsed=false;lastJointTags=0;lastReprojectionBefore=null;lastReprojectionAfter=null;lastJointTimeMs=0;return false;}
+  const chosen=chooseBestCubeMeasurement(sets,frameTime);if(!chosen)return false;
+  lastCenterSpread=chosen.fused.maxPositionSpread;lastRotationSpread=THREE.MathUtils.radToDeg(chosen.fused.maxRotationSpread);lastSolutionScore=chosen.score;
+  lastAltSelections=chosen.combo.filter(c=>c.solutionName==="alt").length;totalAltSelections+=lastAltSelections;
+  let finalPosition=chosen.fused.position,finalQuaternion=chosen.fused.quaternion;lastJointTags=chosen.combo.length;
+  if(chosen.combo.length>=JOINT_MIN_TAGS){const refined=refineJointCubePose(finalPosition,finalQuaternion,chosen.combo);lastReprojectionBefore=refined.before;lastReprojectionAfter=refined.after;lastJointTimeMs=refined.timeMs;if(refined.accepted){finalPosition=refined.position;finalQuaternion=refined.quaternion;lastJointUsed=true;}else lastJointUsed=false;}
+  else{lastJointUsed=false;lastReprojectionBefore=null;lastReprojectionAfter=null;lastJointTimeMs=0;}
+
+  const gapBefore=lastGoodPoseTime===null?0:Math.max(0,frameTime-lastGoodPoseTime);
+
+  /* 5c-17: the proactive mobile ROI comes from a different crop and a
+     strongly oblique face. Keep its anti-dropout benefit, but never allow
+     that source switch to twitch the molecule away from the rigid-motion
+     prediction. An inconsistent assist is simply ignored for pose; the
+     next fresh frame returns to normal full-frame tracking. */
+  if(IS_MOBILE_DEVICE&&detectorSource==="MOBILE-FRESH-FACE-ASSIST"){
+    const predicted=predictedPoseAt(frameTime,CONTINUITY_MAX_AGE_MS);
+    if(predicted){
+      const pd=finalPosition.distanceTo(predicted.position);
+      const rd=quaternionAngle(finalQuaternion,predicted.quaternion);
+      if(pd>MOBILE_ASSIST_MAX_POSITION_ERROR||rd>MOBILE_ASSIST_MAX_ROTATION_ERROR){
+        mobileAssistPoseRejected++;
+        return false;
+      }
+    }
+  }
+
+  const guarded=guardRecoveryMeasurement(
+    finalPosition,finalQuaternion,frameTime,gapBefore,detectorSource,lastJointUsed,chosen.combo.length
+  );
+  if(!guarded.accept)return false;
+
+  /* If a large recovery move needed two-frame confirmation, old
+     pre-dropout velocity would be harmful. Re-learn it immediately. */
+  if(guarded.confirmed){
+    linearVelocity.set(0,0,0);
+    angularVelocity=0;
+    clearMobileMotionHistory();
+  }
+
+  registerGoodPose(finalPosition,finalQuaternion,frameTime,detectorSource);
+  flowNeedsReseed=true;
+  return true;
+}
+
+async function initializeAprilTag(){
+  const worker=new Worker("../libs/apriltag.js"),Apriltag=Comlink.wrap(worker);
+  apriltag=await new Apriltag(Comlink.proxy(()=>{detectorReady=true;}));
+  const start=performance.now();while(!detectorReady){await new Promise(r=>setTimeout(r,20));if(performance.now()-start>15000)throw new Error("AprilTag-WASM wurde nicht bereit.");}
+  await apriltag.set_camera_info(fx,fy,cx,cy);for(let id=0;id<=5;id++)await apriltag.set_tag_size(id,TAG_SIZE);
+  await apriltag.set_return_pose(1);await apriltag.set_return_solutions(1);await apriltag.set_max_detections(6);
+}
+
+async function optimizeCameraTrack(track){
+  try{
+    const caps=typeof track.getCapabilities==="function"?track.getCapabilities():{};
+    const advanced={};
+
+    if(Array.isArray(caps.focusMode)&&caps.focusMode.includes("continuous"))advanced.focusMode="continuous";
+    if(Array.isArray(caps.exposureMode)&&caps.exposureMode.includes("continuous"))advanced.exposureMode="continuous";
+    if(Array.isArray(caps.whiteBalanceMode)&&caps.whiteBalanceMode.includes("continuous"))advanced.whiteBalanceMode="continuous";
+
+    /* On phones, a mild negative EV bias keeps high-contrast tag edges
+       sharper during motion without forcing a fragile manual exposure. */
+    if(
+      IS_MOBILE_DEVICE&&
+      caps.exposureCompensation&&
+      Number.isFinite(caps.exposureCompensation.min)&&
+      Number.isFinite(caps.exposureCompensation.max)&&
+      advanced.exposureMode==="continuous"
+    ){
+      const target=THREE.MathUtils.clamp(
+        MOBILE_EXPOSURE_COMPENSATION,
+        caps.exposureCompensation.min,
+        caps.exposureCompensation.max
+      );
+      advanced.exposureCompensation=target;
+      mobileExposureComp=target;
+    }
+
+    const maxFps=Number(caps.frameRate?.max||30);
+    const canFast=IS_MOBILE_DEVICE&&maxFps>=MOBILE_FAST_FPS_MIN;
+    const targetFps=canFast?Math.min(MOBILE_TARGET_FPS,maxFps):30;
+    const targetWidth=IS_MOBILE_DEVICE?Math.min(MOBILE_CAPTURE_WIDTH,Number(caps.width?.max||MOBILE_CAPTURE_WIDTH)):WIDTH;
+    const targetHeight=IS_MOBILE_DEVICE?Math.min(MOBILE_CAPTURE_HEIGHT,Number(caps.height?.max||MOBILE_CAPTURE_HEIGHT)):HEIGHT;
+
+    const makeConstraints=(w,h,fast,minFps=true)=>{
+      const c={
+        width:{ideal:w},
+        height:{ideal:h},
+        aspectRatio:{ideal:4/3},
+        frameRate:fast
+          ? {ideal:targetFps,min:minFps?Math.min(MOBILE_FAST_FPS_MIN,targetFps):undefined,max:targetFps}
+          : {ideal:30,max:30}
+      };
+      if(c.frameRate.min===undefined)delete c.frameRate.min;
+      if(Array.isArray(caps.resizeMode)&&caps.resizeMode.includes("none"))c.resizeMode="none";
+      if(Object.keys(advanced).length)c.advanced=[advanced];
+      return c;
+    };
+
+    let constraints=makeConstraints(targetWidth,targetHeight,canFast,true);
+    try{
+      await track.applyConstraints(constraints);
+    }catch(firstError){
+      /* Some mobile camera stacks expose 60 fps as a capability but reject
+         a strict minimum in a specific resolution. Retry as an ideal. */
+      if(canFast){
+        constraints=makeConstraints(targetWidth,targetHeight,true,false);
+        await track.applyConstraints(constraints);
+      }else{
+        throw firstError;
+      }
+    }
+
+    let settings=track.getSettings?.()||{};
+
+    /* Motion sharpness has priority over source resolution. If asking for
+       high-res made the camera fall back to ~30 fps, retry 640x480 at the
+       faster rate. Recovery still gains from shorter exposure. */
+    if(canFast&&Number(settings.frameRate||0)<45){
+      try{
+        await track.applyConstraints(makeConstraints(WIDTH,HEIGHT,true,false));
+        settings=track.getSettings?.()||settings;
+      }catch(e){
+        console.warn("Mobile Fast-FPS Fallback:",e);
+      }
+    }
+
+    mobileFastCapture=IS_MOBILE_DEVICE&&Number(settings.frameRate||0)>=45;
+    sourceVideoText=`${settings.width||"?"}×${settings.height||"?"}`;
+    const evText=mobileExposureComp===null?"":` / EV ${mobileExposureComp.toFixed(1)}`;
+    cameraModeText=`${sourceVideoText} / ${Number(settings.frameRate||0).toFixed(0)} fps${advanced.focusMode?" / AF":""}${IS_MOBILE_DEVICE?" / MOBIL":""}${evText}`;
+  }catch(e){
+    cameraModeText="Standard (Optimierung nicht unterstützt)";
+    console.warn("Kameraoptimierung:",e);
+  }
+}
+async function startCamera(){
+  const targetWidth=IS_MOBILE_DEVICE?MOBILE_CAPTURE_WIDTH:WIDTH;
+  const targetHeight=IS_MOBILE_DEVICE?MOBILE_CAPTURE_HEIGHT:HEIGHT;
+  const targetFps=IS_MOBILE_DEVICE?MOBILE_TARGET_FPS:30;
+  const stream=await navigator.mediaDevices.getUserMedia({
+    audio:false,
+    video:{
+      facingMode:{ideal:"environment"},
+      width:{ideal:targetWidth},
+      height:{ideal:targetHeight},
+      aspectRatio:{ideal:4/3},
+      frameRate:{ideal:targetFps,max:targetFps}
+    }
+  });
+  const track=stream.getVideoTracks()[0];
+  if(track)await optimizeCameraTrack(track);
+  video.srcObject=stream;
+  await new Promise(resolve=>{
+    if(video.readyState>=2&&video.videoWidth>0)resolve();
+    else video.addEventListener("loadedmetadata",resolve,{once:true});
+  });
+  await video.play();
+  sourceVideoText=`${video.videoWidth||"?"}×${video.videoHeight||"?"}`;
+  cameraReady=true;
+}
+
+function createFullGrayscale(){
+  analysisCtx.drawImage(video,0,0,WIDTH,HEIGHT);
+  const rgba=analysisCtx.getImageData(0,0,WIDTH,HEIGHT).data,g=new Uint8Array(WIDTH*HEIGHT);
+  for(let i=0,j=0;i<rgba.length;i+=4,j++)g[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+  return g;
+}
+function getFrameTimestamp(callbackNow,metadata){
+  const candidates=[["captureTime",metadata?.captureTime],["presentationTime",metadata?.presentationTime],["callback",callbackNow]];let selected=performance.now();frameTimeSource="performance.now";
+  for(const [name,value] of candidates)if(typeof value==="number"&&Number.isFinite(value)&&Math.abs(value-callbackNow)<1500){selected=value;frameTimeSource=name;break;}
+  if(lastFrameTimestamp!==null&&selected<=lastFrameTimestamp){selected=Math.max(callbackNow,lastFrameTimestamp+.1);frameTimeSource+="+monoton";}lastFrameTimestamp=selected;return selected;
+}
+
+function polygonArea(points){
+  let a=0;
+  for(let i=0;i<points.length;i++){
+    const p=points[i],q=points[(i+1)%points.length];
+    a+=p.x*q.y-q.x*p.y;
+  }
+  return Math.abs(a)/2;
+}
+
+/* Rank all six faces from the predicted rigid cube pose.
+   This is used both by the proven combined recovery ROI and by the new
+   single-face high-sensitivity search. */
+function predictedFaces(frameTime){
+  const pred=bestRecoveryPoseAt(frameTime);
+  if(!pred)return [];
+
+  const faces=[];
+  for(let id=0;id<=5;id++){
+    const worldCorners=[];
+    let valid=true;
+    for(const localPoint of cubeTagCorners[id]){
+      const projected=projectCubePoint(localPoint,pred.position,pred.quaternion);
+      if(!projected||!Number.isFinite(projected.x)||!Number.isFinite(projected.y)){valid=false;break;}
+      worldCorners.push(projected);
+    }
+    if(!valid)continue;
+
+    const localNormal=new THREE.Vector3(0,0,1).applyQuaternion(relativeFrom3[id]);
+    const worldNormal=localNormal.clone().applyQuaternion(pred.quaternion).normalize();
+    const localCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(relativeFrom3[id]);
+    const worldCenter=localCenter.clone().applyQuaternion(pred.quaternion).add(pred.position);
+    const toCamera=worldCenter.clone().multiplyScalar(-1);
+    let frontality=-1;
+    if(toCamera.lengthSq()>1e-12){toCamera.normalize();frontality=worldNormal.dot(toCamera);}
+
+    const area=Math.max(1,polygonArea(worldCorners));
+    /* Slightly negative frontality is intentionally allowed: that is
+       often the face just appearing around a cube edge. */
+    const visibility=Math.max(0.04,frontality+0.12);
+    faces.push({id,corners:worldCorners,frontality,area,score:visibility*Math.sqrt(area)});
+  }
+
+  faces.sort((a,b)=>b.score-a.score);
+  return faces;
+}
+
+function predictedFaceRecoveryROI(frameTime){
+  const faces=predictedFaces(frameTime);
+  if(!faces.length)return null;
+
+  const selected=faces.slice(0,ROI_MAX_FACES);
+  const pts=selected.flatMap(f=>f.corners);
+
+  let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x));
+  let minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
+  let w=maxX-minX,h=maxY-minY;
+  if(w<=0||h<=0)return null;
+
+  const age=Math.max(0,frameTime-lastGoodPoseTime);
+  const motionFraction=Math.min(
+    1,
+    0.45*Math.min(1,Math.abs(angularVelocity)/MAX_ANGULAR_SPEED)+
+    0.30*Math.min(1,linearVelocity.length()/MAX_LINEAR_SPEED)+
+    0.25*Math.min(1,age/ROI_RECOVERY_MAX_AGE_MS)
+  );
+  const paddingFactor=ROI_PADDING_FACTOR+0.55*motionFraction;
+  const pad=Math.max(ROI_MIN_PADDING_PX,Math.max(w,h)*paddingFactor);
+
+  minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
+  let cxr=(minX+maxX)/2,cyr=(minY+maxY)/2;
+  w=maxX-minX;h=maxY-minY;
+  if(w<ROI_MIN_SIZE_PX)w=ROI_MIN_SIZE_PX;
+  if(h<ROI_MIN_SIZE_PX)h=ROI_MIN_SIZE_PX;
+
+  let x0=cxr-w/2,y0=cyr-h/2,x1=cxr+w/2,y1=cyr+h/2;
+  x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(WIDTH,x1);y1=Math.min(HEIGHT,y1);
+  w=x1-x0;h=y1-y0;
+  if(w<40||h<40)return null;
+
+  return {x:x0,y:y0,width:w,height:h,ids:selected.map(f=>f.id)};
+}
+
+function predictedSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
+  const excluded=new Set(excludeIds.map(Number));
+  const faces=predictedFaces(frameTime).filter(f=>!excluded.has(f.id));
+  if(!faces.length)return null;
+
+  const usable=faces.slice(0,FACE_ROI_CANDIDATES);
+  const face=usable[Math.abs(rankOffset)%usable.length];
+  const pts=face.corners;
+
+  let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x));
+  let minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
+  let w=maxX-minX,h=maxY-minY;
+  if(w<=0||h<=0)return null;
+
+  const age=Math.max(0,frameTime-lastGoodPoseTime);
+  const motionFraction=Math.min(
+    1,
+    0.55*Math.min(1,Math.abs(angularVelocity)/MAX_ANGULAR_SPEED)+
+    0.25*Math.min(1,linearVelocity.length()/MAX_LINEAR_SPEED)+
+    0.20*Math.min(1,age/ROI_RECOVERY_MAX_AGE_MS)
+  );
+  const pad=Math.max(
+    FACE_ROI_MIN_PADDING_PX,
+    Math.max(w,h)*(FACE_ROI_PADDING_FACTOR+0.35*motionFraction)
+  );
+
+  minX-=pad;maxX+=pad;minY-=pad;maxY+=pad;
+  let cxr=(minX+maxX)/2,cyr=(minY+maxY)/2;
+  w=maxX-minX;h=maxY-minY;
+  if(w<FACE_ROI_MIN_SIZE_PX)w=FACE_ROI_MIN_SIZE_PX;
+  if(h<FACE_ROI_MIN_SIZE_PX)h=FACE_ROI_MIN_SIZE_PX;
+
+  let x0=cxr-w/2,y0=cyr-h/2,x1=cxr+w/2,y1=cyr+h/2;
+  x0=Math.max(0,x0);y0=Math.max(0,y0);x1=Math.min(WIDTH,x1);y1=Math.min(HEIGHT,y1);
+  w=x1-x0;h=y1-y0;
+  if(w<32||h<32)return null;
+
+  return {x:x0,y:y0,width:w,height:h,ids:[face.id],face};
+}
+
+function remapRecoveryDetection(d,roi,sx,sy){
+  const map=p=>{const q=getPoint(p);return q?{x:roi.x+q.x/sx,y:roi.y+q.y/sy}:p;};
+  return {...d,corners:Array.isArray(d.corners)?d.corners.map(map):d.corners,center:d.center?map(d.center):d.center};
+}
+
+function drawRecoverySource(roi,rw,rh){
+  recoveryCanvas.width=rw;
+  recoveryCanvas.height=rh;
+
+  if(IS_MOBILE_DEVICE&&video.videoWidth>0&&video.videoHeight>0){
+    /* 5c-15: crop directly from the native phone camera frame instead of
+       from the already downscaled 640×480 analysis canvas. This preserves
+       small tag edge detail exactly where recovery needs it. */
+    const sourceScaleX=video.videoWidth/WIDTH;
+    const sourceScaleY=video.videoHeight/HEIGHT;
+    recoveryCtx.drawImage(
+      video,
+      roi.x*sourceScaleX,
+      roi.y*sourceScaleY,
+      roi.width*sourceScaleX,
+      roi.height*sourceScaleY,
+      0,0,rw,rh
+    );
+    mobileNativeRoi=video.videoWidth>WIDTH||video.videoHeight>HEIGHT;
+  }else{
+    /* Desktop keeps the exact 5c-14 same-frame source. */
+    recoveryCtx.drawImage(analysisCanvas,roi.x,roi.y,roi.width,roi.height,0,0,rw,rh);
+  }
+}
+
+async function detectRecoveryROI(frameTime){
+  const roi=predictedFaceRecoveryROI(frameTime);
+  if(!roi)return [];
+
+  roiAttempts++;
+  const roiMaxDim=IS_MOBILE_DEVICE?MOBILE_ROI_MAX_DIM:ROI_MAX_DIM;
+  const scale=Math.min(ROI_MAX_UPSCALE,roiMaxDim/Math.max(roi.width,roi.height));
+  const rw=Math.max(80,Math.round(roi.width*scale));
+  const rh=Math.max(80,Math.round(roi.height*scale));
+
+  drawRecoverySource(roi,rw,rh);
+
+  const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
+  const g=new Uint8Array(rw*rh);
+  for(let i=0,j=0;i<rgba.length;i+=4,j++)g[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+
+  const sx=rw/roi.width,sy=rh/roi.height;
+  const rfx=fx*sx,rfy=fy*sy,rcx=(cx-roi.x)*sx,rcy=(cy-roi.y)*sy;
+  const t0=performance.now();
+
+  try{
+    await apriltag.set_camera_info(rfx,rfy,rcx,rcy);
+    const result=await apriltag.detect(g,rw,rh);
+    lastRoiTimeMs=performance.now()-t0;
+    const arr=Array.isArray(result)?result:[];
+    const relevant=arr.filter(isRelevantDetection).map(d=>remapRecoveryDetection(d,roi,sx,sy));
+    if(relevant.length)roiHits++;
+    lastRoiText=`Seiten ${roi.ids.join(",")} | ${Math.round(roi.width)}×${Math.round(roi.height)} → ${rw}×${rh}`;
+    return relevant;
+  } finally {
+    await apriltag.set_camera_info(fx,fy,cx,cy);
+  }
+}
+
+async function detectSingleFaceROI(frameTime,excludeIds=[],rankOffset=0){
+  const roi=predictedSingleFaceROI(frameTime,excludeIds,rankOffset);
+  if(!roi)return [];
+
+  faceRoiAttempts++;
+  const faceMaxDim=IS_MOBILE_DEVICE?MOBILE_FACE_ROI_MAX_DIM:FACE_ROI_MAX_DIM;
+  const scale=Math.min(FACE_ROI_MAX_UPSCALE,faceMaxDim/Math.max(roi.width,roi.height));
+  const rw=Math.max(96,Math.round(roi.width*scale));
+  const rh=Math.max(96,Math.round(roi.height*scale));
+
+  drawRecoverySource(roi,rw,rh);
+
+  const rgba=recoveryCtx.getImageData(0,0,rw,rh).data;
+  const g=new Uint8Array(rw*rh);
+  for(let i=0,j=0;i<rgba.length;i+=4,j++)g[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+
+  const sx=rw/roi.width,sy=rh/roi.height;
+  const rfx=fx*sx,rfy=fy*sy,rcx=(cx-roi.x)*sx,rcy=(cy-roi.y)*sy;
+  const t0=performance.now();
+
+  try{
+    await apriltag.set_camera_info(rfx,rfy,rcx,rcy);
+    const result=await apriltag.detect(g,rw,rh);
+    lastRoiTimeMs=performance.now()-t0;
+    const wantedId=roi.ids[0];
+    const arr=Array.isArray(result)?result:[];
+    const relevant=arr
+      .filter(isRelevantDetection)
+      .filter(d=>Number(d.id)===wantedId)
+      .map(d=>remapRecoveryDetection(d,roi,sx,sy));
+    if(relevant.length)faceRoiHits++;
+    lastRoiText=`Einzelseite ${wantedId} | ${Math.round(roi.width)}×${Math.round(roi.height)} → ${rw}×${rh}`;
+    return relevant;
+  }finally{
+    await apriltag.set_camera_info(fx,fy,cx,cy);
+  }
+}
+
+function mergeNewDetections(primary,secondary){
+  const result=primary.slice();
+  const ids=new Set(result.map(d=>Number(d.id)));
+  for(const d of secondary){
+    const id=Number(d.id);
+    if(!ids.has(id)){result.push(d);ids.add(id);}
+  }
+  return result;
+}
+
+function shouldProactiveAssist(detections,frameTime){
+  if(detections.length!==1||!hasGoodPose||lastGoodPoseTime===null)return false;
+  if(lastMainTimeMs>PROACTIVE_ASSIST_MAX_FULL_TIME_MS)return false;
+  if(normalFrameSerial%PROACTIVE_ASSIST_EVERY_N!==0)return false;
+
+  const currentIds=new Set(detections.map(d=>Number(d.id)));
+  const next=predictedFaces(frameTime).find(f=>!currentIds.has(f.id));
+  if(!next)return false;
+
+  const fastTurn=Math.abs(angularVelocity)>=PROACTIVE_ASSIST_MIN_ANGULAR_SPEED;
+  const edgeRisk=next.frontality>=PROACTIVE_ASSIST_MIN_FRONT;
+  return fastTurn||edgeRisk;
+}
+
+
+/* =====================================================
+   5c-19 HYBRID OPTICAL FLOW
+
+   The detector path is NOT changed. This tracker runs in the rVFC callback
+   even while the AprilTag worker is busy. It follows a small set of strong
+   surface patches at 320×240, then refines the known 3D cube pose from the
+   resulting 2D↔3D correspondences. AprilTag remains the absolute anchor.
+   ===================================================== */
+
+function buildFlowPyramid(){
+  flowCtx.drawImage(video,0,0,FLOW_WIDTH,FLOW_HEIGHT);
+  const rgba=flowCtx.getImageData(0,0,FLOW_WIDTH,FLOW_HEIGHT).data;
+  const levels=[];
+  let w=FLOW_WIDTH,h=FLOW_HEIGHT;
+  let data=new Uint8Array(w*h);
+  for(let i=0,j=0;i<rgba.length;i+=4,j++){
+    data[j]=Math.round((rgba[i]+rgba[i+1]+rgba[i+2])/3);
+  }
+  levels.push({data,width:w,height:h});
+
+  for(let level=1;level<FLOW_LEVELS;level++){
+    const pw=w,ph=h,pd=data;
+    w=Math.max(1,Math.floor(pw/2));
+    h=Math.max(1,Math.floor(ph/2));
+    data=new Uint8Array(w*h);
+    for(let y=0;y<h;y++){
+      const sy=y*2;
+      for(let x=0;x<w;x++){
+        const sx=x*2;
+        const i00=sy*pw+sx;
+        const i10=sy*pw+Math.min(sx+1,pw-1);
+        const i01=Math.min(sy+1,ph-1)*pw+sx;
+        const i11=Math.min(sy+1,ph-1)*pw+Math.min(sx+1,pw-1);
+        data[y*w+x]=Math.round((pd[i00]+pd[i10]+pd[i01]+pd[i11])*0.25);
+      }
+    }
+    levels.push({data,width:w,height:h});
+  }
+  return levels;
+}
+
+function sampleGray(level,x,y){
+  const {data,width,height}=level;
+  if(x<0||y<0||x>width-1||y>height-1)return null;
+  const x0=Math.floor(x),y0=Math.floor(y);
+  const x1=Math.min(x0+1,width-1),y1=Math.min(y0+1,height-1);
+  const ax=x-x0,ay=y-y0;
+  const v00=data[y0*width+x0],v10=data[y0*width+x1];
+  const v01=data[y1*width+x0],v11=data[y1*width+x1];
+  return (v00*(1-ax)+v10*ax)*(1-ay)+(v01*(1-ax)+v11*ax)*ay;
+}
+
+function flowFeatureScore(level,x,y){
+  const r=2;
+  if(x<r+1||y<r+1||x>=level.width-r-1||y>=level.height-r-1)return 0;
+  let sum=0,count=0;
+  for(let yy=-r;yy<=r;yy++){
+    for(let xx=-r;xx<=r;xx++){
+      const gx=(sampleGray(level,x+xx+1,y+yy)-sampleGray(level,x+xx-1,y+yy))*0.5;
+      const gy=(sampleGray(level,x+xx,y+yy+1)-sampleGray(level,x+xx,y+yy-1))*0.5;
+      if(!Number.isFinite(gx)||!Number.isFinite(gy))continue;
+      sum+=Math.abs(gx)+Math.abs(gy);
+      count++;
+    }
+  }
+  return count?sum/count:0;
+}
+
+function trackPointLK(prevPyr,currPyr,x,y,guessX=x,guessY=y){
+  let dx=0,dy=0;
+  const initialDx=guessX-x,initialDy=guessY-y;
+
+  for(let level=FLOW_LEVELS-1;level>=0;level--){
+    const factor=2**level;
+    const prev=prevPyr[level],curr=currPyr[level];
+    const px=x/factor,py=y/factor;
+
+    if(level===FLOW_LEVELS-1){
+      dx=initialDx/factor;
+      dy=initialDy/factor;
+    }else{
+      dx*=2;
+      dy*=2;
+    }
+
+    for(let iter=0;iter<FLOW_ITERATIONS;iter++){
+      let gxx=0,gxy=0,gyy=0,bx=0,by=0,count=0;
+      for(let yy=-FLOW_PATCH_RADIUS;yy<=FLOW_PATCH_RADIUS;yy++){
+        for(let xx=-FLOW_PATCH_RADIUS;xx<=FLOW_PATCH_RADIUS;xx++){
+          const sx=px+xx,sy=py+yy;
+          const p=sampleGray(prev,sx,sy);
+          const c=sampleGray(curr,sx+dx,sy+dy);
+          const pxp=sampleGray(prev,sx+1,sy),pxm=sampleGray(prev,sx-1,sy);
+          const pyp=sampleGray(prev,sx,sy+1),pym=sampleGray(prev,sx,sy-1);
+          if(p===null||c===null||pxp===null||pxm===null||pyp===null||pym===null)continue;
+          const ix=(pxp-pxm)*0.5;
+          const iy=(pyp-pym)*0.5;
+          const it=c-p;
+          gxx+=ix*ix;
+          gxy+=ix*iy;
+          gyy+=iy*iy;
+          bx+=ix*it;
+          by+=iy*it;
+          count++;
+        }
+      }
+
+      const det=gxx*gyy-gxy*gxy;
+      if(count<20||det<1e4)return null;
+
+      let du=(-gyy*bx+gxy*by)/det;
+      let dv=(gxy*bx-gxx*by)/det;
+      const step=Math.hypot(du,dv);
+      if(step>2.5){
+        du*=2.5/step;
+        dv*=2.5/step;
+      }
+      dx+=du;
+      dy+=dv;
+      if(du*du+dv*dv<0.0009)break;
+    }
+  }
+
+  const nx=x+dx,ny=y+dy;
+  const level=currPyr[0];
+  if(nx<FLOW_PATCH_RADIUS+1||ny<FLOW_PATCH_RADIUS+1||
+     nx>=level.width-FLOW_PATCH_RADIUS-1||ny>=level.height-FLOW_PATCH_RADIUS-1)return null;
+
+  let absError=0,count=0;
+  for(let yy=-FLOW_PATCH_RADIUS;yy<=FLOW_PATCH_RADIUS;yy++){
+    for(let xx=-FLOW_PATCH_RADIUS;xx<=FLOW_PATCH_RADIUS;xx++){
+      const a=sampleGray(prevPyr[0],x+xx,y+yy);
+      const b=sampleGray(currPyr[0],nx+xx,ny+yy);
+      if(a===null||b===null)continue;
+      absError+=Math.abs(a-b);
+      count++;
+    }
+  }
+  const error=count?absError/count:Infinity;
+  if(!Number.isFinite(error)||error>FLOW_MAX_PHOTOMETRIC_ERROR)return null;
+  return {x:nx,y:ny,error};
+}
+
+function poseForFlowTime(timeMs){
+  if(flowValid&&flowPoseTime!==null&&timeMs>=flowPoseTime&&timeMs-flowPoseTime<=FLOW_MAX_RENDER_AGE_MS){
+    const dt=Math.min((timeMs-flowPoseTime)/1000,0.05);
+    const position=flowPosePosition.clone().addScaledVector(linearVelocity,dt);
+    const quaternion=flowPoseQuaternion.clone();
+    const angle=angularVelocity*dt;
+    if(Math.abs(angle)>1e-5){
+      quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
+    }
+    return {position,quaternion,ageMs:timeMs-flowPoseTime,source:"flow"};
+  }
+  const p=predictedPoseAt(timeMs,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+  return p?{...p,source:"prediction"}:null;
+}
+
+function bestRecoveryPoseAt(timeMs){
+  const flowPose=poseForFlowTime(timeMs);
+  if(flowPose&&flowPose.source==="flow")return flowPose;
+  return predictedPoseAt(timeMs,ROI_RECOVERY_MAX_AGE_MS);
+}
+
+function facesFromPose(pose){
+  if(!pose)return [];
+  const faces=[];
+  for(let id=0;id<=5;id++){
+    const corners=[];
+    let valid=true;
+    for(const localPoint of cubeTagCorners[id]){
+      const projected=projectCubePoint(localPoint,pose.position,pose.quaternion);
+      if(!projected||!Number.isFinite(projected.x)||!Number.isFinite(projected.y)){valid=false;break;}
+      corners.push(projected);
+    }
+    if(!valid)continue;
+
+    const localNormal=new THREE.Vector3(0,0,1).applyQuaternion(relativeFrom3[id]);
+    const worldNormal=localNormal.clone().applyQuaternion(pose.quaternion).normalize();
+    const localCenter=new THREE.Vector3(0,0,HALF_CUBE).applyQuaternion(relativeFrom3[id]);
+    const worldCenter=localCenter.clone().applyQuaternion(pose.quaternion).add(pose.position);
+    const toCamera=worldCenter.clone().multiplyScalar(-1);
+    let frontality=-1;
+    if(toCamera.lengthSq()>1e-12){toCamera.normalize();frontality=worldNormal.dot(toCamera);}
+    const area=Math.max(1,polygonArea(corners));
+    faces.push({id,corners,frontality,area,score:Math.max(0.02,frontality+0.10)*Math.sqrt(area)});
+  }
+  faces.sort((a,b)=>b.score-a.score);
+  return faces;
+}
+
+function seedFlowTracker(pyramid,frameTime){
+  const pose=predictedPoseAt(frameTime,CONTINUITY_MAX_AGE_MS);
+  if(!pose||!pyramid)return false;
+
+  const candidates=[];
+  const faces=facesFromPose(pose).filter(f=>f.frontality>-0.08).slice(0,3);
+
+  for(const face of faces){
+    for(const cubePoint of flowFacePoints[face.id]){
+      const p=projectCubePoint(cubePoint,pose.position,pose.quaternion);
+      if(!p)continue;
+      const x=p.x*FLOW_SCALE_X,y=p.y*FLOW_SCALE_Y;
+      if(x<8||y<8||x>=FLOW_WIDTH-8||y>=FLOW_HEIGHT-8)continue;
+      const score=flowFeatureScore(pyramid[0],x,y);
+      if(score<FLOW_MIN_FEATURE_SCORE)continue;
+      candidates.push({cubePoint:cubePoint.clone(),x,y,score,faceId:face.id});
+    }
+  }
+
+  candidates.sort((a,b)=>b.score-a.score);
+  const selected=[];
+  for(const candidate of candidates){
+    let tooClose=false;
+    for(const s of selected){
+      if(Math.hypot(candidate.x-s.x,candidate.y-s.y)<FLOW_MIN_POINT_SEPARATION){
+        tooClose=true;break;
+      }
+    }
+    if(!tooClose)selected.push(candidate);
+    if(selected.length>=FLOW_MAX_POINTS)break;
+  }
+
+  flowPoints=selected;
+  flowPrevPyramid=pyramid;
+  flowPrevTime=frameTime;
+  flowNeedsReseed=false;
+  flowReseeds++;
+  flowLastText=`Seed ${selected.length} Punkte`;
+  return selected.length>=FLOW_MIN_POINTS;
+}
+
+function flowObservationErrors(position,quaternion,observations){
+  return observations.map(o=>{
+    const p=projectCubePoint(o.point,position,quaternion);
+    return p?Math.hypot(p.x-o.x,p.y-o.y):Infinity;
+  });
+}
+
+function updateOpticalFlow(frameTime){
+  if(!cameraReady||video.readyState<2||video.videoWidth<=0)return;
+
+  const pyramid=buildFlowPyramid();
+  flowFrames++;
+
+  if(!hasGoodPose||lastGoodPoseTime===null||frameTime-lastGoodPoseTime>FLOW_MAX_BRIDGE_FROM_TAG_MS){
+    flowPrevPyramid=pyramid;
+    flowPrevTime=frameTime;
+    flowPoints=[];
+    flowValid=false;
+    flowNeedsReseed=true;
+    flowLastText="warte auf AprilTag";
+    return;
+  }
+
+  if(flowNeedsReseed||!flowPrevPyramid||!flowPoints.length){
+    seedFlowTracker(pyramid,frameTime);
+    return;
+  }
+
+  const guessPose=poseForFlowTime(frameTime);
+  const tracked=[];
+
+  for(const point of flowPoints){
+    let guessX=point.x,guessY=point.y;
+    if(guessPose){
+      const gp=projectCubePoint(point.cubePoint,guessPose.position,guessPose.quaternion);
+      if(gp){
+        guessX=gp.x*FLOW_SCALE_X;
+        guessY=gp.y*FLOW_SCALE_Y;
+      }
+    }
+
+    const forward=trackPointLK(flowPrevPyramid,pyramid,point.x,point.y,guessX,guessY);
+    if(!forward)continue;
+
+    const back=trackPointLK(
+      pyramid,flowPrevPyramid,
+      forward.x,forward.y,
+      point.x,point.y
+    );
+    if(!back||Math.hypot(back.x-point.x,back.y-point.y)>FLOW_MAX_FB_ERROR)continue;
+
+    tracked.push({
+      cubePoint:point.cubePoint,
+      x:forward.x,
+      y:forward.y,
+      score:point.score,
+      error:forward.error,
+      faceId:point.faceId
+    });
+  }
+
+  flowPrevPyramid=pyramid;
+  flowPrevTime=frameTime;
+  flowPoints=tracked;
+
+  if(tracked.length<FLOW_MIN_POINTS){
+    flowValid=false;
+    flowNeedsReseed=true;
+    flowRejected++;
+    flowLastText=`zu wenig Punkte ${tracked.length}`;
+    return;
+  }
+
+  const observations=tracked.map(p=>({
+    point:p.cubePoint,
+    x:p.x/FLOW_SCALE_X,
+    y:p.y/FLOW_SCALE_Y,
+    baseWeight:THREE.MathUtils.clamp(1-p.error/FLOW_MAX_PHOTOMETRIC_ERROR,0.20,1)
+  }));
+
+  const initial=flowValid&&flowPoseTime!==null&&frameTime-flowPoseTime<100
+    ? {position:flowPosePosition.clone(),quaternion:flowPoseQuaternion.clone()}
+    : predictedPoseAt(frameTime,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+
+  if(!initial){
+    flowValid=false;
+    flowNeedsReseed=true;
+    return;
+  }
+
+  let refined=refinePoseFromObservations(initial.position,initial.quaternion,observations,4);
+  if(!refined){
+    flowValid=false;
+    flowRejected++;
+    flowLastText="Pose-Lösung fehlgeschlagen";
+    return;
+  }
+
+  const errors=flowObservationErrors(refined.position,refined.quaternion,observations);
+  const finite=errors.filter(Number.isFinite).sort((a,b)=>a-b);
+  const median=finite.length?finite[Math.floor(finite.length/2)]:Infinity;
+  const outlierLimit=Math.min(
+    FLOW_MAX_REPROJECTION_OUTLIER_PX,
+    Math.max(3.0,median*2.5)
+  );
+
+  const inlierObs=observations.filter((o,i)=>errors[i]<=outlierLimit);
+  if(inlierObs.length>=FLOW_MIN_POINTS&&inlierObs.length<observations.length){
+    const refined2=refinePoseFromObservations(refined.position,refined.quaternion,inlierObs,3);
+    if(refined2)refined=refined2;
+  }
+
+  const reference=flowValid&&flowPoseTime!==null
+    ? {position:flowPosePosition,quaternion:flowPoseQuaternion}
+    : initial;
+
+  const stepPos=refined.position.distanceTo(reference.position);
+  const stepRot=quaternionAngle(refined.quaternion,reference.quaternion);
+  const seedPose=predictedPoseAt(frameTime,FLOW_MAX_BRIDGE_FROM_TAG_MS);
+  const seedPos=seedPose?refined.position.distanceTo(seedPose.position):0;
+  const seedRot=seedPose?quaternionAngle(refined.quaternion,seedPose.quaternion):0;
+
+  /* Once optical flow is already locked, frame-to-frame geometry is the
+     stronger constraint than the older constant-velocity prediction. This
+     lets the bridge survive a real acceleration/turn instead of falling
+     back exactly when AprilTag is absent. The seed-distance check is only
+     required for the first flow pose after an AprilTag anchor. */
+  const seedConsistent=
+    flowValid||
+    (
+      seedPos<=FLOW_POSE_MAX_POSITION_FROM_SEED&&
+      seedRot<=FLOW_POSE_MAX_ROTATION_FROM_SEED
+    );
+
+  const acceptable=
+    refined.rmse<=FLOW_POSE_MAX_RMSE_PX&&
+    stepPos<=FLOW_POSE_MAX_POSITION_STEP&&
+    stepRot<=FLOW_POSE_MAX_ROTATION_STEP&&
+    seedConsistent;
+
+  if(!acceptable){
+    flowValid=false;
+    flowRejected++;
+    flowLastText=`verworfen ${refined.rmse.toFixed(1)} px / ${Math.round(stepPos*1000)} mm / ${THREE.MathUtils.radToDeg(stepRot).toFixed(0)}°`;
+    return;
+  }
+
+  flowPosePosition.copy(refined.position);
+  flowPoseQuaternion.copy(refined.quaternion);
+  flowPoseTime=frameTime;
+  flowPoseRmse=refined.rmse;
+  flowInliers=inlierObs.length>=FLOW_MIN_POINTS?inlierObs.length:observations.length;
+  flowValid=true;
+  flowAccepted++;
+  flowLastText=`${flowInliers}/${tracked.length} Punkte / ${flowPoseRmse.toFixed(1)} px`;
+}
+
+function flowPoseForRender(now){
+  if(!flowValid||flowPoseTime===null)return null;
+  const age=now-flowPoseTime;
+  if(age<0||age>FLOW_MAX_RENDER_AGE_MS)return null;
+
+  const dt=Math.min(age/1000,0.05);
+  const position=flowPosePosition.clone().addScaledVector(linearVelocity,dt);
+  const quaternion=flowPoseQuaternion.clone();
+  const angle=angularVelocity*dt;
+  if(Math.abs(angle)>1e-5){
+    quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(angularVelocityAxis,angle)).normalize();
+  }
+  return {position,quaternion,ageMs:age};
+}
+
+async function detectFullFrame(fullGray){
+  fullAttempts++;
+  const t0=performance.now();
+  const result=await apriltag.detect(fullGray,WIDTH,HEIGHT);
+  lastMainTimeMs=performance.now()-t0;
+  const relevant=(Array.isArray(result)?result:[]).filter(isRelevantDetection);
+  if(relevant.length)fullHits++;
+  return relevant;
+}
+
+async function detectCurrentVideoFrame(frameTime){
+  detectionRunning=true;
+  const pipelineStart=performance.now();
+
+  try{
+    let fullGray=null;
+    const getFullGray=()=>{
+      if(!fullGray)fullGray=createFullGrayscale();
+      return fullGray;
+    };
+    let detections=[];
+    let intentionalAssistOnly=false;
+
+    const canRecover=
+      hasGoodPose&&
+      lastGoodPoseTime!==null&&
+      frameTime-lastGoodPoseTime>=0&&
+      frameTime-lastGoodPoseTime<=ROI_RECOVERY_MAX_AGE_MS;
+
+    if(!recoveryMode){
+      normalFrameSerial++;
+
+      /* Mobile: a queued next-face assist gets its OWN fresh camera frame.
+         5c-14 performed it after full detection on the same frame, which is
+         useful on desktop but can make a phone miss the following frame. */
+      if(IS_MOBILE_DEVICE&&pendingMobileAssist&&canRecover){
+        intentionalAssistOnly=true;
+        proactiveAttempts++;
+        detections=await detectSingleFaceROI(frameTime,pendingMobileAssistExcludeIds,0);
+        pendingMobileAssist=false;
+        pendingMobileAssistExcludeIds=[];
+        if(detections.length){
+          proactiveHits++;
+          detectorSource="MOBILE-FRESH-FACE-ASSIST";
+        }else{
+          detectorSource="MOBILE-ASSIST-MISS";
+        }
+      }else{
+        detections=await detectFullFrame(getFullGray());
+
+        if(detections.length){
+          detectorSource="FULL-STABIL";
+          lastRoiTimeMs=0;
+
+          if(canRecover&&shouldProactiveAssist(detections,frameTime)){
+            const existingIds=detections.map(d=>Number(d.id));
+            if(IS_MOBILE_DEVICE){
+              /* Do not stack a second detector pass onto an already ~30 ms
+                 phone frame. Schedule it for the next fresh video frame. */
+              pendingMobileAssist=true;
+              pendingMobileAssistExcludeIds=existingIds;
+            }else{
+              proactiveAttempts++;
+              const assist=await detectSingleFaceROI(frameTime,existingIds,0);
+              if(assist.length){
+                detections=mergeNewDetections(detections,assist);
+                proactiveHits++;
+                detectorSource="FULL+FACE-ASSIST";
+              }
+            }
+          }
+        }else if(canRecover){
+          fullFallbacks++;
+
+          if(IS_MOBILE_DEVICE){
+            /* A second detector pass on the SAME blurred/stale frame is a
+               poor trade on phones. Enter recovery immediately and let the
+               next camera frame be searched first. */
+            recoveryMode=true;
+            recoveryFrames=0;
+            pendingMobileAssist=false;
+            pendingMobileAssistExcludeIds=[];
+            mobileFreshRecoveryDeferrals++;
+            detectorSource="MOBILE-WARTE-AUF-FRISCHES-BILD";
+          }else{
+            /* Desktop retains the proven same-frame 5c-14 rescue. */
+            detections=await detectRecoveryROI(frameTime);
+            detectorSource=detections.length?"FACE-ROI-RESCUE":"NICHTS";
+            if(!detections.length){
+              recoveryMode=true;
+              recoveryFrames=0;
+            }
+          }
+        }else{
+          detectorSource="NICHTS";
+          lastRoiTimeMs=0;
+        }
+      }
+    }else{
+      recoveryFrames++;
+
+      if(IS_MOBILE_DEVICE){
+        /* One AprilTag pass per fresh phone frame. This prevents full+ROI
+           chains from consuming 50–80 ms and feeding stale images back into
+           the tracker. Faster camera capture means the next attempt arrives
+           quickly, often with much less motion blur. */
+        mobileSinglePassRecovery++;
+
+        if(!canRecover){
+          detections=await detectFullFrame(getFullGray());
+          detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
+        }else{
+          const phase=(recoveryFrames-1)%MOBILE_RECOVERY_CYCLE;
+
+          if(phase===0){
+            detections=await detectRecoveryROI(frameTime);
+            detectorSource=detections.length?"MOBILE-NATIVE-ROI":"MOBILE-ROI-MISS";
+          }else if(phase===1){
+            detections=await detectSingleFaceROI(frameTime,[],0);
+            detectorSource=detections.length?"MOBILE-FACE-0":"MOBILE-FACE-0-MISS";
+          }else if(phase===2){
+            detections=await detectSingleFaceROI(frameTime,[],1);
+            detectorSource=detections.length?"MOBILE-FACE-1":"MOBILE-FACE-1-MISS";
+          }else{
+            detections=await detectFullFrame(getFullGray());
+            detectorSource=detections.length?"MOBILE-FULL-REACQUIRE":"NICHTS";
+          }
+        }
+      }else{
+        /* Exact 5c-14 desktop recovery path. */
+        if(canRecover){
+          detections=await detectRecoveryROI(frameTime);
+        }
+
+        if(detections.length){
+          detectorSource="FACE-ROI-RECOVERY";
+        }else if(canRecover&&recoveryFrames%RECOVERY_FULL_EVERY_N!==0){
+          const rankOffset=Math.floor(recoveryFrames/RECOVERY_FULL_EVERY_N)%FACE_ROI_CANDIDATES;
+          detections=await detectSingleFaceROI(frameTime,[],rankOffset);
+          detectorSource=detections.length?"FACE-ROI-HIGH-SENS":"ROI-SUCHE";
+        }else{
+          detections=await detectFullFrame(getFullGray());
+          detectorSource=detections.length?"FULL-REACQUIRE":"NICHTS";
+        }
+      }
+    }
+
+    const found=processDetections(detections,frameTime);
+
+    if(found){
+      consecutiveMisses=0;
+      recoveryMode=false;
+      recoveryFrames=0;
+      pendingMobileAssist=false;
+      pendingMobileAssistExcludeIds=[];
+    }else if(intentionalAssistOnly){
+      /* This frame was intentionally used only to look for an emerging
+         next face. Missing it is NOT a tracking loss; prediction bridges
+         this one camera frame and normal full detection resumes next. */
+      consecutiveMisses=0;
+      recoveryMode=false;
+      recoveryFrames=0;
+    }else{
+      consecutiveMisses++;
+      if(canRecover)recoveryMode=true;
+    }
+
+    const end=performance.now();
+    lastDetectionLatencyMs=end-pipelineStart;
+    lastFrameAgeAtResultMs=Math.max(0,end-frameTime);
+
+    detectionCounter++;
+    const now=performance.now();
+    if(now-detectionFpsStart>=1000){
+      detectionFPS=detectionCounter/((now-detectionFpsStart)/1000);
+      detectionCounter=0;
+      detectionFpsStart=now;
+    }
+  }catch(e){
+    console.error(e);
+  }finally{
+    detectionRunning=false;
+  }
+}
+
+function onVideoFrame(callbackNow,metadata){
+  video.requestVideoFrameCallback(onVideoFrame);videoFrameCounter++;
+  if(typeof metadata?.presentedFrames==="number"&&Number.isFinite(metadata.presentedFrames)){if(lastPresentedFrames!==null){const d=metadata.presentedFrames-lastPresentedFrames;if(d>1)skippedPresentedFrames+=d-1;}lastPresentedFrames=metadata.presentedFrames;}
+  const now=performance.now();if(now-videoFpsStart>=1000){videoFPS=videoFrameCounter/((now-videoFpsStart)/1000);videoFrameCounter=0;videoFpsStart=now;}
+  if(!cameraReady||!detectorReady)return;
+
+  const frameTime=getFrameTimestamp(callbackNow,metadata);
+
+  /* Crucial difference from rejected 5c-18: detector scheduling is untouched.
+     Only the lightweight optical-flow bridge sees every fresh video frame. */
+  updateOpticalFlow(frameTime);
+
+  if(detectionRunning){skippedBecauseBusy++;return;}
+  detectCurrentVideoFrame(frameTime);
+}
+let fallbackLastVideoTime=-1;
+function fallbackVideoFrameLoop(){
+  requestAnimationFrame(fallbackVideoFrameLoop);
+  if(!cameraReady||!detectorReady)return;
+  if(video.currentTime===fallbackLastVideoTime)return;
+  fallbackLastVideoTime=video.currentTime;
+  frameTimeSource="Fallback";
+  const frameTime=performance.now();
+  updateOpticalFlow(frameTime);
+  if(detectionRunning){skippedBecauseBusy++;return;}
+  detectCurrentVideoFrame(frameTime);
+}
+function startVideoProcessing(){if(typeof video.requestVideoFrameCallback==="function")video.requestVideoFrameCallback(onVideoFrame);else requestAnimationFrame(fallbackVideoFrameLoop);}
+
+/* =====================================================
+   5c-13 DISPLAY STABILIZATION
+
+   No slow low-pass and no reacquisition bridge.
+   Only microscopic pose noise is damped. As soon as the target
+   differs perceptibly, the output becomes fully direct.
+   ===================================================== */
+
+let stabilizedPoseReady=false,stabilizerLastTime=null;
+const stabilizedPosition=new THREE.Vector3();
+const stabilizedQuaternion=new THREE.Quaternion();
+
+function smoothstep01(x){
+  x=THREE.MathUtils.clamp(x,0,1);
+  return x*x*(3-2*x);
+}
+
+function resetMicroStabilizer(position,quaternion,now){
+  stabilizedPosition.copy(position);
+  stabilizedQuaternion.copy(quaternion);
+  stabilizerLastTime=now;
+  stabilizedPoseReady=true;
+}
+
+function stabilizeMobileStickyPose(position,quaternion,now){
+  if(!stabilizedPoseReady||stabilizerLastTime===null){
+    resetMicroStabilizer(position,quaternion,now);
+    mobileStickyRadiusPos=0;
+    mobileStickyRadiusRot=0;
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const dt=(now-stabilizerLastTime)/1000;
+  stabilizerLastTime=now;
+  if(dt<=0||dt>MICRO_RESET_DT){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const posError=stabilizedPosition.distanceTo(position);
+  const targetQuaternion=quaternion.clone();
+  if(stabilizedQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  const rotError=quaternionAngle(stabilizedQuaternion,targetQuaternion);
+
+  /* Robust prediction velocity decides how "sticky" the pose may be.
+     A large actual displacement forces direct mode immediately even if the
+     velocity history has not caught up yet. */
+  let motionT=Math.max(
+    THREE.MathUtils.clamp(linearVelocity.length()/MOBILE_STICKY_LINEAR_FULL,0,1),
+    THREE.MathUtils.clamp(Math.abs(angularVelocity)/MOBILE_STICKY_ANGULAR_FULL,0,1)
+  );
+  if(posError>=MOBILE_STICKY_FORCE_DIRECT_POS||rotError>=MOBILE_STICKY_FORCE_DIRECT_ROT)motionT=1;
+  motionT=smoothstep01(motionT);
+
+  const posRadius=THREE.MathUtils.lerp(MOBILE_STICKY_POS_STILL,MOBILE_STICKY_POS_MOVING,motionT);
+  const rotRadius=THREE.MathUtils.lerp(MOBILE_STICKY_ROT_STILL,MOBILE_STICKY_ROT_MOVING,motionT);
+  mobileStickyRadiusPos=posRadius;
+  mobileStickyRadiusRot=rotRadius;
+
+  /* "Sticky sphere": if the noisy target remains inside the radius, do
+     nothing. If it leaves, move only enough to sit exactly on the sphere's
+     boundary. This is continuous at the threshold and can never build up
+     temporal lag. */
+  if(posError>posRadius&&posError>1e-12){
+    const correction=position.clone().sub(stabilizedPosition);
+    correction.multiplyScalar((posError-posRadius)/posError);
+    stabilizedPosition.add(correction);
+  }
+
+  if(rotError>rotRadius&&rotError>1e-12){
+    const catchup=(rotError-rotRadius)/rotError;
+    stabilizedQuaternion.slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1)).normalize();
+  }
+
+  return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1-motionT};
+}
+
+function stabilizeDesktopStickyPose(position,quaternion,now){
+  if(!stabilizedPoseReady||stabilizerLastTime===null){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const dt=(now-stabilizerLastTime)/1000;
+  stabilizerLastTime=now;
+  if(dt<=0||dt>MICRO_RESET_DT){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const posError=stabilizedPosition.distanceTo(position);
+  const targetQuaternion=quaternion.clone();
+  if(stabilizedQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  const rotError=quaternionAngle(stabilizedQuaternion,targetQuaternion);
+
+  const posMotion=smoothstep01(
+    posError/Math.max(1e-9,DESKTOP_STICKY_POS_DIRECT)
+  );
+  const rotMotion=smoothstep01(
+    rotError/Math.max(1e-9,DESKTOP_STICKY_ROT_DIRECT)
+  );
+  const motionT=Math.max(posMotion,rotMotion);
+
+  const posRadius=THREE.MathUtils.lerp(
+    DESKTOP_STICKY_POS_STILL,
+    DESKTOP_STICKY_POS_MOVING,
+    motionT
+  );
+  const rotRadius=THREE.MathUtils.lerp(
+    DESKTOP_STICKY_ROT_STILL,
+    DESKTOP_STICKY_ROT_MOVING,
+    motionT
+  );
+
+  if(posError>posRadius&&posError>1e-12){
+    const correction=position.clone().sub(stabilizedPosition);
+    correction.multiplyScalar((posError-posRadius)/posError);
+    stabilizedPosition.add(correction);
+  }
+
+  if(rotError>rotRadius&&rotError>1e-12){
+    const catchup=(rotError-rotRadius)/rotError;
+    stabilizedQuaternion
+      .slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1))
+      .normalize();
+  }
+
+  return {
+    position:stabilizedPosition,
+    quaternion:stabilizedQuaternion,
+    alpha:1-motionT
+  };
+}
+
+function stabilizeMicroJitter(position,quaternion,now){
+  if(IS_MOBILE_DEVICE)return stabilizeMobileStickyPose(position,quaternion,now);
+
+  /* EPA-6a: Auf dem PC exakt dieselbe räumliche Sticky-Logik wie am Handy.
+     Dadurch bleiben die bewährten Stillstandsradien und die direkte
+     Reaktion bei echter Bewegung identisch. */
+  return stabilizeMobileStickyPose(position,quaternion,now);
+
+  /* Bisheriger 5c-14-Desktopfilter bleibt als leicht rücksetzbare Referenz
+     im Quelltext erhalten, ist in EPA-6 aber nicht aktiv. */
+  if(!stabilizedPoseReady||stabilizerLastTime===null){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const dt=(now-stabilizerLastTime)/1000;
+  stabilizerLastTime=now;
+  if(dt<=0||dt>MICRO_RESET_DT){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const posError=stabilizedPosition.distanceTo(position);
+  const rotError=quaternionAngle(stabilizedQuaternion,quaternion);
+  const posT=smoothstep01((posError-MICRO_POS_START)/Math.max(1e-9,MICRO_POS_DIRECT-MICRO_POS_START));
+  const rotT=smoothstep01((rotError-MICRO_ROT_START)/Math.max(1e-9,MICRO_ROT_DIRECT-MICRO_ROT_START));
+  const motionT=Math.max(posT,rotT);
+  const alpha=THREE.MathUtils.lerp(MICRO_ALPHA_STILL,1,motionT);
+
+  stabilizedPosition.lerp(position,alpha);
+
+  /* Spatial lag cap: strong stillness filtering can never create visible
+     trailing when the cube starts moving slowly. */
+  const remainingPos=stabilizedPosition.distanceTo(position);
+  if(remainingPos>MICRO_MAX_LAG_POS){
+    const correction=position.clone().sub(stabilizedPosition);
+    correction.multiplyScalar((remainingPos-MICRO_MAX_LAG_POS)/remainingPos);
+    stabilizedPosition.add(correction);
+  }
+
+  const targetQuaternion=quaternion.clone();
+  if(stabilizedQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  stabilizedQuaternion.slerp(targetQuaternion,alpha).normalize();
+
+  const remainingRot=quaternionAngle(stabilizedQuaternion,targetQuaternion);
+  if(remainingRot>MICRO_MAX_LAG_ROT){
+    const catchup=1-MICRO_MAX_LAG_ROT/remainingRot;
+    stabilizedQuaternion.slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1)).normalize();
+  }
+
+  return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha};
+}
+
+function updateRenderedPose(now){
+  if(!hasGoodPose||lastGoodPoseTime===null){
+    trackedCubeRoot.visible=false;
+    trackingMode="KEINE POSE";
+    stabilizedPoseReady=false;
+    return;
+  }
+
+  const age=Math.max(0,now-lastGoodPoseTime);
+
+  /* 5c-19: use optical flow only when the absolute AprilTag pose is no
+     longer fresh. It therefore cannot add jitter during normal tracking,
+     but it bridges exactly the frames that previously became a dropout. */
+  if(
+    (age>=FLOW_RENDER_AFTER_MS||recoveryMode||consecutiveMisses>0)&&
+    flowPoseTime!==null&&
+    flowPoseTime>=lastGoodPoseTime
+  ){
+    const fp=flowPoseForRender(now);
+    if(fp){
+      const stabilized=stabilizeMicroJitter(fp.position,fp.quaternion,now);
+      trackedCubeRoot.position.copy(stabilized.position);
+      trackedCubeRoot.quaternion.copy(stabilized.quaternion);
+      trackedCubeRoot.visible=true;
+      trackingMode="OPTICAL-FLOW-BRÜCKE";
+      return;
+    }
+  }
+
+  /* Keep the successful 5c-12 prediction/recovery windows unchanged. */
+  if(age<=MAX_PREDICTION_TIME_MS){
+    const p=predictedPoseAt(now,MAX_PREDICTION_TIME_MS);
+    if(!p){trackedCubeRoot.visible=false;return;}
+
+    const stabilized=stabilizeMicroJitter(p.position,p.quaternion,now);
+    trackedCubeRoot.position.copy(stabilized.position);
+    trackedCubeRoot.quaternion.copy(stabilized.quaternion);
+    trackedCubeRoot.visible=true;
+
+    if(age<=Math.max(55,lastFrameAgeAtResultMs+10)){
+      trackingMode=lastJointUsed?"JOINT + DIREKT":"APRILTAG + DIREKT";
+    }else{
+      trackingMode=recoveryMode?"RECOVERY + PROGNOSE":"PROGNOSE";
+    }
+    return;
+  }
+
+  /* Keep the no-blink hold from 5c-12. */
+  if(age<=MAX_HOLD_TIME_MS){
+    const p=predictedPoseAt(lastGoodPoseTime+MAX_PREDICTION_TIME_MS,MAX_PREDICTION_TIME_MS);
+    if(!p){trackedCubeRoot.visible=false;return;}
+
+    const stabilized=stabilizeMicroJitter(p.position,p.quaternion,now);
+    trackedCubeRoot.position.copy(stabilized.position);
+    trackedCubeRoot.quaternion.copy(stabilized.quaternion);
+    trackedCubeRoot.visible=true;
+    trackingMode="RECOVERY + HALTEN";
+    return;
+  }
+
+  trackedCubeRoot.visible=false;
+  trackingMode="VERLOREN";
+  stabilizedPoseReady=false;
+}
+function resize(){
+  const sw=innerWidth,sh=innerHeight,va=WIDTH/HEIGHT,sa=sw/sh;let w,h;if(sa>va){h=sh;w=h*va;}else{w=sw;h=w/va;}const l=(sw-w)/2,t=(sh-h)/2;
+  threeCanvas.style.width=w+"px";threeCanvas.style.height=h+"px";threeCanvas.style.left=l+"px";threeCanvas.style.top=t+"px";
+}
+addEventListener("resize",resize);resize();
+function updateStatus(now){
+  const ids=lastVisibleIDs.length?lastVisibleIDs.join(", "):"–";
+  const age=lastGoodPoseTime===null?0:Math.max(0,now-lastGoodPoseTime);
+  const ps=lastCenterSpread===null?"–":(lastCenterSpread*1000).toFixed(1)+" mm";
+  const rs=lastRotationSpread===null?"–":lastRotationSpread.toFixed(2)+"°";
+  const score=lastSolutionScore===null?"–":lastSolutionScore.toFixed(2);
+  const repro=lastReprojectionBefore===null||lastReprojectionAfter===null
+    ?"–"
+    :`${lastReprojectionBefore.toFixed(2)} → ${lastReprojectionAfter.toFixed(2)} px`;
+  const roiHitRate=roiAttempts?100*roiHits/roiAttempts:0;
+  const fullHitRate=fullAttempts?100*fullHits/fullAttempts:0;
+
+  status.textContent=
+    `GeoChemAR ${VERSION}`+
+    `\nSichtbare IDs: ${ids}`+
+    `\nKamera: ${cameraModeText}`+
+    `\nQuelle: ${sourceVideoText} / ${IS_MOBILE_DEVICE?"Mobilmodus":"Desktopmodus"}`+
+    `\nKamera-Frames/s: ${videoFPS.toFixed(1)}`+
+    `\nErkennungen/s: ${detectionFPS.toFixed(1)}`+
+    `\n\nTracking: ${trackingMode}`+
+    `\nDetektorquelle: ${detectorSource}`+
+    `\nRecovery-Modus: ${recoveryMode?"JA":"NEIN"}`+
+    `\nFehlframes in Folge: ${consecutiveMisses}`+
+    `\nMessalter: ${age.toFixed(0)} ms`+
+    `\nPipeline: ${lastDetectionLatencyMs.toFixed(0)} ms`+
+    `\nROI-Zeit: ${lastRoiTimeMs.toFixed(0)} ms`+
+    `\nFull-Zeit: ${lastMainTimeMs.toFixed(0)} ms`+
+    `\nFramealter: ${lastFrameAgeAtResultMs.toFixed(0)} ms`+
+    `\n\nFull-Treffer: ${fullHits}/${fullAttempts} (${fullHitRate.toFixed(0)} %)`+
+    `\nRecovery-ROI: ${lastRoiText}`+
+    `\nROI-Treffer: ${roiHits}/${roiAttempts} (${roiHitRate.toFixed(0)} %)`+
+    `\nEinzelflächen-ROI: ${faceRoiHits}/${faceRoiAttempts}`+
+    `\nProaktiv nächste Seite: ${proactiveHits}/${proactiveAttempts}`+
+    `\nFull→ROI-Rettungen: ${fullFallbacks}`+
+    `\nMobile Fast-Capture: ${mobileFastCapture?"JA":"NEIN"}`+
+    `\nMobile Native-ROI: ${mobileNativeRoi?"JA":"NEIN"}`+
+    `\nMobile Fresh-Recovery: ${mobileFreshRecoveryDeferrals}`+
+    `\nMobile Single-Pass: ${mobileSinglePassRecovery}`+
+    `\nMobile robuste V-Segmente: ${mobileRobustSegments}`+
+    `\nMobile Sticky-Radius: ${(mobileStickyRadiusPos*1000).toFixed(2)} mm / ${THREE.MathUtils.radToDeg(mobileStickyRadiusRot).toFixed(2)}°`+
+    `\nAssist-Pose verworfen: ${mobileAssistPoseRejected}`+
+    `\nRecovery-Guard: ${recoveryGuardText}`+
+    `\nGuard verworfen/bestätigt: ${recoveryGuardRejected}/${recoveryGuardConfirmed}`+
+    `\n\nOptical Flow: ${flowValid?"AKTIV":"bereit"}`+
+    `\nFlow-Punkte/RMSE: ${flowInliers} / ${flowPoseRmse===null?"–":flowPoseRmse.toFixed(1)+" px"}`+
+    `\nFlow akzeptiert/verworfen: ${flowAccepted}/${flowRejected}`+
+    `\nFlow Reseeds: ${flowReseeds}`+
+    `\nFlow Status: ${flowLastText}`+
+    `\n\nJoint-Pose: ${lastJointUsed?"JA":"NEIN"}`+
+    `\nJoint-Tags: ${lastJointTags}`+
+    `\nReprojektion: ${repro}`+
+    `\nJoint-Zeit: ${lastJointTimeMs.toFixed(2)} ms`+
+    `\n\nAlt-Pose aktuell: ${lastAltSelections}`+
+    `\nLösungsscore: ${score}`+
+    `\nPositionsabw.: ${ps}`+
+    `\nRotationsabw.: ${rs}`+
+    `\nBusy übersprungen: ${skippedBecauseBusy}`+
+    `\nVideo-Frames verpasst: ${skippedPresentedFrames}`;
+}
+function animate(now){requestAnimationFrame(animate);updateRenderedPose(now);updateStatus(now);renderer.render(scene,camera);}
+function showError(e){console.error(e);errorBox.style.display="block";errorBox.textContent="FEHLER:\n"+(e?.stack||String(e));}
+async function start(){try{status.textContent="AprilTag wird geladen …";await initializeAprilTag();status.textContent="AprilTag bereit ✓\nKamera wird gestartet …";await startCamera();startVideoProcessing();requestAnimationFrame(animate);}catch(e){showError(e);}}
+start();
+</script>
+</body>
+</html>
