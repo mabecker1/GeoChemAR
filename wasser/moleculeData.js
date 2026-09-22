@@ -3,13 +3,13 @@ export const DEFAULT_MOLECULE = "WATER_CLUSTER";
 export const MOLECULES = Object.freeze({
   WATER_CLUSTER: Object.freeze({
     key: "WATER_CLUSTER",
-    formula: "(H₂O)₄₀",
+    formula: "(H₂O)₁₀₀",
     name: "Wasser-Ausschnitt",
     zoom: Object.freeze({
-      min: 0.55,
+      min: 0.35,
       max: 2.3,
       step: 0.1,
-      default: 1.0
+      default: 0.80
     }),
     implemented: true
   })

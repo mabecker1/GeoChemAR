@@ -1,39 +1,38 @@
 import * as THREE from "../libs/three.module.min.js";
 
 /*
-  GeoChemAR – Wasser-Version 1
+  GeoChemAR – Wasser-Version 2
 
-  Didaktisch idealisierte Wasserprobe:
-  - ca. 40 H2O-Moleküle
-  - jedes H2O-Molekül mit korrekter lokaler Geometrie:
+  Änderungen gegenüber Version 1:
+  - jetzt 100 H2O-Moleküle
+  - deutlicheres Ball-and-Stick-Modell
+  - größere intermolekulare Abstände für bessere Lesbarkeit
+  - interne H2O-Geometrie bleibt korrekt:
       O–H = 0.9572 Å
       H–O–H = 104.5°
-  - Sauerstoffatome in einer kompakten, räumlichen Probe mit lokaler
-    tetraedrischer Nachbarschaft (repräsentativer Ausschnitt)
-  - Wasserstoffbrücken als O···O-Verbindungen zwischen nahen Nachbarn
 
-  Ziel ist hier keine MD-Simulation, sondern eine fachlich sinnvolle,
-  räumlich gut lesbare Unterrichtsdarstellung eines Wasser-Ausschnitts.
+  Ziel bleibt eine didaktisch gut lesbare 3D-Wasserprobe.
 */
 
 const ANGSTROM_TO_SCENE = 0.0060;
 const O_H = 0.9572;
 const H_O_H_DEG = 104.5;
-const O_O_TARGET = 2.76;
+const O_O_TARGET = 3.45; // bewusst vergrößert für bessere Sichtbarkeit
+const MOLECULE_COUNT = 100;
 
 const DISPLAY = Object.freeze({
   atomRadius: Object.freeze({
-    H: 0.0049,
-    O: 0.0088
+    H: 0.0039,
+    O: 0.0069
   }),
   color: Object.freeze({
     H: 0xffffff,
     O: 0xd93636,
-    bond: 0xbcc4ce,
+    bond: 0xbfc7d2,
     hbond: 0x7fb8ff
   }),
-  bondRadius: 0.00155,
-  hBondRadius: 0.00075
+  bondRadius: 0.00120,
+  hBondRadius: 0.00062
 });
 
 function v(x,y,z){ return new THREE.Vector3(x,y,z); }
@@ -41,7 +40,7 @@ function v(x,y,z){ return new THREE.Vector3(x,y,z); }
 function materialForElement(element){
   return new THREE.MeshStandardMaterial({
     color: DISPLAY.color[element],
-    roughness: element === "H" ? 0.46 : 0.60,
+    roughness: element === "H" ? 0.43 : 0.58,
     metalness: 0
   });
 }
@@ -50,8 +49,8 @@ function createAtom(element, position){
   const radius = DISPLAY.atomRadius[element];
   const geometry = new THREE.SphereGeometry(
     radius,
-    element === "H" ? 32 : 42,
-    element === "H" ? 22 : 28
+    element === "H" ? 28 : 36,
+    element === "H" ? 20 : 26
   );
   const mesh = new THREE.Mesh(geometry, materialForElement(element));
   mesh.position.copy(position);
@@ -64,7 +63,7 @@ function createCylinder(start, end, radius, material){
   const delta = end.clone().sub(start);
   const length = delta.length();
   const direction = delta.clone().normalize();
-  const geometry = new THREE.CylinderGeometry(radius, radius, length, 22, 1, false);
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 18, 1, false);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(start).add(end).multiplyScalar(0.5);
   mesh.quaternion.setFromUnitVectors(v(0,1,0), direction);
@@ -93,21 +92,21 @@ function addDashedHydrogenBond(group, oxygenA, oxygenB){
   if(length <= 1e-9) return;
 
   const direction = axis.clone().normalize();
-  const start = oxygenA.clone().addScaledVector(direction, DISPLAY.atomRadius.O + 0.0006);
-  const end = oxygenB.clone().addScaledVector(direction, -(DISPLAY.atomRadius.O + 0.0006));
+  const start = oxygenA.clone().addScaledVector(direction, DISPLAY.atomRadius.O + 0.0005);
+  const end = oxygenB.clone().addScaledVector(direction, -(DISPLAY.atomRadius.O + 0.0005));
   const usable = end.clone().sub(start);
   const usableLength = usable.length();
   if(usableLength <= 1e-9) return;
 
-  const dashCount = Math.max(3, Math.min(7, Math.round(usableLength / 0.010)));
-  const gapFactor = 0.38;
+  const dashCount = Math.max(3, Math.min(7, Math.round(usableLength / 0.012)));
+  const gapFactor = 0.42;
   const segment = usableLength / dashCount;
   const dashLength = segment * (1 - gapFactor);
 
   const material = new THREE.MeshStandardMaterial({
     color: DISPLAY.color.hbond,
     transparent: true,
-    opacity: 0.86,
+    opacity: 0.84,
     roughness: 0.55,
     metalness: 0
   });
@@ -140,7 +139,7 @@ function chooseDonorDirections(position, neighborDirections){
       const a = neighborDirections[i];
       const b = neighborDirections[j];
       const radialScore = a.dot(outward) + b.dot(outward);
-      const separationScore = -Math.abs(a.dot(b) + 1/3); // tetrahedral pair preferred
+      const separationScore = -Math.abs(a.dot(b) + 1/3);
       const score = radialScore + 0.65 * separationScore;
       if(score > bestScore){
         bestScore = score;
@@ -176,8 +175,8 @@ function computeHydrogenDirections(position, neighborDirections){
   return [h1,h2];
 }
 
-function generateDiamondPoints(targetCount = 40){
-  const a = O_O_TARGET * 4 / Math.sqrt(3); // diamond nearest-neighbor distance -> target O···O
+function generateDiamondPoints(targetCount = MOLECULE_COUNT){
+  const a = O_O_TARGET * 4 / Math.sqrt(3);
   const basis = [
     [0,0,0], [0.25,0.25,0.25],
     [0,0.5,0.5], [0.25,0.75,0.75],
@@ -186,9 +185,9 @@ function generateDiamondPoints(targetCount = 40){
   ];
 
   const points = [];
-  for(let i=-2;i<=2;i++){
-    for(let j=-2;j<=2;j++){
-      for(let k=-2;k<=2;k++){
+  for(let i=-3;i<=3;i++){
+    for(let j=-3;j<=3;j++){
+      for(let k=-3;k<=3;k++){
         for(const b of basis){
           points.push(v((i+b[0])*a,(j+b[1])*a,(k+b[2])*a));
         }
@@ -199,8 +198,6 @@ function generateDiamondPoints(targetCount = 40){
   points.sort((p,q)=>p.lengthSq()-q.lengthSq());
   const selected = points.slice(0, targetCount).map(p=>p.clone());
 
-  // Leichte deterministische Verzerrung, damit die Probe natürlicher wirkt,
-  // ohne die lokale tetraedrische Ordnung zu verlieren.
   for(let idx=0; idx<selected.length; idx++){
     const p = selected[idx];
     const r = p.length();
@@ -210,13 +207,12 @@ function generateDiamondPoints(targetCount = 40){
     if(tangent.lengthSq() < 1e-10) tangent.set(1,0,0);
     tangent.normalize();
     const bitangent = new THREE.Vector3().crossVectors(n, tangent).normalize();
-    const wobble1 = Math.sin(idx * 1.73) * 0.09;
-    const wobble2 = Math.cos(idx * 1.11) * 0.07;
+    const wobble1 = Math.sin(idx * 1.73) * 0.11;
+    const wobble2 = Math.cos(idx * 1.11) * 0.09;
     p.addScaledVector(tangent, wobble1);
     p.addScaledVector(bitangent, wobble2);
   }
 
-  // Auf Schwerpunkt zentrieren.
   const center = selected.reduce((acc,p)=>acc.add(p), new THREE.Vector3()).multiplyScalar(1/selected.length);
   for(const p of selected) p.sub(center);
 
@@ -226,10 +222,10 @@ function generateDiamondPoints(targetCount = 40){
 function buildClusterData(){
   if(cachedCluster) return cachedCluster;
 
-  const oxygenPositions = generateDiamondPoints(40);
+  const oxygenPositions = generateDiamondPoints(MOLECULE_COUNT);
   const moleculeInfos = oxygenPositions.map((p,index)=>({ index, O: p.clone(), H1: null, H2: null }));
 
-  const neighborThreshold = 3.18; // Å – near first O···O shell
+  const neighborThreshold = 3.95;
   const edges = [];
   const neighbors = Array.from({length: oxygenPositions.length}, ()=>[]);
 
@@ -254,7 +250,6 @@ function buildClusterData(){
     info.H2 = info.O.clone().addScaledVector(hDir2, O_H);
   }
 
-  // Skalierung in die AR-Szene.
   for(const m of moleculeInfos){
     m.O.multiplyScalar(ANGSTROM_TO_SCENE);
     m.H1.multiplyScalar(ANGSTROM_TO_SCENE);
@@ -262,7 +257,6 @@ function buildClusterData(){
   }
 
   const scaledEdges = edges.map(([i,j,d])=>({ i, j, distance: d * ANGSTROM_TO_SCENE }));
-
   cachedCluster = { moleculeInfos, hydrogenBondEdges: scaledEdges };
   return cachedCluster;
 }
