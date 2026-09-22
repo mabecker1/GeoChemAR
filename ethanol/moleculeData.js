@@ -5,12 +5,14 @@ export const MOLECULES = Object.freeze({
     key: "ETHANOL",
     formula: "C₂H₆O",
     name: "Ethanol",
-    zoom: Object.freeze({
-      min: 0.55,
-      max: 2.2,
-      step: 0.1,
-      default: 1.0
-    }),
+    zoom: Object.freeze({ min: 0.55, max: 2.2, step: 0.1, default: 1.0 }),
+    implemented: true
+  }),
+  H2O: Object.freeze({
+    key: "H2O",
+    formula: "H₂O",
+    name: "Wasser",
+    zoom: Object.freeze({ min: 0.75, max: 2.6, step: 0.1, default: 1.4 }),
     implemented: true
   })
 });
