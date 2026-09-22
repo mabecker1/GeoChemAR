@@ -208,7 +208,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, createGeometryOverlay, createAngleOverlay, createLonePairOverlay, disposeMolecule } from "./moleculeBuilder.js";
 
-const VERSION="EPA-5 / Core 5c-19";
+const VERSION="EPA-6 JitterTest / Core 5c-19";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -250,6 +250,17 @@ const MICRO_ROT_DIRECT=THREE.MathUtils.degToRad(0.80);
 const MICRO_MAX_LAG_POS=0.00035;     // max 0.35 mm visible lag
 const MICRO_MAX_LAG_ROT=THREE.MathUtils.degToRad(0.25);
 const MICRO_RESET_DT=0.18;
+
+/* EPA-6 JitterGuard – Desktop:
+   Kein zusätzlicher zeitlicher Low-Pass. Kleine Pose-Schwankungen bleiben
+   innerhalb einer räumlich begrenzten Sticky Sphere unsichtbar. Sobald die
+   echte Bewegung größer wird, schrumpft diese Grenze schnell. */
+const DESKTOP_STICKY_POS_STILL=0.00045;      // 0.45 mm
+const DESKTOP_STICKY_POS_MOVING=0.00007;     // 0.07 mm
+const DESKTOP_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.32);
+const DESKTOP_STICKY_ROT_MOVING=THREE.MathUtils.degToRad(0.05);
+const DESKTOP_STICKY_POS_DIRECT=0.00135;      // 1.35 mm
+const DESKTOP_STICKY_ROT_DIRECT=THREE.MathUtils.degToRad(0.95);
 
 /* Do not convert sub-pixel pose noise into prediction velocity. */
 const VELOCITY_NOISE_POS=0.00020;
@@ -306,9 +317,9 @@ const MOBILE_MOTION_BLEND=0.58;
    small "sticky" sphere. As soon as real motion starts, that sphere shrinks
    almost to zero. Therefore the maximum error is spatially bounded instead
    of accumulating as visible trailing. */
-const MOBILE_STICKY_POS_STILL=0.00070;      // 0.70 mm
+const MOBILE_STICKY_POS_STILL=0.00085;      // 0.85 mm – EPA-6 JitterGuard
 const MOBILE_STICKY_POS_MOVING=0.00010;     // 0.10 mm
-const MOBILE_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.50);
+const MOBILE_STICKY_ROT_STILL=THREE.MathUtils.degToRad(0.65); // EPA-6 JitterGuard
 const MOBILE_STICKY_ROT_MOVING=THREE.MathUtils.degToRad(0.08);
 const MOBILE_STICKY_LINEAR_FULL=0.10;       // m/s => essentially direct
 const MOBILE_STICKY_ANGULAR_FULL=1.8;       // rad/s => essentially direct
@@ -2199,9 +2210,72 @@ function stabilizeMobileStickyPose(position,quaternion,now){
   return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1-motionT};
 }
 
+function stabilizeDesktopStickyPose(position,quaternion,now){
+  if(!stabilizedPoseReady||stabilizerLastTime===null){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const dt=(now-stabilizerLastTime)/1000;
+  stabilizerLastTime=now;
+  if(dt<=0||dt>MICRO_RESET_DT){
+    resetMicroStabilizer(position,quaternion,now);
+    return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
+  }
+
+  const posError=stabilizedPosition.distanceTo(position);
+  const targetQuaternion=quaternion.clone();
+  if(stabilizedQuaternion.dot(targetQuaternion)<0){
+    targetQuaternion.x*=-1;targetQuaternion.y*=-1;
+    targetQuaternion.z*=-1;targetQuaternion.w*=-1;
+  }
+  const rotError=quaternionAngle(stabilizedQuaternion,targetQuaternion);
+
+  const posMotion=smoothstep01(
+    posError/Math.max(1e-9,DESKTOP_STICKY_POS_DIRECT)
+  );
+  const rotMotion=smoothstep01(
+    rotError/Math.max(1e-9,DESKTOP_STICKY_ROT_DIRECT)
+  );
+  const motionT=Math.max(posMotion,rotMotion);
+
+  const posRadius=THREE.MathUtils.lerp(
+    DESKTOP_STICKY_POS_STILL,
+    DESKTOP_STICKY_POS_MOVING,
+    motionT
+  );
+  const rotRadius=THREE.MathUtils.lerp(
+    DESKTOP_STICKY_ROT_STILL,
+    DESKTOP_STICKY_ROT_MOVING,
+    motionT
+  );
+
+  if(posError>posRadius&&posError>1e-12){
+    const correction=position.clone().sub(stabilizedPosition);
+    correction.multiplyScalar((posError-posRadius)/posError);
+    stabilizedPosition.add(correction);
+  }
+
+  if(rotError>rotRadius&&rotError>1e-12){
+    const catchup=(rotError-rotRadius)/rotError;
+    stabilizedQuaternion
+      .slerp(targetQuaternion,THREE.MathUtils.clamp(catchup,0,1))
+      .normalize();
+  }
+
+  return {
+    position:stabilizedPosition,
+    quaternion:stabilizedQuaternion,
+    alpha:1-motionT
+  };
+}
+
 function stabilizeMicroJitter(position,quaternion,now){
   if(IS_MOBILE_DEVICE)return stabilizeMobileStickyPose(position,quaternion,now);
+  return stabilizeDesktopStickyPose(position,quaternion,now);
 
+  /* Bisheriger 5c-14-Desktopfilter bleibt als leicht rücksetzbare Referenz
+     im Quelltext erhalten, ist in EPA-6 aber nicht aktiv. */
   if(!stabilizedPoseReady||stabilizerLastTime===null){
     resetMicroStabilizer(position,quaternion,now);
     return {position:stabilizedPosition,quaternion:stabilizedQuaternion,alpha:1};
