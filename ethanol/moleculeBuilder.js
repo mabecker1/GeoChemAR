@@ -1,5 +1,4 @@
 import * as THREE from "../libs/three.module.min.js";
-import { ETHANOL_ESP_POSITIONS, ETHANOL_ESP_INDICES, ETHANOL_ESP_COLORS } from "./ethanolSurfaceData.js";
 
 /*
   GeoChemAR – Ethanol Testversion 1b
@@ -223,10 +222,16 @@ export function buildMolecule(data){
 }
 
 
-export function createEspSurfaceOverlay(data){
+
+export async function createEspSurfaceOverlay(data){
   if(data?.key!=="ETHANOL"){
     throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
   }
+
+  // Lazy Loading: die große Oberflächendatei wird erst geladen,
+  // wenn die ESP-Oberfläche wirklich eingeblendet wird.
+  const surfaceModule = await import("./ethanolSurfaceData.js");
+  const { ETHANOL_ESP_POSITIONS, ETHANOL_ESP_INDICES, ETHANOL_ESP_COLORS } = surfaceModule;
 
   const geometry=new THREE.BufferGeometry();
   geometry.setAttribute(
@@ -243,8 +248,8 @@ export function createEspSurfaceOverlay(data){
   const material=new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
-    opacity:0.58,
-    shininess:70,
+    opacity:0.56,
+    shininess:72,
     specular:0x555555,
     side:THREE.DoubleSide,
     depthWrite:false
@@ -255,6 +260,7 @@ export function createEspSurfaceOverlay(data){
   mesh.userData.kind="esp-surface";
   return mesh;
 }
+
 
 export function disposeObject3D(root){
   if(!root)return;
