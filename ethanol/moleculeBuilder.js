@@ -89,7 +89,7 @@ function createSurfaceMesh(positions, indices, colors, {flipWinding=false}={}){
 export async function createEspSurfaceOverlay(data){
   switch(data?.key){
     case "ETHANOL": { const surfaceModule=await import("./ethanolSurfaceData.js"); const { ETHANOL_ESP_POSITIONS, ETHANOL_ESP_INDICES, ETHANOL_ESP_COLORS }=surfaceModule; return createSurfaceMesh(ETHANOL_ESP_POSITIONS,ETHANOL_ESP_INDICES,ETHANOL_ESP_COLORS,{flipWinding:true}); }
-    case "H2O": { const surfaceModule=await import("./waterSurfaceData.js"); const { WATER_ESP_POSITIONS, WATER_ESP_INDICES, WATER_ESP_COLORS }=surfaceModule; return createSurfaceMesh(WATER_ESP_POSITIONS,WATER_ESP_INDICES,WATER_ESP_COLORS,{flipWinding:false}); }
+    case "H2O": { const surfaceModule=await import("./waterSurfaceData.js"); const { WATER_ESP_POSITIONS, WATER_ESP_INDICES, WATER_ESP_COLORS }=surfaceModule; return createSurfaceMesh(WATER_ESP_POSITIONS,WATER_ESP_INDICES,WATER_ESP_COLORS,{flipWinding:true}); }
     default: throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
   }
 }
