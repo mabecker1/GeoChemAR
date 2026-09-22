@@ -1,15 +1,19 @@
 import * as THREE from "../libs/three.module.min.js";
 
 /*
-  GeoChemAR – Ethanol Testversion 1
+  GeoChemAR – Ethanol Testversion 1a
 
-  Diese erste Ethanol-Version enthält:
-  - korrekt wirkendes Ball-and-Stick-Modell von Ethanol
-  - Zoom-Unterstützung
-  - Nutzung des stabilen EPA-6a-Tracking-Kerns
+  Geometrie:
+  Experimentelle Strukturkoordinaten aus der NIST CCCBDB für Ethanol.
+  Dadurch sind beide C-Atome realistisch annähernd tetraedrisch und
+  das O-Atom sauber gewinkelt.
 
-  Die Elektronendichteoberfläche mit elektrostatischem Potenzial
-  folgt im nächsten Entwicklungsschritt.
+  Verwendete experimentelle Kernwerte:
+  C-C = 1.512 Å
+  C-O = 1.431 Å
+  O-H = 0.971 Å
+  C-C-O = 107.8°
+  C-O-H = 105.4°
 */
 
 const ANGSTROM_TO_SCENE = 0.026;
@@ -29,14 +33,6 @@ const DISPLAY = Object.freeze({
   bondRadius: 0.00195
 });
 
-const BOND = Object.freeze({
-  CH: 1.09,
-  CC: 1.54,
-  CO: 1.43,
-  OH: 0.96,
-  COH_ANGLE_DEG: 108.5
-});
-
 function v(x,y,z){ return new THREE.Vector3(x,y,z); }
 
 function materialForElement(element){
@@ -49,7 +45,11 @@ function materialForElement(element){
 
 function createAtom(element, position){
   const radius = DISPLAY.atomRadius[element];
-  const geometry = new THREE.SphereGeometry(radius, element==="H" ? 40 : 48, element==="H" ? 28 : 32);
+  const geometry = new THREE.SphereGeometry(
+    radius,
+    element==="H" ? 40 : 48,
+    element==="H" ? 28 : 32
+  );
   const mesh = new THREE.Mesh(geometry, materialForElement(element));
   mesh.position.copy(position);
   mesh.userData.kind = "atom";
@@ -87,60 +87,44 @@ function addBond(group, atomA, atomB, elementA, elementB){
   group.add(createBondCylinder(start, end, DISPLAY.bondRadius, material));
 }
 
-function tetrahedralFollowersForBondDirection(bondDir){
-  const u = bondDir.clone().normalize().negate();
-  const helper = Math.abs(u.z) < 0.9 ? v(0,0,1) : v(0,1,0);
+/*
+  Experimentelle NIST-CCCBDB-Koordinaten (Å):
+  C1  1.1879  -0.3829   0.0000
+  C2  0.0000   0.5526   0.0000
+  O  -1.1867  -0.2472   0.0000
+  HO -1.9237   0.3850   0.0000
+  H1  2.0985   0.2306   0.0000
+  H2  1.1184  -1.0093   0.8869
+  H3  1.1184  -1.0093  -0.8869
+  H4 -0.0227   1.1812   0.8852
+  H5 -0.0227   1.1812  -0.8852
 
-  const e2 = helper.clone().sub(u.clone().multiplyScalar(helper.dot(u))).normalize();
-  const e3 = new THREE.Vector3().crossVectors(u, e2).normalize();
+  Das entspricht dem trans-Konformer. Die gesamte Struktur wird nur
+  zum Würfelzentrum verschoben und einheitlich skaliert; Winkel und
+  relative Abstände bleiben unverändert.
+*/
+function experimentalEthanolCoordinates(){
+  const raw = {
+    C1: v( 1.1879, -0.3829,  0.0000),
+    C2: v( 0.0000,  0.5526,  0.0000),
+    O:  v(-1.1867, -0.2472,  0.0000),
+    HO: v(-1.9237,  0.3850,  0.0000),
+    H1: v( 2.0985,  0.2306,  0.0000),
+    H2: v( 1.1184, -1.0093,  0.8869),
+    H3: v( 1.1184, -1.0093, -0.8869),
+    H4: v(-0.0227,  1.1812,  0.8852),
+    H5: v(-0.0227,  1.1812, -0.8852)
+  };
 
-  const x = -1/3;
-  const r = 2*Math.sqrt(2)/3;
+  const points = Object.values(raw);
+  const box = new THREE.Box3().setFromPoints(points);
+  const center = box.getCenter(new THREE.Vector3());
 
-  const dirs = [];
-  for(const phiDeg of [0,120,240]){
-    const phi = THREE.MathUtils.degToRad(phiDeg);
-    const dir = u.clone().multiplyScalar(x)
-      .add(e2.clone().multiplyScalar(r*Math.cos(phi)))
-      .add(e3.clone().multiplyScalar(r*Math.sin(phi)))
-      .normalize();
-    dirs.push(dir);
+  const result = {};
+  for(const [key,p] of Object.entries(raw)){
+    result[key] = p.clone().sub(center).multiplyScalar(ANGSTROM_TO_SCENE);
   }
-  return dirs;
-}
-
-function perpendicularTo(direction){
-  const refs = [v(1,0,0), v(0,1,0), v(0,0,1)];
-  refs.sort((a,b)=>Math.abs(a.dot(direction))-Math.abs(b.dot(direction)));
-  const p = refs[0].clone();
-  p.addScaledVector(direction, -p.dot(direction));
-  return p.normalize();
-}
-
-function ethanolCoordinates(){
-  const C1 = v(0,0,0);
-  const C1_to_C2 = v(1,0,0).normalize();
-  const C2 = C1.clone().addScaledVector(C1_to_C2, BOND.CC * ANGSTROM_TO_SCENE);
-
-  const [C2_to_O, C2_to_H4, C2_to_H5] = tetrahedralFollowersForBondDirection(C1.clone().sub(C2));
-  const O  = C2.clone().addScaledVector(C2_to_O,  BOND.CO * ANGSTROM_TO_SCENE);
-  const H4 = C2.clone().addScaledVector(C2_to_H4, BOND.CH * ANGSTROM_TO_SCENE);
-  const H5 = C2.clone().addScaledVector(C2_to_H5, BOND.CH * ANGSTROM_TO_SCENE);
-
-  const [C1_to_H1, C1_to_H2, C1_to_H3] = tetrahedralFollowersForBondDirection(C2.clone().sub(C1));
-  const H1 = C1.clone().addScaledVector(C1_to_H1, BOND.CH * ANGSTROM_TO_SCENE);
-  const H2 = C1.clone().addScaledVector(C1_to_H2, BOND.CH * ANGSTROM_TO_SCENE);
-  const H3 = C1.clone().addScaledVector(C1_to_H3, BOND.CH * ANGSTROM_TO_SCENE);
-
-  const O_to_C2 = C2.clone().sub(O).normalize();
-  const perp = perpendicularTo(O_to_C2);
-  const theta = THREE.MathUtils.degToRad(BOND.COH_ANGLE_DEG);
-  const O_to_HO = O_to_C2.clone().multiplyScalar(Math.cos(theta))
-    .add(perp.multiplyScalar(Math.sin(theta)))
-    .normalize();
-  const HO = O.clone().addScaledVector(O_to_HO, BOND.OH * ANGSTROM_TO_SCENE);
-
-  return { C1, C2, O, H1, H2, H3, H4, H5, HO };
+  return result;
 }
 
 export function buildMolecule(data){
@@ -151,22 +135,27 @@ export function buildMolecule(data){
   const g = new THREE.Group();
   g.name = "ETHANOL";
 
-  const p = ethanolCoordinates();
+  const p = experimentalEthanolCoordinates();
 
+  // Bindungsgerüst: CH3-CH2-OH
   addBond(g, p.C1, p.C2, "C", "C");
   addBond(g, p.C2, p.O,  "C", "O");
   addBond(g, p.O,  p.HO, "O", "H");
 
+  // CH3-Gruppe
   addBond(g, p.C1, p.H1, "C", "H");
   addBond(g, p.C1, p.H2, "C", "H");
   addBond(g, p.C1, p.H3, "C", "H");
 
+  // CH2-Gruppe
   addBond(g, p.C2, p.H4, "C", "H");
   addBond(g, p.C2, p.H5, "C", "H");
 
+  // Atome
   g.add(createAtom("C", p.C1));
   g.add(createAtom("C", p.C2));
   g.add(createAtom("O", p.O));
+
   g.add(createAtom("H", p.H1));
   g.add(createAtom("H", p.H2));
   g.add(createAtom("H", p.H3));
