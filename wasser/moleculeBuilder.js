@@ -223,9 +223,10 @@ export async function createHydrogenBondOverlay(data){
 export async function createSimpleSurfaceOverlay(data){
   if(data?.key !== "WATER_CLUSTER") throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
   const mod = await import("./waterClusterSurfaceData.js");
-  const { WATER_CLUSTER_SURFACE_POSITIONS, WATER_CLUSTER_SURFACE_INDICES } = mod;
+  const { WATER_CLUSTER_SURFACE_POSITIONS, WATER_CLUSTER_SURFACE_INDICES, WATER_CLUSTER_SURFACE_COLORS } = mod;
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(WATER_CLUSTER_SURFACE_POSITIONS, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(WATER_CLUSTER_SURFACE_COLORS, 3));
   const flipped = [];
   for(let i=0;i<WATER_CLUSTER_SURFACE_INDICES.length;i+=3){
     flipped.push(WATER_CLUSTER_SURFACE_INDICES[i], WATER_CLUSTER_SURFACE_INDICES[i+2], WATER_CLUSTER_SURFACE_INDICES[i+1]);
@@ -233,11 +234,11 @@ export async function createSimpleSurfaceOverlay(data){
   geometry.setIndex(flipped);
   geometry.computeVertexNormals();
   const material = new THREE.MeshPhongMaterial({
-    color: DISPLAY.color.surface,
+    vertexColors: true,
     transparent: true,
     opacity: 0.26,
     shininess: 60,
-    specular: 0x7aa8c8,
+    specular: 0x6a6a6a,
     side: THREE.FrontSide,
     depthWrite: true
   });
