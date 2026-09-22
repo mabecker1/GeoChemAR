@@ -13,6 +13,7 @@ const O_H = 0.958;
 const H_O_H_DEG = 104.5;
 const O_O_TARGET = 2.90;
 const MOLECULE_COUNT = 100;
+const HYDROGEN_BOND_MAX_HO = 3.2 * ANGSTROM_TO_SCENE;
 
 const DISPLAY = Object.freeze({
   atomRadius: Object.freeze({
@@ -430,7 +431,11 @@ export async function createHydrogenBondOverlay(data){
     const donor = moleculeInfos[hb.donor];
     const acceptor = moleculeInfos[hb.acceptor];
     const donorH = hb.hydrogen === 1 ? donor.H1 : donor.H2;
-    addDashedHydrogenBond(group, donorH, acceptor.O);
+    const hToODistance = donorH.distanceTo(acceptor.O);
+    // An Randmolekülen dürfen Bindungen fehlen; unplausibel lange H-Brücken werden nicht gezeichnet.
+    if(hToODistance <= HYDROGEN_BOND_MAX_HO){
+      addDashedHydrogenBond(group, donorH, acceptor.O);
+    }
   }
   return group;
 }
