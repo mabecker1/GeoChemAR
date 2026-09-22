@@ -11,11 +11,15 @@ import * as THREE from "../libs/three.module.min.js";
   H2O  = 104,5°
   HCl  = kein Bindungswinkel
 
-  EPA-3 ergänzt:
+  EPA-4 ergänzt:
   - Molekülgeometrie als ein-/ausblendbares 3D-Hilfsgerüst
   - automatisch ausgewählten Bindungswinkel mit Winkelbogen + Wert
+  - freie Elektronenpaare als räumliche, halbtransparente
+    Elektronenwolken am EPA-Zentralatom
 
-  Freie Elektronenpaare folgen im nächsten Schritt.
+  Für diese Unterrichtsanwendung werden freie Elektronenpaare nur am
+  betrachteten EPA-Zentralatom dargestellt:
+  NH3: 1 am N, H2O: 2 am O, HCl: 3 am Cl.
 */
 
 const ANGSTROM_TO_SCENE = 0.033;
@@ -36,7 +40,9 @@ const DISPLAY = Object.freeze({
     Cl: 0x39a852,
     bond: 0xb8bec7,
     geometry: 0x46d7c0,
-    angle: 0xffd54a
+    angle: 0xffd54a,
+    lonePairOuter: 0x9a86ff,
+    lonePairInner: 0x6f58df
   }),
   bondRadius: 0.0020,
   doubleBondRadius: 0.00155,
@@ -161,7 +167,8 @@ function setEpaMetadata(group, data, {
   geometryVertices = [],
   geometryEdges = [],
   geometryFaces = [],
-  angleDirections = null
+  angleDirections = null,
+  lonePairDirections = []
 } = {}) {
   group.userData.epa = {
     key: data.key,
@@ -172,7 +179,8 @@ function setEpaMetadata(group, data, {
     geometryFaces: geometryFaces.map(face => [...face]),
     angleDirections: angleDirections
       ? angleDirections.map(d => d.clone().normalize())
-      : null
+      : null,
+    lonePairDirections: lonePairDirections.map(d => d.clone().normalize())
   };
 }
 
@@ -285,7 +293,8 @@ function buildNH3(data) {
     geometryVertices: [center,...h],
     geometryEdges: [[0,1],[0,2],[0,3],[1,2],[2,3],[3,1]],
     geometryFaces: [[0,1,2],[0,2,3],[0,3,1],[1,2,3]],
-    angleDirections: [dirs[0],dirs[1]]
+    angleDirections: [dirs[0],dirs[1]],
+    lonePairDirections: [v(0,0,1)]
   });
   return g;
 }
@@ -310,7 +319,21 @@ function buildH2O(data) {
     geometryVertices: [center,h1,h2],
     geometryEdges: [[0,1],[0,2],[1,2]],
     geometryFaces: [[0,1,2]],
-    angleDirections: [h1Dir,h2Dir]
+    angleDirections: [h1Dir,h2Dir],
+    /*
+      EPA-Modell: Die beiden freien Elektronenpaare liegen symmetrisch
+      auf der dem H-O-H-Winkel gegenüberliegenden Seite. Ihr gegenseitiger
+      Richtungswinkel wird idealisiert tetraedrisch (109,5°) gewählt.
+      Dadurch liegen die Wolken räumlich ober-/unterhalb der Molekülebene,
+      statt fälschlich als zwei flache 2D-Lappen gezeichnet zu werden.
+    */
+    lonePairDirections: (() => {
+      const beta=THREE.MathUtils.degToRad(109.5/2);
+      return [
+        v(0, Math.sin(beta), Math.cos(beta)),
+        v(0,-Math.sin(beta), Math.cos(beta))
+      ];
+    })()
   });
   return g;
 }
@@ -329,7 +352,21 @@ function buildHCl(data) {
     geometryVertices: [v(0,0,0),h],
     geometryEdges: [[0,1]],
     geometryFaces: [],
-    angleDirections: null
+    angleDirections: null,
+    /*
+      EPA-Modell am Cl: vier Elektronenpaarbereiche insgesamt.
+      Die H-Cl-Bindung zeigt nach +x; die drei freien Elektronenpaare
+      besetzen die drei übrigen tetraedrischen Richtungen.
+    */
+    lonePairDirections: [0,120,240].map(phiDeg => {
+      const phi=THREE.MathUtils.degToRad(phiDeg);
+      const radial=2*Math.SQRT2/3;
+      return v(
+        -1/3,
+        radial*Math.cos(phi),
+        radial*Math.sin(phi)
+      ).normalize();
+    })
   });
   return g;
 }
@@ -582,6 +619,87 @@ export function createAngleOverlay(molecule, data) {
   });
   label.position.copy(midDir.multiplyScalar(radius+0.010));
   group.add(label);
+
+  return group;
+}
+
+
+/* -----------------------------------------------------
+   Freie Elektronenpaare / Elektronenwolken
+   ----------------------------------------------------- */
+
+function createLonePairLobe(direction, centralAtomRadius, scaleFactor=1) {
+  /*
+    Kein Orbitalmodell: Diese Form ist eine didaktische EPA-Wolke.
+    Sie beginnt schmal nahe am Zentralatom und wird nach außen breiter.
+    Zwei ineinander liegende transparente Volumina geben ihr eine
+    weichere, wolkenartige Erscheinung.
+  */
+  const dir=direction.clone().normalize();
+
+  const baseLength=0.032*scaleFactor;
+  const baseWidth=0.0082*scaleFactor;
+
+  const profile=[
+    new THREE.Vector2(0.00045,0.0000),
+    new THREE.Vector2(baseWidth*0.48,baseLength*0.13),
+    new THREE.Vector2(baseWidth*0.82,baseLength*0.34),
+    new THREE.Vector2(baseWidth,     baseLength*0.54),
+    new THREE.Vector2(baseWidth*0.86,baseLength*0.72),
+    new THREE.Vector2(baseWidth*0.52,baseLength*0.89),
+    new THREE.Vector2(0.00035,       baseLength)
+  ];
+
+  const outerGeometry=new THREE.LatheGeometry(profile,40);
+  const outerMaterial=new THREE.MeshPhongMaterial({
+    color:DISPLAY.color.lonePairOuter,
+    transparent:true,
+    opacity:0.30,
+    shininess:18,
+    side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+  const outer=new THREE.Mesh(outerGeometry,outerMaterial);
+  outer.quaternion.setFromUnitVectors(v(0,1,0),dir);
+  outer.position.copy(dir).multiplyScalar(centralAtomRadius*0.56);
+  outer.renderOrder=8;
+
+  const innerGeometry=outerGeometry.clone();
+  const innerMaterial=new THREE.MeshPhongMaterial({
+    color:DISPLAY.color.lonePairInner,
+    transparent:true,
+    opacity:0.18,
+    shininess:28,
+    side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+  const inner=new THREE.Mesh(innerGeometry,innerMaterial);
+  inner.scale.set(0.72,0.84,0.72);
+  inner.position.y=baseLength*0.04;
+  inner.renderOrder=9;
+  outer.add(inner);
+
+  return outer;
+}
+
+export function createLonePairOverlay(molecule,data) {
+  const meta=molecule?.userData?.epa;
+  const directions=meta?.lonePairDirections ?? [];
+  const expected=Number(data?.lonePairsOnEpaAtom ?? 0);
+
+  if(!directions.length || expected<=0)return null;
+
+  const group=new THREE.Group();
+  group.name="lonePairOverlay";
+
+  const centralRadius=DISPLAY.atomRadius[data.epaAtom] ?? 0.010;
+  const cloudScale=data.epaAtom==="Cl" ? 1.08 : 1.0;
+
+  for(const direction of directions.slice(0,expected)){
+    group.add(createLonePairLobe(direction,centralRadius,cloudScale));
+  }
 
   return group;
 }
