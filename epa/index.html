@@ -55,7 +55,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, disposeMolecule } from "./moleculeBuilder.js";
 
-const VERSION="EPA-2 / Core 5c-19";
+const VERSION="EPA-2a / Core 5c-19";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -365,7 +365,7 @@ for(const molecule of Object.values(MOLECULES)){
 }
 
 moleculeSelect.value=DEFAULT_MOLECULE;
-moleculeSelect.addEventListener("change",()=>showMolecule(moleculeSelect.value,true));
+moleculeSelect.addEventListener("change",()=>showMolecule(moleculeSelect.value,false));
 
 zoomOutButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom-selectedMolecule.zoom.step));
 zoomInButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom+selectedMolecule.zoom.step));
