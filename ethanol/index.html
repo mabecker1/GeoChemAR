@@ -193,7 +193,7 @@ html.debug-mode #status{display:block}
     </div>
   </div>
   <div class="controlGroup overlayGroup" aria-label="Oberfläche">
-    <button id="espToggle" class="toggleControl" type="button" aria-pressed="false" disabled title="Elektronendichteoberfläche mit elektrostatischem Potenzial folgt im nächsten Schritt">ESP-Oberfläche</button>
+    <button id="espToggle" class="toggleControl" type="button" aria-pressed="false" title="Elektronendichteoberfläche mit elektrostatischem Potenzial ein- oder ausblenden">ESP-Oberfläche</button>
   </div>
   <div class="controlGroup zoomGroup" aria-label="Molekül-Zoom">
     <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
@@ -208,9 +208,9 @@ html.debug-mode #status{display:block}
 import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
-import { buildMolecule, disposeMolecule } from "./moleculeBuilder.js";
+import { buildMolecule, createEspSurfaceOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="ETH-1b idealisierte sp3-Geometrie / Core EPA-6a";
+const VERSION="ETH-2 ESP-Oberfläche / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -494,6 +494,8 @@ trackedCubeRoot.visible=false;
 scene.add(trackedCubeRoot);
 
 let currentMoleculeObject=null;
+let currentEspSurface=null;
+let espVisible=false;
 let moleculeZoom=selectedMolecule.zoom.default;
 
 function clampZoom(value){
@@ -508,11 +510,33 @@ function applyMoleculeZoom(value){
   zoomInButton.disabled=moleculeZoom>=selectedMolecule.zoom.max-1e-9;
 }
 
+function setEspVisible(visible){
+  espVisible=!!visible;
+  espToggleButton.classList.toggle("active",espVisible);
+  espToggleButton.setAttribute("aria-pressed",espVisible?"true":"false");
+
+  if(!espVisible){
+    if(currentEspSurface)currentEspSurface.visible=false;
+    return;
+  }
+
+  if(!currentEspSurface){
+    currentEspSurface=createEspSurfaceOverlay(selectedMolecule);
+    contentRoot.add(currentEspSurface);
+  }
+  currentEspSurface.visible=true;
+}
+
 function showMolecule(resetZoom=true){
   if(currentMoleculeObject){
     contentRoot.remove(currentMoleculeObject);
     disposeMolecule(currentMoleculeObject);
     currentMoleculeObject=null;
+  }
+  if(currentEspSurface){
+    contentRoot.remove(currentEspSurface);
+    disposeObject3D(currentEspSurface);
+    currentEspSurface=null;
   }
 
   currentMoleculeObject=buildMolecule(selectedMolecule);
@@ -520,12 +544,13 @@ function showMolecule(resetZoom=true){
 
   if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
   applyMoleculeZoom(moleculeZoom);
+  setEspVisible(espVisible);
 }
 
 zoomOutButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom-selectedMolecule.zoom.step));
 zoomInButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom+selectedMolecule.zoom.step));
 zoomResetButton.addEventListener("click",()=>applyMoleculeZoom(selectedMolecule.zoom.default));
-espToggleButton.addEventListener("click",event=>event.preventDefault());
+espToggleButton.addEventListener("click",()=>setEspVisible(!espVisible));
 
 showMolecule(true);
 

@@ -1,4 +1,5 @@
 import * as THREE from "../libs/three.module.min.js";
+import { ETHANOL_ESP_POSITIONS, ETHANOL_ESP_INDICES, ETHANOL_ESP_COLORS } from "./ethanolSurfaceData.js";
 
 /*
   GeoChemAR – Ethanol Testversion 1b
@@ -219,6 +220,54 @@ export function buildMolecule(data){
   g.add(createAtom("H",p.HO));
 
   return g;
+}
+
+
+export function createEspSurfaceOverlay(data){
+  if(data?.key!=="ETHANOL"){
+    throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
+  }
+
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(ETHANOL_ESP_POSITIONS,3)
+  );
+  geometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(ETHANOL_ESP_COLORS,3)
+  );
+  geometry.setIndex(ETHANOL_ESP_INDICES);
+  geometry.computeVertexNormals();
+
+  const material=new THREE.MeshPhongMaterial({
+    vertexColors:true,
+    transparent:true,
+    opacity:0.58,
+    shininess:70,
+    specular:0x555555,
+    side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+  const mesh=new THREE.Mesh(geometry,material);
+  mesh.renderOrder=3;
+  mesh.userData.kind="esp-surface";
+  return mesh;
+}
+
+export function disposeObject3D(root){
+  if(!root)return;
+  root.traverse(obj=>{
+    if(obj.geometry)obj.geometry.dispose();
+    if(obj.material){
+      const mats=Array.isArray(obj.material)?obj.material:[obj.material];
+      for(const m of mats){
+        if(m?.map)m.map.dispose?.();
+        m?.dispose?.();
+      }
+    }
+  });
 }
 
 export function disposeMolecule(root){
