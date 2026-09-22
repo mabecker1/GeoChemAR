@@ -14,16 +14,16 @@ import * as THREE from "../libs/three.module.min.js";
   Ziel bleibt eine didaktisch gut lesbare 3D-Wasserprobe.
 */
 
-const ANGSTROM_TO_SCENE = 0.0060;
-const O_H = 0.9572;
+const ANGSTROM_TO_SCENE = 0.033;
+const O_H = 0.958;
 const H_O_H_DEG = 104.5;
-const O_O_TARGET = 3.45; // bewusst vergrößert für bessere Sichtbarkeit
+const O_O_TARGET = 5.80; // bewusst deutlich vergrößert für bessere Sichtbarkeit
 const MOLECULE_COUNT = 100;
 
 const DISPLAY = Object.freeze({
   atomRadius: Object.freeze({
-    H: 0.0039,
-    O: 0.0069
+    H: 0.0070,
+    O: 0.0100
   }),
   color: Object.freeze({
     H: 0xffffff,
@@ -31,8 +31,8 @@ const DISPLAY = Object.freeze({
     bond: 0xbfc7d2,
     hbond: 0x7fb8ff
   }),
-  bondRadius: 0.00120,
-  hBondRadius: 0.00062
+  bondRadius: 0.0020,
+  hBondRadius: 0.00070
 });
 
 function v(x,y,z){ return new THREE.Vector3(x,y,z); }
@@ -49,8 +49,8 @@ function createAtom(element, position){
   const radius = DISPLAY.atomRadius[element];
   const geometry = new THREE.SphereGeometry(
     radius,
-    element === "H" ? 28 : 36,
-    element === "H" ? 20 : 26
+    element === "H" ? 40 : 48,
+    element === "H" ? 28 : 32
   );
   const mesh = new THREE.Mesh(geometry, materialForElement(element));
   mesh.position.copy(position);
@@ -63,7 +63,7 @@ function createCylinder(start, end, radius, material){
   const delta = end.clone().sub(start);
   const length = delta.length();
   const direction = delta.clone().normalize();
-  const geometry = new THREE.CylinderGeometry(radius, radius, length, 18, 1, false);
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 32, 1, false);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(start).add(end).multiplyScalar(0.5);
   mesh.quaternion.setFromUnitVectors(v(0,1,0), direction);
@@ -225,7 +225,7 @@ function buildClusterData(){
   const oxygenPositions = generateDiamondPoints(MOLECULE_COUNT);
   const moleculeInfos = oxygenPositions.map((p,index)=>({ index, O: p.clone(), H1: null, H2: null }));
 
-  const neighborThreshold = 3.95;
+  const neighborThreshold = 6.15;
   const edges = [];
   const neighbors = Array.from({length: oxygenPositions.length}, ()=>[]);
 

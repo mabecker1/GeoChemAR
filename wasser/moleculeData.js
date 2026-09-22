@@ -6,10 +6,10 @@ export const MOLECULES = Object.freeze({
     formula: "(H₂O)₁₀₀",
     name: "Wasser-Ausschnitt",
     zoom: Object.freeze({
-      min: 0.35,
+      min: 0.20,
       max: 2.3,
       step: 0.1,
-      default: 0.80
+      default: 0.35
     }),
     implemented: true
   })
