@@ -244,7 +244,7 @@ html.debug-mode #status{display:block}
 <canvas id="recoveryCanvas" width="320" height="320"></canvas>
 <canvas id="flowCanvas" width="320" height="240"></canvas>
 <canvas id="threeCanvas" width="640" height="480"></canvas>
-<div id="status">Wasser-Version wird geladen …</div>
+<div id="status">Wasser-Version 4 wird geladen …</div>
 <div id="epaControls" aria-label="Wasser-Werkzeuge">
   <div class="controlGroup moleculeGroup">
     <label>Wasser</label>
@@ -252,8 +252,9 @@ html.debug-mode #status{display:block}
       (H₂O)₁₀₀ – Wasser-Ausschnitt
     </div>
   </div>
-  <div class="controlGroup overlayGroup" aria-label="Wasserstoffbrücken">
+  <div class="controlGroup overlayGroup" aria-label="Overlays">
     <button id="espToggle" class="toggleControl" type="button" aria-pressed="false" title="Wasserstoffbrücken ein- oder ausblenden">Wasserstoffbrücken</button>
+    <button id="surfaceToggle" class="toggleControl" type="button" aria-pressed="false" title="Oberfläche ein- oder ausblenden">Oberfläche</button>
   </div>
   <div class="controlGroup zoomGroup" aria-label="Molekül-Zoom">
     <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
@@ -268,9 +269,9 @@ html.debug-mode #status{display:block}
 import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
-import { buildMolecule, createHydrogenBondOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
+import { buildMolecule, createHydrogenBondOverlay, createSimpleSurfaceOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="WATER-3 100 H2O / EPA-Ball-and-Stick / viel größere Abstände / Core EPA-6a";
+const VERSION="WATER-4 100 H2O / halbe Abstände / H-Brücken + einfache Oberfläche / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -458,6 +459,7 @@ const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
 if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
 const errorBox=document.getElementById("error");
 const espToggleButton=document.getElementById("espToggle");
+const surfaceToggleButton=document.getElementById("surfaceToggle");
 const espLegend=document.getElementById("espLegend");
 const zoomOutButton=document.getElementById("zoomOut");
 const zoomInButton=document.getElementById("zoomIn");
@@ -556,7 +558,9 @@ scene.add(trackedCubeRoot);
 
 let currentMoleculeObject=null;
 let currentEspSurface=null;
+let currentClusterSurface=null;
 let espVisible=false;
+let surfaceVisible=false;
 let moleculeZoom=selectedMolecule.zoom.default;
 
 function clampZoom(value){
@@ -633,6 +637,32 @@ async function setEspVisible(visible){
   applyMoleculeSurfaceView(true);
 }
 
+async function setSurfaceVisible(visible){
+  surfaceVisible=!!visible;
+  surfaceToggleButton.classList.toggle("active",surfaceVisible);
+  surfaceToggleButton.setAttribute("aria-pressed",surfaceVisible?"true":"false");
+
+  if(!surfaceVisible){
+    if(currentClusterSurface) currentClusterSurface.visible=false;
+    return;
+  }
+
+  if(!currentClusterSurface){
+    surfaceToggleButton.disabled=true;
+    const oldText=surfaceToggleButton.textContent;
+    surfaceToggleButton.textContent="Lädt …";
+    try{
+      currentClusterSurface=await createSimpleSurfaceOverlay(selectedMolecule);
+      contentRoot.add(currentClusterSurface);
+    }finally{
+      surfaceToggleButton.disabled=false;
+      surfaceToggleButton.textContent=oldText;
+    }
+  }
+
+  currentClusterSurface.visible=true;
+}
+
 function showMolecule(resetZoom=true){
   if(currentMoleculeObject){
     contentRoot.remove(currentMoleculeObject);
@@ -644,6 +674,11 @@ function showMolecule(resetZoom=true){
     disposeObject3D(currentEspSurface);
     currentEspSurface=null;
   }
+  if(currentClusterSurface){
+    contentRoot.remove(currentClusterSurface);
+    disposeObject3D(currentClusterSurface);
+    currentClusterSurface=null;
+  }
 
   currentMoleculeObject=buildMolecule(selectedMolecule);
   contentRoot.add(currentMoleculeObject);
@@ -652,12 +687,14 @@ function showMolecule(resetZoom=true){
   if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
   applyMoleculeZoom(moleculeZoom);
   void setEspVisible(espVisible);
+  void setSurfaceVisible(surfaceVisible);
 }
 
 zoomOutButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom-selectedMolecule.zoom.step));
 zoomInButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom+selectedMolecule.zoom.step));
 zoomResetButton.addEventListener("click",()=>applyMoleculeZoom(selectedMolecule.zoom.default));
 espToggleButton.addEventListener("click",()=>{ void setEspVisible(!espVisible); });
+surfaceToggleButton.addEventListener("click",()=>{ void setSurfaceVisible(!surfaceVisible); });
 
 showMolecule(true);
 
