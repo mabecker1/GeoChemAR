@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR EPA – Molekülauswahl + Zoom</title>
+<title>GeoChemAR EPA – Geometrie + Bindungswinkel</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
@@ -11,7 +11,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
 #status{position:fixed;top:10px;left:10px;z-index:10;padding:9px 12px;border-radius:8px;background:rgba(0,0,0,.74);color:#fff;font-size:13px;line-height:1.4;white-space:pre-line;pointer-events:none}
 #error{position:fixed;left:10px;right:10px;bottom:10px;z-index:20;padding:10px;border-radius:8px;background:rgba(160,0,0,.92);color:#fff;font-size:13px;white-space:pre-wrap;display:none}
-#epaControls{position:fixed;top:10px;right:10px;z-index:12;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:rgba(0,0,0,.76);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#epaControls{position:fixed;top:10px;right:10px;z-index:12;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:10px;padding:9px 10px;border-radius:10px;background:rgba(0,0,0,.76);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:calc(100vw - 20px)}
 #epaControls .controlGroup{display:flex;align-items:center;gap:8px}
 #epaControls label{font-size:13px;font-weight:700;white-space:nowrap}
 #epaControls select{height:44px;min-width:190px;border:1px solid rgba(255,255,255,.30);border-radius:9px;background:#fff;color:#1f2937;font:600 15px Arial,sans-serif;padding:0 34px 0 11px;cursor:pointer}
@@ -20,6 +20,9 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 #epaControls button:disabled{opacity:.45;cursor:default}
 #zoomValue{min-width:58px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
 #zoomReset{font-size:14px;padding:0 12px;min-width:auto}
+#epaControls .toggleControl{font-size:14px;min-width:104px;padding:0 12px}
+#epaControls .toggleControl.active{background:#2fac16;color:#fff;border-color:#74d862}
+#epaControls .toggleControl:disabled{background:#e5e7eb;color:#7b8491}
 @media (max-width:760px){
   #epaControls{top:auto;left:10px;right:10px;bottom:10px;transform:none;flex-direction:column;align-items:stretch;gap:7px;padding:8px}
   #epaControls .controlGroup{justify-content:center}
@@ -41,6 +44,10 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
     <label for="moleculeSelect">Molekül</label>
     <select id="moleculeSelect" aria-label="Molekül auswählen"></select>
   </div>
+  <div class="controlGroup overlayGroup" aria-label="Darstellung">
+    <button id="geometryToggle" class="toggleControl" type="button" aria-pressed="false">Geometrie</button>
+    <button id="angleToggle" class="toggleControl" type="button" aria-pressed="false">Winkel</button>
+  </div>
   <div class="controlGroup zoomGroup" aria-label="Molekül-Zoom">
     <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
     <span id="zoomValue">100 %</span>
@@ -53,9 +60,9 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
-import { buildMolecule, disposeMolecule } from "./moleculeBuilder.js";
+import { buildMolecule, createGeometryOverlay, createAngleOverlay, disposeMolecule } from "./moleculeBuilder.js";
 
-const VERSION="EPA-2a / Core 5c-19";
+const VERSION="EPA-3 / Core 5c-19";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -230,6 +237,8 @@ const threeCanvas=document.getElementById("threeCanvas");
 const status=document.getElementById("status");
 const errorBox=document.getElementById("error");
 const moleculeSelect=document.getElementById("moleculeSelect");
+const geometryToggleButton=document.getElementById("geometryToggle");
+const angleToggleButton=document.getElementById("angleToggle");
 const zoomOutButton=document.getElementById("zoomOut");
 const zoomInButton=document.getElementById("zoomIn");
 const zoomResetButton=document.getElementById("zoomReset");
@@ -326,7 +335,12 @@ trackedCubeRoot.visible=false;
 scene.add(trackedCubeRoot);
 
 let currentMoleculeObject=null;
+let currentGeometryOverlay=null;
+let currentAngleOverlay=null;
+
 let moleculeZoom=selectedMolecule.zoom.default;
+let geometryVisible=false;
+let angleVisible=false;
 
 function clampZoom(value){
   return THREE.MathUtils.clamp(value,selectedMolecule.zoom.min,selectedMolecule.zoom.max);
@@ -340,8 +354,50 @@ function applyMoleculeZoom(value){
   zoomInButton.disabled=moleculeZoom>=selectedMolecule.zoom.max-1e-9;
 }
 
+function disposeCurrentOverlays(){
+  if(currentGeometryOverlay){
+    contentRoot.remove(currentGeometryOverlay);
+    disposeMolecule(currentGeometryOverlay);
+    currentGeometryOverlay=null;
+  }
+  if(currentAngleOverlay){
+    contentRoot.remove(currentAngleOverlay);
+    disposeMolecule(currentAngleOverlay);
+    currentAngleOverlay=null;
+  }
+}
+
+function updateToggleUI(){
+  geometryToggleButton.classList.toggle("active",geometryVisible);
+  geometryToggleButton.setAttribute("aria-pressed",geometryVisible?"true":"false");
+
+  const hasAngle=!!selectedMolecule.representativeBondAngle;
+  angleToggleButton.disabled=!hasAngle;
+  angleToggleButton.classList.toggle("active",angleVisible&&hasAngle);
+  angleToggleButton.setAttribute("aria-pressed",angleVisible&&hasAngle?"true":"false");
+}
+
+function rebuildOverlays(){
+  disposeCurrentOverlays();
+  if(!currentMoleculeObject)return;
+
+  if(geometryVisible){
+    currentGeometryOverlay=createGeometryOverlay(currentMoleculeObject,selectedMolecule);
+    if(currentGeometryOverlay)contentRoot.add(currentGeometryOverlay);
+  }
+
+  if(angleVisible&&selectedMolecule.representativeBondAngle){
+    currentAngleOverlay=createAngleOverlay(currentMoleculeObject,selectedMolecule);
+    if(currentAngleOverlay)contentRoot.add(currentAngleOverlay);
+  }
+
+  updateToggleUI();
+}
+
 function showMolecule(key,resetZoom=true){
   const next=getMoleculeData(key);
+
+  disposeCurrentOverlays();
 
   if(currentMoleculeObject){
     contentRoot.remove(currentMoleculeObject);
@@ -355,6 +411,7 @@ function showMolecule(key,resetZoom=true){
 
   if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
   applyMoleculeZoom(moleculeZoom);
+  rebuildOverlays();
 }
 
 for(const molecule of Object.values(MOLECULES)){
@@ -366,6 +423,17 @@ for(const molecule of Object.values(MOLECULES)){
 
 moleculeSelect.value=DEFAULT_MOLECULE;
 moleculeSelect.addEventListener("change",()=>showMolecule(moleculeSelect.value,false));
+
+geometryToggleButton.addEventListener("click",()=>{
+  geometryVisible=!geometryVisible;
+  rebuildOverlays();
+});
+
+angleToggleButton.addEventListener("click",()=>{
+  if(!selectedMolecule.representativeBondAngle)return;
+  angleVisible=!angleVisible;
+  rebuildOverlays();
+});
 
 zoomOutButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom-selectedMolecule.zoom.step));
 zoomInButton.addEventListener("click",()=>applyMoleculeZoom(moleculeZoom+selectedMolecule.zoom.step));
