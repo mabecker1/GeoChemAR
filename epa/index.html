@@ -5,30 +5,175 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>GeoChemAR EPA – Geometrie + Winkel + freie Elektronenpaare</title>
 <style>
-html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
-#video{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
+:root{
+  --ui-green:#2fac16;
+  --ui-green-dark:#258c12;
+  --ui-panel:rgba(18,22,27,.82);
+  --ui-panel-border:rgba(255,255,255,.14);
+  --ui-text:#f8fafc;
+  --ui-text-dark:#1f2937;
+  --ui-muted:#d0d5dd;
+  --ui-button:#ffffff;
+  --ui-disabled:#e5e7eb;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;padding:0;width:100%;height:100%;overflow:hidden;
+  background:#000;font-family:Arial,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+button,select{font-family:inherit}
+#video{
+  position:fixed;inset:0;width:100%;height:100%;
+  object-fit:contain;background:#000;z-index:1;
+}
 #threeCanvas{position:fixed;z-index:2;pointer-events:none}
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
-#status{position:fixed;top:10px;left:10px;z-index:10;padding:9px 12px;border-radius:8px;background:rgba(0,0,0,.74);color:#fff;font-size:13px;line-height:1.4;white-space:pre-line;pointer-events:none}
-#error{position:fixed;left:10px;right:10px;bottom:10px;z-index:20;padding:10px;border-radius:8px;background:rgba(160,0,0,.92);color:#fff;font-size:13px;white-space:pre-wrap;display:none}
-#epaControls{position:fixed;top:10px;right:10px;z-index:12;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:10px;padding:9px 10px;border-radius:10px;background:rgba(0,0,0,.76);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:calc(100vw - 20px)}
-#epaControls .controlGroup{display:flex;align-items:center;gap:8px}
-#epaControls label{font-size:13px;font-weight:700;white-space:nowrap}
-#epaControls select{height:44px;min-width:190px;border:1px solid rgba(255,255,255,.30);border-radius:9px;background:#fff;color:#1f2937;font:600 15px Arial,sans-serif;padding:0 34px 0 11px;cursor:pointer}
-#epaControls button{min-width:44px;height:44px;border:1px solid rgba(255,255,255,.25);border-radius:9px;background:#fff;color:#1f2937;font-size:22px;font-weight:700;cursor:pointer;touch-action:manipulation}
-#epaControls button:active{transform:translateY(1px)}
-#epaControls button:disabled{opacity:.45;cursor:default}
-#zoomValue{min-width:58px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-#zoomReset{font-size:14px;padding:0 12px;min-width:auto}
-#epaControls .toggleControl{font-size:14px;min-width:104px;padding:0 12px}
-#epaControls .toggleControl.active{background:#2fac16;color:#fff;border-color:#74d862}
-#epaControls .toggleControl:disabled{background:#e5e7eb;color:#7b8491}
+
+/* Im Unterricht bleiben die technischen Tracking-Diagnosen unsichtbar.
+   Für Tests: URL einfach um ?debug=1 ergänzen. */
+#status{
+  display:none;
+  position:fixed;top:10px;left:10px;z-index:30;
+  max-width:min(520px,calc(100vw - 20px));
+  padding:9px 12px;border-radius:9px;
+  background:rgba(0,0,0,.78);color:#fff;
+  font-size:12px;line-height:1.4;white-space:pre-line;
+  pointer-events:none;
+}
+html.debug-mode #status{display:block}
+
+#error{
+  position:fixed;left:10px;right:10px;bottom:10px;z-index:40;
+  padding:10px 12px;border-radius:9px;
+  background:rgba(160,0,0,.94);color:#fff;
+  font-size:13px;white-space:pre-wrap;display:none;
+}
+
+/* Hauptbedienfeld */
+#epaControls{
+  position:fixed;top:12px;right:12px;z-index:20;
+  display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;
+  gap:9px;
+  max-width:calc(100vw - 24px);
+  padding:8px;
+  border:1px solid var(--ui-panel-border);
+  border-radius:14px;
+  background:var(--ui-panel);
+  color:var(--ui-text);
+  box-shadow:0 5px 22px rgba(0,0,0,.28);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  user-select:none;
+}
+#epaControls .controlGroup{
+  display:flex;align-items:center;gap:6px;
+}
+#epaControls .overlayGroup,
+#epaControls .zoomGroup{
+  padding-left:8px;
+  border-left:1px solid rgba(255,255,255,.16);
+}
+#epaControls label{
+  font-size:12px;font-weight:700;
+  color:var(--ui-muted);white-space:nowrap;
+}
+#epaControls select{
+  height:40px;min-width:196px;
+  border:1px solid rgba(255,255,255,.23);
+  border-radius:10px;
+  background:#fff;color:var(--ui-text-dark);
+  font-size:14px;font-weight:700;
+  padding:0 34px 0 11px;
+  cursor:pointer;outline:none;
+}
+#epaControls select:focus-visible,
+#epaControls button:focus-visible{
+  outline:3px solid rgba(47,172,22,.42);
+  outline-offset:2px;
+}
+#epaControls button{
+  min-width:40px;height:40px;
+  border:1px solid rgba(255,255,255,.23);
+  border-radius:10px;
+  background:var(--ui-button);
+  color:var(--ui-text-dark);
+  font-size:20px;font-weight:700;
+  cursor:pointer;touch-action:manipulation;
+  transition:background .14s ease,color .14s ease,border-color .14s ease,transform .06s ease;
+}
+#epaControls button:hover:not(:disabled){background:#f3f4f6}
+#epaControls button:active:not(:disabled){transform:translateY(1px)}
+#epaControls button:disabled{
+  opacity:.48;cursor:default;
+  background:var(--ui-disabled);color:#7b8491;
+}
+#epaControls .toggleControl{
+  min-width:auto;
+  padding:0 11px;
+  font-size:13px;
+  font-weight:700;
+}
+#epaControls .toggleControl.active{
+  background:var(--ui-green);
+  color:#fff;
+  border-color:var(--ui-green);
+}
+#epaControls .toggleControl.active:hover{
+  background:var(--ui-green-dark);
+  border-color:var(--ui-green-dark);
+}
+#zoomValue{
+  min-width:52px;text-align:center;
+  color:#fff;font-size:13px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+#zoomReset{
+  min-width:40px!important;
+  padding:0 10px!important;
+  font-size:17px!important;
+}
+
+/* Smartphone: kompakt unten, trotzdem gut antippbar */
 @media (max-width:760px){
-  #epaControls{top:auto;left:10px;right:10px;bottom:10px;transform:none;flex-direction:column;align-items:stretch;gap:7px;padding:8px}
+  #epaControls{
+    top:auto;
+    left:max(8px,env(safe-area-inset-left));
+    right:max(8px,env(safe-area-inset-right));
+    bottom:max(8px,env(safe-area-inset-bottom));
+    max-width:none;
+    flex-direction:column;
+    align-items:stretch;
+    gap:7px;
+    padding:8px;
+    border-radius:13px;
+  }
   #epaControls .controlGroup{justify-content:center}
   #epaControls .moleculeGroup{justify-content:stretch}
   #epaControls .moleculeGroup label{display:none}
-  #epaControls select{width:100%;min-width:0}
+  #epaControls .overlayGroup,
+  #epaControls .zoomGroup{
+    padding-left:0;border-left:none;
+  }
+  #epaControls .overlayGroup{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+  }
+  #epaControls select{width:100%;min-width:0;height:42px}
+  #epaControls button{height:42px;min-width:42px}
+  #epaControls .toggleControl{width:100%;padding:0 8px}
+  #error{
+    bottom:154px;
+    left:max(8px,env(safe-area-inset-left));
+    right:max(8px,env(safe-area-inset-right));
+  }
+}
+
+/* Sehr schmale Geräte: Bezeichnungen etwas kompakter */
+@media (max-width:390px){
+  #epaControls .toggleControl{font-size:12px}
+  #epaControls{gap:6px;padding:7px}
 }
 </style>
 </head>
@@ -53,7 +198,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
     <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
     <span id="zoomValue">100 %</span>
     <button id="zoomIn" type="button" aria-label="Vergrößern">+</button>
-    <button id="zoomReset" type="button">Reset</button>
+    <button id="zoomReset" type="button" aria-label="Zoom zurücksetzen" title="Zoom zurücksetzen">↺</button>
   </div>
 </div>
 <div id="error"></div>
@@ -63,7 +208,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, createGeometryOverlay, createAngleOverlay, createLonePairOverlay, disposeMolecule } from "./moleculeBuilder.js";
 
-const VERSION="EPA-4 / Core 5c-19";
+const VERSION="EPA-5 / Core 5c-19";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -236,6 +381,8 @@ const flowCanvas=document.getElementById("flowCanvas");
 const flowCtx=flowCanvas.getContext("2d",{willReadFrequently:true});
 const threeCanvas=document.getElementById("threeCanvas");
 const status=document.getElementById("status");
+const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
+if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
 const errorBox=document.getElementById("error");
 const moleculeSelect=document.getElementById("moleculeSelect");
 const geometryToggleButton=document.getElementById("geometryToggle");
