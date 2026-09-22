@@ -1,19 +1,16 @@
 import * as THREE from "../libs/three.module.min.js";
 
 /*
-  GeoChemAR – Ethanol Testversion 1a
+  GeoChemAR – Ethanol Testversion 1b
 
-  Geometrie:
-  Experimentelle Strukturkoordinaten aus der NIST CCCBDB für Ethanol.
-  Dadurch sind beide C-Atome realistisch annähernd tetraedrisch und
-  das O-Atom sauber gewinkelt.
+  Didaktisch idealisierte Geometrie:
+  - beide C-Atome exakt tetraedrisch: 109,47°
+  - O-Atom sauber gewinkelt: C–O–H = 105,4°
+  - Bindungslängen nahe experimentellen Ethanol-Werten
 
-  Verwendete experimentelle Kernwerte:
-  C-C = 1.512 Å
-  C-O = 1.431 Å
-  O-H = 0.971 Å
-  C-C-O = 107.8°
-  C-O-H = 105.4°
+  Diese Version ist bewusst NICHT die leicht verzerrte experimentelle
+  Gasphasengeometrie. Für den Unterricht soll die sp3-Tetraedergeometrie
+  an beiden C-Atomen klar und eindeutig sichtbar sein.
 */
 
 const ANGSTROM_TO_SCENE = 0.026;
@@ -31,6 +28,15 @@ const DISPLAY = Object.freeze({
     bond: 0xb8bec7
   }),
   bondRadius: 0.00195
+});
+
+const BOND = Object.freeze({
+  CH: 1.09,
+  CC: 1.512,
+  CO: 1.431,
+  OH: 0.971,
+  TETRAHEDRAL_DEG: 109.47122063449069,
+  COH_DEG: 105.4
 });
 
 function v(x,y,z){ return new THREE.Vector3(x,y,z); }
@@ -88,92 +94,141 @@ function addBond(group, atomA, atomB, elementA, elementB){
 }
 
 /*
-  Experimentelle NIST-CCCBDB-Koordinaten (Å):
-  C1  1.1879  -0.3829   0.0000
-  C2  0.0000   0.5526   0.0000
-  O  -1.1867  -0.2472   0.0000
-  HO -1.9237   0.3850   0.0000
-  H1  2.0985   0.2306   0.0000
-  H2  1.1184  -1.0093   0.8869
-  H3  1.1184  -1.0093  -0.8869
-  H4 -0.0227   1.1812   0.8852
-  H5 -0.0227   1.1812  -0.8852
+  Für einen idealen Tetraeder gilt:
+  cos(109,47°) = -1/3.
 
-  Das entspricht dem trans-Konformer. Die gesamte Struktur wird nur
-  zum Würfelzentrum verschoben und einheitlich skaliert; Winkel und
-  relative Abstände bleiben unverändert.
+  Liegt eine Bindung eines sp3-C-Atoms entlang +x, dann können die drei
+  übrigen Bindungen deshalb die x-Komponente -1/3 besitzen und sind
+  um die x-Achse jeweils um 120° gegeneinander versetzt.
+
+  Analog gilt dies gespiegelt für das zweite C-Atom.
 */
-function experimentalEthanolCoordinates(){
-  const raw = {
-    C1: v( 1.1879, -0.3829,  0.0000),
-    C2: v( 0.0000,  0.5526,  0.0000),
-    O:  v(-1.1867, -0.2472,  0.0000),
-    HO: v(-1.9237,  0.3850,  0.0000),
-    H1: v( 2.0985,  0.2306,  0.0000),
-    H2: v( 1.1184, -1.0093,  0.8869),
-    H3: v( 1.1184, -1.0093, -0.8869),
-    H4: v(-0.0227,  1.1812,  0.8852),
-    H5: v(-0.0227,  1.1812, -0.8852)
-  };
+function idealTetrahedralThree(oppositeXSign){
+  const x = oppositeXSign / 3;
+  const radial = 2*Math.sqrt(2)/3;
 
-  const points = Object.values(raw);
-  const box = new THREE.Box3().setFromPoints(points);
-  const center = box.getCenter(new THREE.Vector3());
+  return [0,120,240].map(phiDeg=>{
+    const phi=THREE.MathUtils.degToRad(phiDeg);
+    return v(
+      x,
+      radial*Math.cos(phi),
+      radial*Math.sin(phi)
+    ).normalize();
+  });
+}
 
-  const result = {};
-  for(const [key,p] of Object.entries(raw)){
-    result[key] = p.clone().sub(center).multiplyScalar(ANGSTROM_TO_SCENE);
-  }
-  return result;
+function ethanolCoordinates(){
+  const s=ANGSTROM_TO_SCENE;
+
+  // C–C-Achse bewusst horizontal und symmetrisch um den Ursprung.
+  const C1=v(-BOND.CC*s/2,0,0);
+  const C2=v( BOND.CC*s/2,0,0);
+
+  /*
+    C1:
+    Die C1→C2-Bindung zeigt nach +x.
+    Die drei C–H-Bindungen müssen daher jeweils x=-1/3 besitzen.
+  */
+  const methylDirs=idealTetrahedralThree(-1);
+  const H1=C1.clone().addScaledVector(methylDirs[0],BOND.CH*s);
+  const H2=C1.clone().addScaledVector(methylDirs[1],BOND.CH*s);
+  const H3=C1.clone().addScaledVector(methylDirs[2],BOND.CH*s);
+
+  /*
+    C2:
+    Die C2→C1-Bindung zeigt nach -x.
+    O und die beiden H-Atome liegen in den drei übrigen exakten
+    Tetraederrichtungen mit x=+1/3.
+  */
+  const methyleneDirs=idealTetrahedralThree(+1);
+  const dirO=methyleneDirs[0];
+  const dirH4=methyleneDirs[1];
+  const dirH5=methyleneDirs[2];
+
+  const O =C2.clone().addScaledVector(dirO, BOND.CO*s);
+  const H4=C2.clone().addScaledVector(dirH4,BOND.CH*s);
+  const H5=C2.clone().addScaledVector(dirH5,BOND.CH*s);
+
+  /*
+    O-Atom:
+    O→C zeigt zurück entlang -dirO.
+    O→H wird in derselben Ebene so angeordnet, dass C–O–H exakt 105,4°
+    beträgt. Die gewinkelte Geometrie ist dadurch klar sichtbar.
+  */
+  const oToC=dirO.clone().negate();
+
+  // Senkrechte Richtung in der xy-Ebene; Vorzeichen so gewählt,
+  // dass das Hydroxy-H vom Kohlenstoffgerüst weg zeigt.
+  const perpendicular=v(
+    dirO.y,
+    -dirO.x,
+    0
+  ).normalize();
+
+  const theta=THREE.MathUtils.degToRad(BOND.COH_DEG);
+  const oToH=oToC.clone().multiplyScalar(Math.cos(theta))
+    .add(perpendicular.multiplyScalar(Math.sin(theta)))
+    .normalize();
+
+  const HO=O.clone().addScaledVector(oToH,BOND.OH*s);
+
+  const points={C1,C2,O,H1,H2,H3,H4,H5,HO};
+
+  // Gesamtes Molekül exakt um seinen Bounding-Box-Mittelpunkt zentrieren.
+  const box=new THREE.Box3().setFromPoints(Object.values(points));
+  const center=box.getCenter(new THREE.Vector3());
+  for(const p of Object.values(points))p.sub(center);
+
+  return points;
 }
 
 export function buildMolecule(data){
-  if(data?.key !== "ETHANOL"){
+  if(data?.key!=="ETHANOL"){
     throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
   }
 
-  const g = new THREE.Group();
-  g.name = "ETHANOL";
+  const g=new THREE.Group();
+  g.name="ETHANOL";
 
-  const p = experimentalEthanolCoordinates();
+  const p=ethanolCoordinates();
 
-  // Bindungsgerüst: CH3-CH2-OH
-  addBond(g, p.C1, p.C2, "C", "C");
-  addBond(g, p.C2, p.O,  "C", "O");
-  addBond(g, p.O,  p.HO, "O", "H");
+  // Bindungsgerüst CH3–CH2–OH
+  addBond(g,p.C1,p.C2,"C","C");
+  addBond(g,p.C2,p.O,"C","O");
+  addBond(g,p.O,p.HO,"O","H");
 
   // CH3-Gruppe
-  addBond(g, p.C1, p.H1, "C", "H");
-  addBond(g, p.C1, p.H2, "C", "H");
-  addBond(g, p.C1, p.H3, "C", "H");
+  addBond(g,p.C1,p.H1,"C","H");
+  addBond(g,p.C1,p.H2,"C","H");
+  addBond(g,p.C1,p.H3,"C","H");
 
   // CH2-Gruppe
-  addBond(g, p.C2, p.H4, "C", "H");
-  addBond(g, p.C2, p.H5, "C", "H");
+  addBond(g,p.C2,p.H4,"C","H");
+  addBond(g,p.C2,p.H5,"C","H");
 
   // Atome
-  g.add(createAtom("C", p.C1));
-  g.add(createAtom("C", p.C2));
-  g.add(createAtom("O", p.O));
+  g.add(createAtom("C",p.C1));
+  g.add(createAtom("C",p.C2));
+  g.add(createAtom("O",p.O));
 
-  g.add(createAtom("H", p.H1));
-  g.add(createAtom("H", p.H2));
-  g.add(createAtom("H", p.H3));
-  g.add(createAtom("H", p.H4));
-  g.add(createAtom("H", p.H5));
-  g.add(createAtom("H", p.HO));
+  g.add(createAtom("H",p.H1));
+  g.add(createAtom("H",p.H2));
+  g.add(createAtom("H",p.H3));
+  g.add(createAtom("H",p.H4));
+  g.add(createAtom("H",p.H5));
+  g.add(createAtom("H",p.HO));
 
   return g;
 }
 
 export function disposeMolecule(root){
-  if(!root) return;
+  if(!root)return;
   root.traverse(obj=>{
-    if(obj.geometry) obj.geometry.dispose();
+    if(obj.geometry)obj.geometry.dispose();
     if(obj.material){
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const mats=Array.isArray(obj.material)?obj.material:[obj.material];
       for(const m of mats){
-        if(m?.map) m.map.dispose?.();
+        if(m?.map)m.map.dispose?.();
         m?.dispose?.();
       }
     }
