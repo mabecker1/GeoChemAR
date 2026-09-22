@@ -251,8 +251,8 @@ export async function createEspSurfaceOverlay(data){
     opacity:0.74,
     shininess:72,
     specular:0x555555,
-    side:THREE.DoubleSide,
-    depthWrite:false
+    side:THREE.FrontSide,
+    depthWrite:true
   });
 
   const mesh=new THREE.Mesh(geometry,material);
