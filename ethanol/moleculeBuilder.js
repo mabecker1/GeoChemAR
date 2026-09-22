@@ -242,7 +242,20 @@ export async function createEspSurfaceOverlay(data){
     "color",
     new THREE.Float32BufferAttribute(ETHANOL_ESP_COLORS,3)
   );
-  geometry.setIndex(ETHANOL_ESP_INDICES);
+  // Die Marching-Cubes-Indizes der berechneten Oberfläche sind hier
+  // bezüglich der sichtbaren Außenseite invertiert. Deshalb drehen wir
+  // jede Dreiecksorientierung um, damit wirklich die vorderste äußere
+  // Oberfläche gerendert wird und nicht die "hintere" Hülle.
+  const correctedIndices = [];
+  for(let i=0;i<ETHANOL_ESP_INDICES.length;i+=3){
+    correctedIndices.push(
+      ETHANOL_ESP_INDICES[i],
+      ETHANOL_ESP_INDICES[i+2],
+      ETHANOL_ESP_INDICES[i+1]
+    );
+  }
+
+  geometry.setIndex(correctedIndices);
   geometry.computeVertexNormals();
 
   const material=new THREE.MeshPhongMaterial({
