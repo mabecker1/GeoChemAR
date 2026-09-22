@@ -37,7 +37,7 @@ export const MOLECULES = Object.freeze({
     lonePairsOnEpaAtom: 0,
     geometryOverlay: "trigonalPlanar",
     zoom: Object.freeze({ min: 0.6, max: 2.0, step: 0.1, default: 1.0 }),
-    implemented: false
+    implemented: true
   }),
 
   CO2: Object.freeze({
@@ -54,7 +54,7 @@ export const MOLECULES = Object.freeze({
     lonePairsOnEpaAtom: 0,
     geometryOverlay: "linear",
     zoom: Object.freeze({ min: 0.6, max: 2.0, step: 0.1, default: 1.0 }),
-    implemented: false
+    implemented: true
   }),
 
   NH3: Object.freeze({
@@ -71,7 +71,7 @@ export const MOLECULES = Object.freeze({
     lonePairsOnEpaAtom: 1,
     geometryOverlay: "trigonalPyramidal",
     zoom: Object.freeze({ min: 0.6, max: 2.0, step: 0.1, default: 1.0 }),
-    implemented: false
+    implemented: true
   }),
 
   H2O: Object.freeze({
@@ -88,7 +88,7 @@ export const MOLECULES = Object.freeze({
     lonePairsOnEpaAtom: 2,
     geometryOverlay: "bent",
     zoom: Object.freeze({ min: 0.6, max: 2.0, step: 0.1, default: 1.0 }),
-    implemented: false
+    implemented: true
   }),
 
   HCl: Object.freeze({
@@ -101,7 +101,7 @@ export const MOLECULES = Object.freeze({
     lonePairsOnEpaAtom: 3,
     geometryOverlay: "diatomic",
     zoom: Object.freeze({ min: 0.6, max: 2.0, step: 0.1, default: 1.0 }),
-    implemented: false
+    implemented: true
   })
 });
 
