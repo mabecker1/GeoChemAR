@@ -214,8 +214,24 @@ export async function createHydrogenBondOverlay(data){
   const { moleculeInfos, hydrogenBondEdges } = buildClusterData();
   const group = new THREE.Group();
   group.name = "WATER_HBONDS";
+
   for(const edge of hydrogenBondEdges){
-    addDashedHydrogenBond(group, moleculeInfos[edge.i].O, moleculeInfos[edge.j].O);
+    const a = moleculeInfos[edge.i];
+    const b = moleculeInfos[edge.j];
+
+    const candidates = [
+      { donorH: a.H1, acceptorO: b.O },
+      { donorH: a.H2, acceptorO: b.O },
+      { donorH: b.H1, acceptorO: a.O },
+      { donorH: b.H2, acceptorO: a.O }
+    ].map(item => ({ ...item, distance: item.donorH.distanceTo(item.acceptorO) }));
+
+    candidates.sort((m,n)=>m.distance-n.distance);
+    const best = candidates[0];
+
+    if(best && best.distance < 0.085){
+      addDashedHydrogenBond(group, best.donorH, best.acceptorO);
+    }
   }
   return group;
 }
@@ -236,9 +252,9 @@ export async function createSimpleSurfaceOverlay(data){
   const material = new THREE.MeshPhongMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.26,
-    shininess: 60,
-    specular: 0x6a6a6a,
+    opacity: 0.88,
+    shininess: 72,
+    specular: 0x555555,
     side: THREE.FrontSide,
     depthWrite: true
   });
