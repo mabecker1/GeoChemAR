@@ -13,7 +13,7 @@ export const MOLECULES = Object.freeze({
     bondingPartnersOnEpaAtom: 2,
     lonePairsOnEpaAtom: 2,
     molecularGeometry: "gewinkelt",
-    representativeBondAngle: Object.freeze({ label: "H–O–Cl", value: 102.9, unit: "°" }),
+    representativeBondAngle: Object.freeze({ label: "H–O–Cl", value: 104.5, unit: "°" }),
     geometryOverlay: "bent",
     geometryQuestions: Object.freeze([
       Object.freeze({ id: "O", atomLabel: "O-Atom", correct: "gewinkelt" })
@@ -30,7 +30,7 @@ export const MOLECULES = Object.freeze({
     bondingPartnersOnEpaAtom: 3,
     lonePairsOnEpaAtom: 1,
     molecularGeometry: "trigonal-pyramidal",
-    representativeBondAngle: Object.freeze({ label: "F–P–F", value: 97.8, unit: "°" }),
+    representativeBondAngle: Object.freeze({ label: "F–P–F", value: 106.5, unit: "°" }),
     geometryOverlay: "trigonalPyramidal",
     geometryQuestions: Object.freeze([
       Object.freeze({ id: "P", atomLabel: "P-Atom", correct: "trigonal-pyramidal" })
@@ -47,7 +47,7 @@ export const MOLECULES = Object.freeze({
     bondingPartnersOnEpaAtom: 2,
     lonePairsOnEpaAtom: 2,
     molecularGeometry: "gewinkelt",
-    representativeBondAngle: Object.freeze({ label: "H–S–H", value: 92.1, unit: "°" }),
+    representativeBondAngle: Object.freeze({ label: "H–S–H", value: 104.5, unit: "°" }),
     geometryOverlay: "bent",
     geometryQuestions: Object.freeze([
       Object.freeze({ id: "S", atomLabel: "S-Atom", correct: "gewinkelt" })
@@ -81,7 +81,7 @@ export const MOLECULES = Object.freeze({
         id: "O", atomLabel: "O(OH)", epaAtom: "O",
         bondingPartnersOnEpaAtom: 2, lonePairsOnEpaAtom: 2,
         molecularGeometry: "gewinkelt",
-        representativeBondAngle: Object.freeze({ label: "C–O–H", value: 106.0, unit: "°" })
+        representativeBondAngle: Object.freeze({ label: "C–O–H", value: 104.5, unit: "°" })
       })
     ]),
     zoom: ZOOM,

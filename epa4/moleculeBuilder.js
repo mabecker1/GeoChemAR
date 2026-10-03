@@ -525,11 +525,38 @@ function buildCOCl2(data) {
 }
 
 
-function bentLonePairDirections(){
+function bentLonePairDirectionsForBonds(bondDir1,bondDir2){
+  const a=bondDir1.clone().normalize();
+  const b=bondDir2.clone().normalize();
+
+  /*
+    Orientierung analog zu H2O aus EPA2:
+    Die freien EP liegen auf der den Bindungen gegenüberliegenden Seite
+    und symmetrisch ober- bzw. unterhalb der Bindungsebene.
+    Der Winkel zwischen ihren Richtungen wird idealisiert mit 109,5° gewählt.
+  */
+  let bondBisector=a.clone().add(b);
+  if(bondBisector.lengthSq()<1e-10){
+    bondBisector=perpendicularTo(a);
+  }else{
+    bondBisector.normalize();
+  }
+
+  let planeNormal=a.clone().cross(b);
+  if(planeNormal.lengthSq()<1e-10){
+    planeNormal=perpendicularTo(a);
+  }else{
+    planeNormal.normalize();
+  }
+
+  const oppositeBisector=bondBisector.negate().normalize();
   const beta=THREE.MathUtils.degToRad(109.5/2);
+
   return [
-    v(0, Math.sin(beta), Math.cos(beta)),
-    v(0,-Math.sin(beta), Math.cos(beta))
+    oppositeBisector.clone().multiplyScalar(Math.cos(beta))
+      .add(planeNormal.clone().multiplyScalar(Math.sin(beta))).normalize(),
+    oppositeBisector.clone().multiplyScalar(Math.cos(beta))
+      .add(planeNormal.clone().multiplyScalar(-Math.sin(beta))).normalize()
   ];
 }
 
@@ -538,7 +565,7 @@ function buildHOCl(data) {
   g.name="HOCl";
   g.add(createAtom("O",v(0,0,0)));
 
-  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 102.9);
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 104.5);
   const half=gamma/2;
   const hDir=v( Math.sin(half),0,-Math.cos(half)).normalize();
   const clDir=v(-Math.sin(half),0,-Math.cos(half)).normalize();
@@ -552,7 +579,7 @@ function buildHOCl(data) {
     geometryEdges:[[0,1],[0,2],[1,2]],
     geometryFaces:[[0,1,2]],
     angleDirections:[hDir,clDir],
-    lonePairDirections:bentLonePairDirections()
+    lonePairDirections:bentLonePairDirectionsForBonds(hDir,clDir)
   });
   return g;
 }
@@ -562,7 +589,7 @@ function buildPF3(data) {
   g.name="PF3";
   g.add(createAtom("P",v(0,0,0)));
 
-  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 97.8);
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 106.5);
   const cos2Alpha=THREE.MathUtils.clamp((Math.cos(gamma)+0.5)/1.5,0,1);
   const cosAlpha=-Math.sqrt(cos2Alpha);
   const sinAlpha=Math.sqrt(Math.max(0,1-cosAlpha*cosAlpha));
@@ -591,7 +618,7 @@ function buildH2S(data) {
   g.name="H2S";
   g.add(createAtom("S",v(0,0,0)));
 
-  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 92.1);
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 104.5);
   const half=gamma/2;
   const distance=BOND_LENGTH_A.SH*ANGSTROM_TO_SCENE;
   const h1Dir=v( Math.sin(half),0,-Math.cos(half)).normalize();
@@ -605,7 +632,7 @@ function buildH2S(data) {
     geometryEdges:[[0,1],[0,2],[1,2]],
     geometryFaces:[[0,1,2]],
     angleDirections:[h1Dir,h2Dir],
-    lonePairDirections:bentLonePairDirections()
+    lonePairDirections:bentLonePairDirectionsForBonds(h1Dir,h2Dir)
   });
   return g;
 }
@@ -637,7 +664,7 @@ function buildHCOOH(data) {
   g.add(createAtom("O",oHydroxyl));
 
   const oToC=C.clone().sub(oHydroxyl).normalize();
-  const coh=THREE.MathUtils.degToRad(106.0);
+  const coh=THREE.MathUtils.degToRad(data.epaCenters?.[1]?.representativeBondAngle?.value ?? 104.5);
   const oToH=rotate2D(oToC,coh);
   const hO=oHydroxyl.clone().addScaledVector(oToH,BOND_LENGTH_A.HCOOH_OH*ANGSTROM_TO_SCENE);
   addBond(g,oHydroxyl,hO,"O","H",1);
@@ -664,7 +691,7 @@ function buildHCOOH(data) {
     geometryEdges:[[0,1],[0,2],[1,2]],
     geometryFaces:[[0,1,2]],
     angleDirections:[oToC,oToH],
-    lonePairDirections:bentLonePairDirections()
+    lonePairDirections:bentLonePairDirectionsForBonds(oToC,oToH)
   };
 
   g.userData.epaCenters=[
