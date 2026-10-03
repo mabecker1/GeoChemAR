@@ -1,0 +1,1030 @@
+import * as THREE from "../libs/three.module.min.js";
+
+/*
+  GeoChemAR EPA – moleculeBuilder.js
+
+  Unterrichtswerte:
+  CH4  = 109,5°
+  H2CO = 120°
+  CO2  = 180°
+  NH3  = 106,5°
+  H2O  = 104,5°
+  HCl  = kein Bindungswinkel
+
+  EPA-4 ergänzt:
+  - Molekülgeometrie als ein-/ausblendbares 3D-Hilfsgerüst
+  - automatisch ausgewählten Bindungswinkel mit Winkelbogen + Wert
+  - freie Elektronenpaare als räumliche, halbtransparente
+    Elektronenwolken am EPA-Zentralatom
+
+  Für diese Unterrichtsanwendung werden freie Elektronenpaare nur am
+  betrachteten EPA-Zentralatom dargestellt:
+  NH3: 1 am N, H2O: 2 am O, HCl: 3 am Cl.
+*/
+
+const ANGSTROM_TO_SCENE = 0.033;
+
+const DISPLAY = Object.freeze({
+  atomRadius: Object.freeze({
+    H: 0.0070,
+    C: 0.0110,
+    N: 0.0105,
+    O: 0.0100,
+    Cl: 0.0130,
+    F: 0.0095,
+    S: 0.0125,
+    P: 0.0120
+  }),
+  color: Object.freeze({
+    H: 0xffffff,
+    C: 0x202020,
+    N: 0x3057d5,
+    O: 0xd93636,
+    Cl: 0x39a852,
+    F: 0x9bdc70,
+    S: 0xf0d43a,
+    P: 0xf28c28,
+    bond: 0xb8bec7,
+    geometry: 0x46d7c0,
+    angle: 0xffd54a,
+    lonePairOuter: 0x9a86ff,
+    lonePairInner: 0x6f58df
+  }),
+  bondRadius: 0.0020,
+  doubleBondRadius: 0.00155,
+  doubleBondSeparation: 0.0034,
+  tripleBondRadius: 0.00128,
+  tripleBondSeparation: 0.0032,
+  geometryEdgeRadius: 0.00062,
+  angleRadiusFactor: 0.53
+});
+
+const BOND_LENGTH_A = Object.freeze({
+  CH: 1.087,
+  FORMALDEHYDE_CH: 1.116,
+  FORMALDEHYDE_CO: 1.208,
+  CO2_CO: 1.162,
+  NH: 1.012,
+  OH: 0.958,
+  HCl: 1.275,
+  CS2_CS: 1.55,
+  CF: 1.32,
+  HCN_CH: 1.06,
+  HCN_CN: 1.16,
+  COCL2_CO: 1.18,
+  COCL2_CCL: 1.74,
+  HOCL_OH: 0.97,
+  HOCL_OCL: 1.69,
+  PF: 1.57,
+  SH: 1.336,
+  HCOOH_CH: 1.10,
+  HCOOH_CO_DOUBLE: 1.21,
+  HCOOH_CO_SINGLE: 1.36,
+  HCOOH_OH: 0.97
+});
+
+function v(x, y, z) {
+  return new THREE.Vector3(x, y, z);
+}
+
+function materialForElement(element) {
+  return new THREE.MeshStandardMaterial({
+    color: DISPLAY.color[element],
+    roughness: element === "H" ? 0.50 : 0.62,
+    metalness: 0
+  });
+}
+
+function createAtom(element, position) {
+  const radius = DISPLAY.atomRadius[element];
+  const geometry = new THREE.SphereGeometry(
+    radius,
+    element === "H" ? 40 : 48,
+    element === "H" ? 28 : 32
+  );
+  const mesh = new THREE.Mesh(geometry, materialForElement(element));
+  mesh.position.copy(position);
+  mesh.userData.kind = "atom";
+  mesh.userData.element = element;
+  return mesh;
+}
+
+function perpendicularTo(direction, preferred = null) {
+  if (preferred) {
+    const p = preferred.clone();
+    p.addScaledVector(direction, -p.dot(direction));
+    if (p.lengthSq() > 1e-10) return p.normalize();
+  }
+
+  const refs = [v(1,0,0), v(0,1,0), v(0,0,1)];
+  refs.sort((a,b) => Math.abs(a.dot(direction)) - Math.abs(b.dot(direction)));
+  const p = refs[0].clone();
+  p.addScaledVector(direction, -p.dot(direction));
+  return p.normalize();
+}
+
+function createBondCylinder(start, end, radius, material) {
+  const delta = end.clone().sub(start);
+  const length = delta.length();
+  const direction = delta.clone().normalize();
+
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, 32, 1, false);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(start).add(end).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(v(0,1,0), direction);
+  mesh.userData.kind = "bond";
+  return mesh;
+}
+
+function addBond(group, atomA, atomB, elementA, elementB, order = 1, preferredDoubleAxis = null) {
+  const pa = atomA.clone();
+  const pb = atomB.clone();
+  const axis = pb.clone().sub(pa);
+  if (axis.lengthSq() <= 1e-12) return;
+
+  const direction = axis.clone().normalize();
+  const ra = DISPLAY.atomRadius[elementA];
+  const rb = DISPLAY.atomRadius[elementB];
+  const start = pa.clone().addScaledVector(direction, ra);
+  const end = pb.clone().addScaledVector(direction, -rb);
+
+  const material = new THREE.MeshStandardMaterial({
+    color: DISPLAY.color.bond,
+    roughness: 0.65,
+    metalness: 0
+  });
+
+  if (order === 1) {
+    group.add(createBondCylinder(start, end, DISPLAY.bondRadius, material));
+    return;
+  }
+
+  const offsetDir = perpendicularTo(direction, preferredDoubleAxis);
+
+  if (order === 2) {
+    const offset = offsetDir.multiplyScalar(DISPLAY.doubleBondSeparation / 2);
+    group.add(createBondCylinder(
+      start.clone().add(offset),
+      end.clone().add(offset),
+      DISPLAY.doubleBondRadius,
+      material
+    ));
+    group.add(createBondCylinder(
+      start.clone().sub(offset),
+      end.clone().sub(offset),
+      DISPLAY.doubleBondRadius,
+      material.clone()
+    ));
+    return;
+  }
+
+  if (order === 3) {
+    const offset = offsetDir.multiplyScalar(DISPLAY.tripleBondSeparation);
+    group.add(createBondCylinder(
+      start,
+      end,
+      DISPLAY.tripleBondRadius,
+      material
+    ));
+    group.add(createBondCylinder(
+      start.clone().add(offset),
+      end.clone().add(offset),
+      DISPLAY.tripleBondRadius,
+      material.clone()
+    ));
+    group.add(createBondCylinder(
+      start.clone().sub(offset),
+      end.clone().sub(offset),
+      DISPLAY.tripleBondRadius,
+      material.clone()
+    ));
+  }
+}
+
+function addAtomAndBond(group, centralElement, outerElement, direction, distance, order = 1, preferredDoubleAxis = null) {
+  const center = v(0,0,0);
+  const outer = direction.clone().normalize().multiplyScalar(distance);
+  addBond(group, center, outer, centralElement, outerElement, order, preferredDoubleAxis);
+  group.add(createAtom(outerElement, outer));
+  return outer;
+}
+
+function setEpaMetadata(group, data, {
+  center = v(0,0,0),
+  outerPositions = [],
+  geometryVertices = [],
+  geometryEdges = [],
+  geometryFaces = [],
+  angleDirections = null,
+  lonePairDirections = []
+} = {}) {
+  group.userData.epa = {
+    key: data.key,
+    center: center.clone(),
+    outerPositions: outerPositions.map(p => p.clone()),
+    geometryVertices: geometryVertices.map(p => p.clone()),
+    geometryEdges: geometryEdges.map(([a,b]) => [a,b]),
+    geometryFaces: geometryFaces.map(face => [...face]),
+    angleDirections: angleDirections
+      ? angleDirections.map(d => d.clone().normalize())
+      : null,
+    lonePairDirections: lonePairDirections.map(d => d.clone().normalize())
+  };
+}
+
+function buildCH4(data) {
+  const g = new THREE.Group();
+  g.name = "CH4";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const distance = BOND_LENGTH_A.CH * ANGSTROM_TO_SCENE;
+  const dirs = [
+    v( 1, 1, 1),
+    v( 1,-1,-1),
+    v(-1, 1,-1),
+    v(-1,-1, 1)
+  ].map(d => d.normalize());
+
+  const h = [];
+  for (const d of dirs) h.push(addAtomAndBond(g, "C", "H", d, distance));
+
+  setEpaMetadata(g, data, {
+    outerPositions: h,
+    geometryVertices: h,
+    geometryEdges: [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
+    geometryFaces: [[0,1,2],[0,1,3],[0,2,3],[1,2,3]],
+    angleDirections: [dirs[0], dirs[1]]
+  });
+  return g;
+}
+
+function buildH2CO(data) {
+  const g = new THREE.Group();
+  g.name = "H2CO";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const angle = THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 120);
+  const oDir = v(1,0,0);
+  const h1Dir = v(Math.cos(angle), Math.sin(angle), 0);
+  const h2Dir = v(Math.cos(angle), -Math.sin(angle), 0);
+
+  const o = addAtomAndBond(
+    g, "C", "O", oDir,
+    BOND_LENGTH_A.FORMALDEHYDE_CO * ANGSTROM_TO_SCENE,
+    2, v(0,0,1)
+  );
+  const h1 = addAtomAndBond(
+    g, "C", "H", h1Dir,
+    BOND_LENGTH_A.FORMALDEHYDE_CH * ANGSTROM_TO_SCENE
+  );
+  const h2 = addAtomAndBond(
+    g, "C", "H", h2Dir,
+    BOND_LENGTH_A.FORMALDEHYDE_CH * ANGSTROM_TO_SCENE
+  );
+
+  setEpaMetadata(g, data, {
+    outerPositions: [o,h1,h2],
+    geometryVertices: [o,h1,h2],
+    geometryEdges: [[0,1],[1,2],[2,0]],
+    geometryFaces: [[0,1,2]],
+    angleDirections: [oDir,h1Dir]
+  });
+  return g;
+}
+
+function buildCO2(data) {
+  const g = new THREE.Group();
+  g.name = "CO2";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const distance = BOND_LENGTH_A.CO2_CO * ANGSTROM_TO_SCENE;
+  const o1 = addAtomAndBond(g, "C", "O", v(1,0,0), distance, 2, v(0,0,1));
+  const o2 = addAtomAndBond(g, "C", "O", v(-1,0,0), distance, 2, v(0,0,1));
+
+  setEpaMetadata(g, data, {
+    outerPositions: [o1,o2],
+    geometryVertices: [o1,o2],
+    geometryEdges: [[0,1]],
+    geometryFaces: [],
+    angleDirections: [v(1,0,0),v(-1,0,0)]
+  });
+  return g;
+}
+
+function buildNH3(data) {
+  const g = new THREE.Group();
+  g.name = "NH3";
+  g.add(createAtom("N", v(0,0,0)));
+
+  const gamma = THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 106.5);
+  const cos2Alpha = THREE.MathUtils.clamp((Math.cos(gamma) + 0.5) / 1.5, 0, 1);
+  const cosAlpha = -Math.sqrt(cos2Alpha);
+  const sinAlpha = Math.sqrt(Math.max(0, 1 - cosAlpha*cosAlpha));
+  const distance = BOND_LENGTH_A.NH * ANGSTROM_TO_SCENE;
+
+  const dirs = [];
+  const h = [];
+  for (const phiDeg of [0,120,240]) {
+    const phi = THREE.MathUtils.degToRad(phiDeg);
+    const d = v(
+      sinAlpha * Math.cos(phi),
+      sinAlpha * Math.sin(phi),
+      cosAlpha
+    ).normalize();
+    dirs.push(d);
+    h.push(addAtomAndBond(g, "N", "H", d, distance));
+  }
+
+  const center = v(0,0,0);
+  setEpaMetadata(g, data, {
+    outerPositions: h,
+    geometryVertices: [center,...h],
+    geometryEdges: [[0,1],[0,2],[0,3],[1,2],[2,3],[3,1]],
+    geometryFaces: [[0,1,2],[0,2,3],[0,3,1],[1,2,3]],
+    angleDirections: [dirs[0],dirs[1]],
+    lonePairDirections: [v(0,0,1)]
+  });
+  return g;
+}
+
+function buildH2O(data) {
+  const g = new THREE.Group();
+  g.name = "H2O";
+  g.add(createAtom("O", v(0,0,0)));
+
+  const gamma = THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 104.5);
+  const half = gamma / 2;
+  const distance = BOND_LENGTH_A.OH * ANGSTROM_TO_SCENE;
+
+  const h1Dir = v( Math.sin(half), 0, -Math.cos(half)).normalize();
+  const h2Dir = v(-Math.sin(half), 0, -Math.cos(half)).normalize();
+  const h1 = addAtomAndBond(g, "O", "H", h1Dir, distance);
+  const h2 = addAtomAndBond(g, "O", "H", h2Dir, distance);
+
+  const center = v(0,0,0);
+  setEpaMetadata(g, data, {
+    outerPositions: [h1,h2],
+    geometryVertices: [center,h1,h2],
+    geometryEdges: [[0,1],[0,2],[1,2]],
+    geometryFaces: [[0,1,2]],
+    angleDirections: [h1Dir,h2Dir],
+    /*
+      EPA-Modell: Die beiden freien Elektronenpaare liegen symmetrisch
+      auf der dem H-O-H-Winkel gegenüberliegenden Seite. Ihr gegenseitiger
+      Richtungswinkel wird idealisiert tetraedrisch (109,5°) gewählt.
+      Dadurch liegen die Wolken räumlich ober-/unterhalb der Molekülebene,
+      statt fälschlich als zwei flache 2D-Lappen gezeichnet zu werden.
+    */
+    lonePairDirections: (() => {
+      const beta=THREE.MathUtils.degToRad(109.5/2);
+      return [
+        v(0, Math.sin(beta), Math.cos(beta)),
+        v(0,-Math.sin(beta), Math.cos(beta))
+      ];
+    })()
+  });
+  return g;
+}
+
+function buildHCl(data) {
+  const g = new THREE.Group();
+  g.name = "HCl";
+  g.add(createAtom("Cl", v(0,0,0)));
+  const h = addAtomAndBond(
+    g, "Cl", "H", v(1,0,0),
+    BOND_LENGTH_A.HCl * ANGSTROM_TO_SCENE
+  );
+
+  setEpaMetadata(g, data, {
+    outerPositions: [h],
+    geometryVertices: [v(0,0,0),h],
+    geometryEdges: [[0,1]],
+    geometryFaces: [],
+    angleDirections: null,
+    /*
+      EPA-Modell am Cl: vier Elektronenpaarbereiche insgesamt.
+      Die H-Cl-Bindung zeigt nach +x; die drei freien Elektronenpaare
+      besetzen die drei übrigen tetraedrischen Richtungen.
+    */
+    lonePairDirections: [0,120,240].map(phiDeg => {
+      const phi=THREE.MathUtils.degToRad(phiDeg);
+      const radial=2*Math.SQRT2/3;
+      return v(
+        -1/3,
+        radial*Math.cos(phi),
+        radial*Math.sin(phi)
+      ).normalize();
+    })
+  });
+  return g;
+}
+
+
+function buildCS2(data) {
+  const g = new THREE.Group();
+  g.name = "CS2";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const distance = BOND_LENGTH_A.CS2_CS * ANGSTROM_TO_SCENE;
+  const s1 = addAtomAndBond(g, "C", "S", v(1,0,0), distance, 2, v(0,0,1));
+  const s2 = addAtomAndBond(g, "C", "S", v(-1,0,0), distance, 2, v(0,0,1));
+
+  setEpaMetadata(g, data, {
+    outerPositions: [s1,s2],
+    geometryVertices: [s1,s2],
+    geometryEdges: [[0,1]],
+    geometryFaces: [],
+    angleDirections: [v(1,0,0),v(-1,0,0)]
+  });
+  return g;
+}
+
+function buildCF4(data) {
+  const g = new THREE.Group();
+  g.name = "CF4";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const distance = BOND_LENGTH_A.CF * ANGSTROM_TO_SCENE;
+  const dirs = [
+    v( 1, 1, 1),
+    v( 1,-1,-1),
+    v(-1, 1,-1),
+    v(-1,-1, 1)
+  ].map(d => d.normalize());
+
+  const atoms = [];
+  for (const d of dirs) atoms.push(addAtomAndBond(g, "C", "F", d, distance));
+
+  setEpaMetadata(g, data, {
+    outerPositions: atoms,
+    geometryVertices: atoms,
+    geometryEdges: [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
+    geometryFaces: [[0,1,2],[0,1,3],[0,2,3],[1,2,3]],
+    angleDirections: [dirs[0],dirs[1]]
+  });
+  return g;
+}
+
+function buildHCN(data) {
+  const g = new THREE.Group();
+  g.name = "HCN";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const h = addAtomAndBond(
+    g, "C", "H", v(-1,0,0),
+    BOND_LENGTH_A.HCN_CH * ANGSTROM_TO_SCENE
+  );
+  const n = addAtomAndBond(
+    g, "C", "N", v(1,0,0),
+    BOND_LENGTH_A.HCN_CN * ANGSTROM_TO_SCENE,
+    3, v(0,0,1)
+  );
+
+  setEpaMetadata(g, data, {
+    outerPositions: [h,n],
+    geometryVertices: [h,n],
+    geometryEdges: [[0,1]],
+    geometryFaces: [],
+    angleDirections: [v(-1,0,0),v(1,0,0)]
+  });
+  return g;
+}
+
+function buildCOCl2(data) {
+  const g = new THREE.Group();
+  g.name = "COCl2";
+  g.add(createAtom("C", v(0,0,0)));
+
+  const angle = THREE.MathUtils.degToRad(120);
+  const oDir = v(1,0,0);
+  const cl1Dir = v(Math.cos(angle), Math.sin(angle), 0);
+  const cl2Dir = v(Math.cos(angle), -Math.sin(angle), 0);
+
+  const o = addAtomAndBond(
+    g, "C", "O", oDir,
+    BOND_LENGTH_A.COCL2_CO * ANGSTROM_TO_SCENE,
+    2, v(0,0,1)
+  );
+  const cl1 = addAtomAndBond(
+    g, "C", "Cl", cl1Dir,
+    BOND_LENGTH_A.COCL2_CCL * ANGSTROM_TO_SCENE
+  );
+  const cl2 = addAtomAndBond(
+    g, "C", "Cl", cl2Dir,
+    BOND_LENGTH_A.COCL2_CCL * ANGSTROM_TO_SCENE
+  );
+
+  setEpaMetadata(g, data, {
+    outerPositions: [o,cl1,cl2],
+    geometryVertices: [o,cl1,cl2],
+    geometryEdges: [[0,1],[1,2],[2,0]],
+    geometryFaces: [[0,1,2]],
+    angleDirections: [oDir,cl1Dir]
+  });
+  return g;
+}
+
+
+function bentLonePairDirections(){
+  const beta=THREE.MathUtils.degToRad(109.5/2);
+  return [
+    v(0, Math.sin(beta), Math.cos(beta)),
+    v(0,-Math.sin(beta), Math.cos(beta))
+  ];
+}
+
+function buildHOCl(data) {
+  const g=new THREE.Group();
+  g.name="HOCl";
+  g.add(createAtom("O",v(0,0,0)));
+
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 102.9);
+  const half=gamma/2;
+  const hDir=v( Math.sin(half),0,-Math.cos(half)).normalize();
+  const clDir=v(-Math.sin(half),0,-Math.cos(half)).normalize();
+  const h=addAtomAndBond(g,"O","H",hDir,BOND_LENGTH_A.HOCL_OH*ANGSTROM_TO_SCENE);
+  const cl=addAtomAndBond(g,"O","Cl",clDir,BOND_LENGTH_A.HOCL_OCL*ANGSTROM_TO_SCENE);
+
+  const center=v(0,0,0);
+  setEpaMetadata(g,data,{
+    outerPositions:[h,cl],
+    geometryVertices:[center,h,cl],
+    geometryEdges:[[0,1],[0,2],[1,2]],
+    geometryFaces:[[0,1,2]],
+    angleDirections:[hDir,clDir],
+    lonePairDirections:bentLonePairDirections()
+  });
+  return g;
+}
+
+function buildPF3(data) {
+  const g=new THREE.Group();
+  g.name="PF3";
+  g.add(createAtom("P",v(0,0,0)));
+
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 97.8);
+  const cos2Alpha=THREE.MathUtils.clamp((Math.cos(gamma)+0.5)/1.5,0,1);
+  const cosAlpha=-Math.sqrt(cos2Alpha);
+  const sinAlpha=Math.sqrt(Math.max(0,1-cosAlpha*cosAlpha));
+  const distance=BOND_LENGTH_A.PF*ANGSTROM_TO_SCENE;
+  const dirs=[]; const atoms=[];
+  for(const phiDeg of [0,120,240]){
+    const phi=THREE.MathUtils.degToRad(phiDeg);
+    const d=v(sinAlpha*Math.cos(phi),sinAlpha*Math.sin(phi),cosAlpha).normalize();
+    dirs.push(d);
+    atoms.push(addAtomAndBond(g,"P","F",d,distance));
+  }
+  const center=v(0,0,0);
+  setEpaMetadata(g,data,{
+    outerPositions:atoms,
+    geometryVertices:[center,...atoms],
+    geometryEdges:[[0,1],[0,2],[0,3],[1,2],[2,3],[3,1]],
+    geometryFaces:[[0,1,2],[0,2,3],[0,3,1],[1,2,3]],
+    angleDirections:[dirs[0],dirs[1]],
+    lonePairDirections:[v(0,0,1)]
+  });
+  return g;
+}
+
+function buildH2S(data) {
+  const g=new THREE.Group();
+  g.name="H2S";
+  g.add(createAtom("S",v(0,0,0)));
+
+  const gamma=THREE.MathUtils.degToRad(data.representativeBondAngle?.value ?? 92.1);
+  const half=gamma/2;
+  const distance=BOND_LENGTH_A.SH*ANGSTROM_TO_SCENE;
+  const h1Dir=v( Math.sin(half),0,-Math.cos(half)).normalize();
+  const h2Dir=v(-Math.sin(half),0,-Math.cos(half)).normalize();
+  const h1=addAtomAndBond(g,"S","H",h1Dir,distance);
+  const h2=addAtomAndBond(g,"S","H",h2Dir,distance);
+  const center=v(0,0,0);
+  setEpaMetadata(g,data,{
+    outerPositions:[h1,h2],
+    geometryVertices:[center,h1,h2],
+    geometryEdges:[[0,1],[0,2],[1,2]],
+    geometryFaces:[[0,1,2]],
+    angleDirections:[h1Dir,h2Dir],
+    lonePairDirections:bentLonePairDirections()
+  });
+  return g;
+}
+
+function rotate2D(dir,angle){
+  const c=Math.cos(angle),s=Math.sin(angle);
+  return v(dir.x*c-dir.y*s,dir.x*s+dir.y*c,0).normalize();
+}
+
+function buildHCOOH(data) {
+  const g=new THREE.Group();
+  g.name="HCOOH";
+  const C=v(0,0,0);
+  g.add(createAtom("C",C));
+
+  const oCarbonylDir=v(1,0,0);
+  const hCDir=v(Math.cos(THREE.MathUtils.degToRad(120)), Math.sin(THREE.MathUtils.degToRad(120)),0).normalize();
+  const oHydroxylDir=v(Math.cos(THREE.MathUtils.degToRad(-120)),Math.sin(THREE.MathUtils.degToRad(-120)),0).normalize();
+
+  const oCarbonyl=oCarbonylDir.clone().multiplyScalar(BOND_LENGTH_A.HCOOH_CO_DOUBLE*ANGSTROM_TO_SCENE);
+  const hC=hCDir.clone().multiplyScalar(BOND_LENGTH_A.HCOOH_CH*ANGSTROM_TO_SCENE);
+  const oHydroxyl=oHydroxylDir.clone().multiplyScalar(BOND_LENGTH_A.HCOOH_CO_SINGLE*ANGSTROM_TO_SCENE);
+
+  addBond(g,C,oCarbonyl,"C","O",2,v(0,0,1));
+  addBond(g,C,hC,"C","H",1);
+  addBond(g,C,oHydroxyl,"C","O",1);
+  g.add(createAtom("O",oCarbonyl));
+  g.add(createAtom("H",hC));
+  g.add(createAtom("O",oHydroxyl));
+
+  const oToC=C.clone().sub(oHydroxyl).normalize();
+  const coh=THREE.MathUtils.degToRad(106.0);
+  const oToH=rotate2D(oToC,coh);
+  const hO=oHydroxyl.clone().addScaledVector(oToH,BOND_LENGTH_A.HCOOH_OH*ANGSTROM_TO_SCENE);
+  addBond(g,oHydroxyl,hO,"O","H",1);
+  g.add(createAtom("H",hO));
+
+  setEpaMetadata(g,data,{
+    center:C,
+    outerPositions:[oCarbonyl,hC,oHydroxyl],
+    geometryVertices:[oCarbonyl,hC,oHydroxyl],
+    geometryEdges:[[0,1],[1,2],[2,0]],
+    geometryFaces:[[0,1,2]],
+    angleDirections:[oCarbonylDir,hCDir],
+    lonePairDirections:[]
+  });
+
+  const cMeta=g.userData.epa;
+  const localC=oToC.clone().multiplyScalar(BOND_LENGTH_A.HCOOH_CO_SINGLE*ANGSTROM_TO_SCENE);
+  const localH=oToH.clone().multiplyScalar(BOND_LENGTH_A.HCOOH_OH*ANGSTROM_TO_SCENE);
+  const oMeta={
+    key:"HCOOH_OH_O",
+    center:v(0,0,0),
+    outerPositions:[localC,localH],
+    geometryVertices:[v(0,0,0),localC,localH],
+    geometryEdges:[[0,1],[0,2],[1,2]],
+    geometryFaces:[[0,1,2]],
+    angleDirections:[oToC,oToH],
+    lonePairDirections:bentLonePairDirections()
+  };
+
+  g.userData.epaCenters=[
+    { meta:cMeta, offset:C.clone(), data:data.epaCenters?.[0] ?? data },
+    { meta:oMeta, offset:oHydroxyl.clone(), data:data.epaCenters?.[1] ?? data }
+  ];
+  return g;
+}
+
+export function buildMolecule(data) {
+  switch (data?.key) {
+    case "CH4":  return buildCH4(data);
+    case "H2CO": return buildH2CO(data);
+    case "CO2":  return buildCO2(data);
+    case "NH3":  return buildNH3(data);
+    case "H2O":  return buildH2O(data);
+    case "HCl":   return buildHCl(data);
+    case "CS2":   return buildCS2(data);
+    case "CF4":   return buildCF4(data);
+    case "HCN":   return buildHCN(data);
+    case "COCl2": return buildCOCl2(data);
+    case "HOCl":  return buildHOCl(data);
+    case "PF3":   return buildPF3(data);
+    case "H2S":   return buildH2S(data);
+    case "HCOOH": return buildHCOOH(data);
+    default: throw new Error(`Unbekanntes Molekül: ${data?.key ?? "?"}`);
+  }
+}
+
+/* -----------------------------------------------------
+   Overlay-Helfer
+   ----------------------------------------------------- */
+
+function createOverlayCylinder(a, b, radius, color, opacity = 0.9) {
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthTest: false,
+    depthWrite: false
+  });
+  const mesh = createBondCylinder(a, b, radius, material);
+  mesh.renderOrder = 10;
+  return mesh;
+}
+
+function createFaceMesh(points, indices) {
+  const positions = [];
+  for (const i of indices) {
+    const p = points[i];
+    positions.push(p.x,p.y,p.z);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions,3));
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshBasicMaterial({
+    color: DISPLAY.color.geometry,
+    transparent: true,
+    opacity: 0.085,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    depthTest: true
+  });
+
+  const mesh = new THREE.Mesh(geometry,material);
+  mesh.renderOrder = 5;
+  return mesh;
+}
+
+function createTextSprite(text, {
+  background = "rgba(255,255,255,0.94)",
+  foreground = "#1f2937",
+  border = "rgba(0,0,0,0.20)",
+  fontPx = 54,
+  paddingX = 30,
+  paddingY = 18,
+  worldHeight = 0.012
+} = {}) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  ctx.font = `700 ${fontPx}px Arial, sans-serif`;
+  const metrics = ctx.measureText(text);
+  const width = Math.ceil(metrics.width + 2*paddingX);
+  const height = Math.ceil(fontPx + 2*paddingY);
+
+  canvas.width = width;
+  canvas.height = height;
+
+  ctx.font = `700 ${fontPx}px Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const r = Math.min(18, height/4);
+  ctx.fillStyle = background;
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 3;
+
+  ctx.beginPath();
+  ctx.moveTo(r,0);
+  ctx.lineTo(width-r,0);
+  ctx.quadraticCurveTo(width,0,width,r);
+  ctx.lineTo(width,height-r);
+  ctx.quadraticCurveTo(width,height,width-r,height);
+  ctx.lineTo(r,height);
+  ctx.quadraticCurveTo(0,height,0,height-r);
+  ctx.lineTo(0,r);
+  ctx.quadraticCurveTo(0,0,r,0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = foreground;
+  ctx.fillText(text,width/2,height/2+1);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false
+  });
+
+  const sprite = new THREE.Sprite(material);
+  const aspect = width/height;
+  sprite.scale.set(worldHeight*aspect,worldHeight,1);
+  sprite.renderOrder = 20;
+  return sprite;
+}
+
+function overlayLabelPosition(points) {
+  if (!points.length) return v(0,0.045,0.01);
+  const box = new THREE.Box3().setFromPoints(points);
+  const center = box.getCenter(new THREE.Vector3());
+  return v(center.x, box.max.y + 0.016, box.max.z + 0.006);
+}
+
+export function createGeometryOverlay(molecule, data) {
+  const meta = molecule?.userData?.epa;
+  if (!meta) return null;
+
+  const group = new THREE.Group();
+  group.name = "moleculeGeometryOverlay";
+  const points = meta.geometryVertices;
+
+  for (const [a,b] of meta.geometryEdges) {
+    if (!points[a] || !points[b]) continue;
+    group.add(createOverlayCylinder(
+      points[a],points[b],
+      DISPLAY.geometryEdgeRadius,
+      DISPLAY.color.geometry,
+      0.84
+    ));
+  }
+
+  for (const face of meta.geometryFaces) {
+    if (face.length === 3 && face.every(i => points[i])) {
+      group.add(createFaceMesh(points,face));
+    }
+  }
+
+  const label = createTextSprite(data.molecularGeometry,{
+    background:"rgba(235,255,250,0.95)",
+    foreground:"#0f6154",
+    border:"rgba(70,215,192,0.55)",
+    fontPx:46,
+    worldHeight:0.0105
+  });
+  label.position.copy(overlayLabelPosition(points));
+  group.add(label);
+
+  return group;
+}
+
+function angleAxis(a,b) {
+  const axis = a.clone().cross(b);
+  if (axis.lengthSq() > 1e-10) return axis.normalize();
+
+  /* 180°: eine stabile Ebene für den Halbkreis wählen. */
+  const candidate = Math.abs(a.z) < 0.8 ? v(0,0,1) : v(0,1,0);
+  return a.clone().cross(candidate).normalize();
+}
+
+function formatAngle(value) {
+  const rounded = Math.round(value*10)/10;
+  const isInteger = Math.abs(rounded-Math.round(rounded)) < 1e-9;
+  const text = isInteger ? String(Math.round(rounded)) : rounded.toFixed(1).replace(".",",");
+  return `${text}°`;
+}
+
+export function createAngleOverlay(molecule, data) {
+  const meta = molecule?.userData?.epa;
+  const angleData = data?.representativeBondAngle;
+  if (!meta?.angleDirections || !angleData) return null;
+
+  const a = meta.angleDirections[0].clone().normalize();
+  const b = meta.angleDirections[1].clone().normalize();
+  const dot = THREE.MathUtils.clamp(a.dot(b),-1,1);
+  const geometricAngle = Math.acos(dot);
+  const axis = angleAxis(a,b);
+
+  const lengths = meta.outerPositions
+    .map(p => p.length())
+    .filter(n => Number.isFinite(n) && n > 0);
+  const minBondLength = lengths.length ? Math.min(...lengths) : 0.035;
+  const radius = THREE.MathUtils.clamp(
+    minBondLength*DISPLAY.angleRadiusFactor,
+    0.014,
+    0.022
+  );
+
+  const arcPoints = [];
+  const segments = Math.max(28,Math.round(geometricAngle/Math.PI*72));
+  for (let i=0;i<=segments;i++) {
+    const t = geometricAngle*(i/segments);
+    const q = new THREE.Quaternion().setFromAxisAngle(axis,t);
+    arcPoints.push(a.clone().applyQuaternion(q).multiplyScalar(radius));
+  }
+
+  const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+  const material = new THREE.LineBasicMaterial({
+    color:DISPLAY.color.angle,
+    transparent:true,
+    opacity:0.98,
+    depthTest:false,
+    depthWrite:false
+  });
+  const arc = new THREE.Line(geometry,material);
+  arc.renderOrder = 15;
+
+  const group = new THREE.Group();
+  group.name = "bondAngleOverlay";
+  group.add(arc);
+
+  /* Kleine Endmarken erhöhen die Lesbarkeit des Winkelbogens. */
+  const tickLength = 0.0032;
+  for (const endpoint of [arcPoints[0],arcPoints[arcPoints.length-1]]) {
+    const radial = endpoint.clone().normalize();
+    group.add(createOverlayCylinder(
+      endpoint.clone().addScaledVector(radial,-tickLength/2),
+      endpoint.clone().addScaledVector(radial, tickLength/2),
+      0.00058,
+      DISPLAY.color.angle,
+      0.98
+    ));
+  }
+
+  const midQ = new THREE.Quaternion().setFromAxisAngle(axis,geometricAngle/2);
+  const midDir = a.clone().applyQuaternion(midQ).normalize();
+
+  const label = createTextSprite(formatAngle(angleData.value),{
+    background:"rgba(255,250,220,0.97)",
+    foreground:"#6b5200",
+    border:"rgba(255,213,74,0.72)",
+    fontPx:58,
+    worldHeight:0.0115
+  });
+  label.position.copy(midDir.multiplyScalar(radius+0.010));
+  group.add(label);
+
+  return group;
+}
+
+
+/* -----------------------------------------------------
+   Freie Elektronenpaare / Elektronenwolken
+   ----------------------------------------------------- */
+
+function createLonePairLobe(direction, centralAtomRadius, scaleFactor=1) {
+  /*
+    Kein Orbitalmodell: Diese Form ist eine didaktische EPA-Wolke.
+    Sie beginnt schmal nahe am Zentralatom und wird nach außen breiter.
+    Zwei ineinander liegende transparente Volumina geben ihr eine
+    weichere, wolkenartige Erscheinung.
+  */
+  const dir=direction.clone().normalize();
+
+  const baseLength=0.032*scaleFactor;
+  const baseWidth=0.0082*scaleFactor;
+
+  const profile=[
+    new THREE.Vector2(0.00045,0.0000),
+    new THREE.Vector2(baseWidth*0.48,baseLength*0.13),
+    new THREE.Vector2(baseWidth*0.82,baseLength*0.34),
+    new THREE.Vector2(baseWidth,     baseLength*0.54),
+    new THREE.Vector2(baseWidth*0.86,baseLength*0.72),
+    new THREE.Vector2(baseWidth*0.52,baseLength*0.89),
+    new THREE.Vector2(0.00035,       baseLength)
+  ];
+
+  const outerGeometry=new THREE.LatheGeometry(profile,40);
+  const outerMaterial=new THREE.MeshPhongMaterial({
+    color:DISPLAY.color.lonePairOuter,
+    transparent:true,
+    opacity:0.30,
+    shininess:18,
+    side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+  const outer=new THREE.Mesh(outerGeometry,outerMaterial);
+  outer.quaternion.setFromUnitVectors(v(0,1,0),dir);
+  outer.position.copy(dir).multiplyScalar(centralAtomRadius*0.56);
+  outer.renderOrder=8;
+
+  const innerGeometry=outerGeometry.clone();
+  const innerMaterial=new THREE.MeshPhongMaterial({
+    color:DISPLAY.color.lonePairInner,
+    transparent:true,
+    opacity:0.18,
+    shininess:28,
+    side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+  const inner=new THREE.Mesh(innerGeometry,innerMaterial);
+  inner.scale.set(0.72,0.84,0.72);
+  inner.position.y=baseLength*0.04;
+  inner.renderOrder=9;
+  outer.add(inner);
+
+  return outer;
+}
+
+export function createLonePairOverlay(molecule,data) {
+  const meta=molecule?.userData?.epa;
+  const directions=meta?.lonePairDirections ?? [];
+  const expected=Number(data?.lonePairsOnEpaAtom ?? 0);
+
+  if(!directions.length || expected<=0)return null;
+
+  const group=new THREE.Group();
+  group.name="lonePairOverlay";
+
+  const centralRadius=DISPLAY.atomRadius[data.epaAtom] ?? 0.010;
+  const cloudScale=data.epaAtom==="Cl" ? 1.08 : 1.0;
+
+  for(const direction of directions.slice(0,expected)){
+    group.add(createLonePairLobe(direction,centralRadius,cloudScale));
+  }
+
+  return group;
+}
+
+export function disposeMolecule(root) {
+  if (!root) return;
+  root.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) {
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const material of materials) {
+        if (material?.map) material.map.dispose?.();
+        material?.dispose?.();
+      }
+    }
+  });
+}
