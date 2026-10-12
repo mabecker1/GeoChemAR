@@ -1,0 +1,25 @@
+GeoChemAR Mesomerie1 – Methanolat-Anion CH3O−
+
+Quantenchemische Berechnung der Elektronendichteoberfläche
+-----------------------------------------------------------
+Methode: Restricted Hartree-Fock (RHF)
+Basissatz: STO-3G
+Gesamtladung: -1
+Elektronen: 18
+Besetzte räumliche Orbitale: 9
+Geometrie: idealisiert tetraedrisches CH3O−
+C–O: 1.410 Å
+C–H: 1.090 Å
+Elektronendichte-Isowert: 0.002000 e/bohr^3
+RHF/STO-3G-Gesamtenergie: -112.691764838144 Hartree
+
+Oberfläche:
+Vertices: 6046
+Dreiecke: 12088
+
+Das elektrostatische Potential auf der dargestellten Oberfläche ist beim
+Methanolat-Anion vollständig negativ. Für eine gut erkennbare räumliche
+Farbdifferenzierung wird deshalb der Bereich zwischen dem 2. und 98.
+Perzentil relativ auf die beim Ethanol verwendete Rot–Gelb–Grün–Cyan–Blau-
+Skala abgebildet. Rot bedeutet relativ negativer/elektronenreicher, Blau
+relativ weniger negativ/elektronenärmer; Blau bedeutet hier nicht positiv.
