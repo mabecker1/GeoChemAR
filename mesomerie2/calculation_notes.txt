@@ -1,5 +1,6 @@
-GeoChemAR Mesomerie2 – Carbonat-Anion CO3^2−
+GeoChemAR Mesomerie2a – Carbonat-Anion CO3^2−
 
-Ball-and-Stick-Modell: trigonal-planar, drei gleichlange C–O-Bindungen.
-Die Oberfläche ist eine berechnete Elektronendichte-Proxy-Oberfläche mit Rot-Gelb-Grün-Cyan-Blau-Farbskala.
-Rot = relativ elektronenreicher, Blau = relativ elektronenärmer.
+Verbesserungen:
+- Ball-and-Stick als mesomere Grenzstruktur: eine C=O-Doppelbindung und zwei O⁻-Zentren.
+- Elektronendichteoberfläche neu berechnet als symmetrische Carbonat-Oberfläche.
+- Farbskala korrigiert: hohe Elektronendichte an den O-Atomen (rot), niedrigere am C-Atom (blau).

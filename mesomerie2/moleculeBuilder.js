@@ -17,7 +17,8 @@ const DISPLAY = Object.freeze({
     O: 0xd93636,
     bond: 0xb8bec7
   }),
-  bondRadius: 0.00195
+  bondRadius: 0.00195,
+  doubleBondSeparation: 0.00265
 });
 
 const BOND = Object.freeze({ CO: 1.281 });
@@ -53,18 +54,36 @@ function createBondCylinder(start,end,radius,material){
   return mesh;
 }
 
+function bondMaterial(){
+  return new THREE.MeshStandardMaterial({
+    color:DISPLAY.color.bond,
+    roughness:0.65,
+    metalness:0
+  });
+}
+
 function addBond(group,atomA,atomB,elementA,elementB){
   const axis=atomB.clone().sub(atomA);
   if(axis.lengthSq()<=1e-12)return;
   const direction=axis.clone().normalize();
   const start=atomA.clone().addScaledVector(direction,DISPLAY.atomRadius[elementA]);
   const end=atomB.clone().addScaledVector(direction,-DISPLAY.atomRadius[elementB]);
-  const material=new THREE.MeshStandardMaterial({
-    color:DISPLAY.color.bond,
-    roughness:0.65,
-    metalness:0
-  });
-  group.add(createBondCylinder(start,end,DISPLAY.bondRadius,material));
+  group.add(createBondCylinder(start,end,DISPLAY.bondRadius,bondMaterial()));
+}
+
+function addDoubleBond(group,atomA,atomB,elementA,elementB,planeNormal){
+  const axis=atomB.clone().sub(atomA);
+  if(axis.lengthSq()<=1e-12)return;
+  const direction=axis.clone().normalize();
+  let offset = planeNormal.clone().cross(direction);
+  if(offset.lengthSq() < 1e-12){
+    offset = new THREE.Vector3(0,0,1).cross(direction);
+  }
+  offset.normalize().multiplyScalar(DISPLAY.doubleBondSeparation);
+  const startBase=atomA.clone().addScaledVector(direction,DISPLAY.atomRadius[elementA]);
+  const endBase=atomB.clone().addScaledVector(direction,-DISPLAY.atomRadius[elementB]);
+  group.add(createBondCylinder(startBase.clone().add(offset), endBase.clone().add(offset), DISPLAY.bondRadius*0.88, bondMaterial()));
+  group.add(createBondCylinder(startBase.clone().sub(offset), endBase.clone().sub(offset), DISPLAY.bondRadius*0.88, bondMaterial()));
 }
 
 function carbonateCoordinates(){
@@ -81,22 +100,22 @@ function carbonateCoordinates(){
   return points;
 }
 
-function createChargeSprite(text){
-  const size=170;
+function createChargeSprite(text, scale=0.020){
+  const size=168;
   const canvas=document.createElement("canvas");
   canvas.width=size;
   canvas.height=size;
   const ctx=canvas.getContext("2d");
   ctx.clearRect(0,0,size,size);
   ctx.beginPath();
-  ctx.arc(size/2,size/2,size*0.39,0,Math.PI*2);
-  ctx.fillStyle="rgba(255,255,255,0.96)";
+  ctx.arc(size/2,size/2,size*0.36,0,Math.PI*2);
+  ctx.fillStyle="rgba(255,255,255,0.98)";
   ctx.fill();
-  ctx.lineWidth=7;
+  ctx.lineWidth=6;
   ctx.strokeStyle="rgba(20,20,20,0.95)";
   ctx.stroke();
   ctx.fillStyle="#111111";
-  ctx.font="bold 105px Arial, sans-serif";
+  ctx.font="bold 110px Arial, sans-serif";
   ctx.textAlign="center";
   ctx.textBaseline="middle";
   ctx.fillText(text,size/2,size/2-2);
@@ -109,7 +128,7 @@ function createChargeSprite(text){
     depthWrite:false
   });
   const sprite=new THREE.Sprite(material);
-  sprite.scale.set(0.026,0.026,1);
+  sprite.scale.set(scale,scale,1);
   sprite.renderOrder=20;
   sprite.userData.kind="charge-label";
   return sprite;
@@ -122,16 +141,26 @@ export function buildMolecule(data){
   const g=new THREE.Group();
   g.name="CARBONATE";
   const p=carbonateCoordinates();
-  addBond(g,p.C,p.O1,"C","O");
+  const planeNormal = new THREE.Vector3(0,0,1);
+
+  // Eine mesomere Grenzstruktur: eine Doppelbindung und zwei negativ geladene O-Atome.
+  addDoubleBond(g,p.C,p.O1,"C","O",planeNormal);
   addBond(g,p.C,p.O2,"C","O");
   addBond(g,p.C,p.O3,"C","O");
+
   g.add(createAtom("C",p.C));
   g.add(createAtom("O",p.O1));
   g.add(createAtom("O",p.O2));
   g.add(createAtom("O",p.O3));
-  const charge=createChargeSprite("2−");
-  charge.position.set(0.022,0.025,0.010);
-  g.add(charge);
+
+  const minus2 = createChargeSprite("−",0.0185);
+  minus2.position.copy(p.O2.clone().add(p.O2.clone().sub(p.C).normalize().multiplyScalar(0.018)).add(new THREE.Vector3(0,0,0.004)));
+  g.add(minus2);
+
+  const minus3 = createChargeSprite("−",0.0185);
+  minus3.position.copy(p.O3.clone().add(p.O3.clone().sub(p.C).normalize().multiplyScalar(0.018)).add(new THREE.Vector3(0,0,0.004)));
+  g.add(minus3);
+
   return g;
 }
 

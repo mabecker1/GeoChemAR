@@ -1,11 +1,10 @@
 {
   "formula": "CO3^2-",
   "name": "Carbonat-Anion",
-  "surface_model": "gaussian-density + charge-colored surface",
+  "surface_model": "recalculated proxy surface with oxygen-high / carbon-low electron-density coloring",
   "co_bond_length_angstrom": 1.281,
-  "density_isovalue": 0.48,
-  "vertices": 10072,
-  "faces": 20140,
-  "esp_percentile_2": -1.029272779416415,
-  "esp_percentile_98": -0.8322142330956539
+  "density_isovalue": 0.53,
+  "vertices": 9676,
+  "faces": 19348,
+  "coloring": "oxygen regions = high (red), carbon region = low (blue)"
 }
