@@ -1,321 +1,372 @@
 import * as THREE from "../libs/three.module.min.js";
-import { WATER_SURFACE_DATA } from "./waterSurfaceData.js";
+import {
+  WATER_SURFACE_POSITIONS,
+  WATER_SURFACE_INDICES,
+  WATER_SURFACE_COLORS
+} from "./waterSurfaceData.js";
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
-const WATER_MODEL=[["O", [0.0, 0.0, 0.0]], ["H", [0.58773, 0.75906, 0.0]], ["H", [0.58773, -0.75906, 0.0]]];
-const HEXANE_MODEL=[["C", [-3.125, -0.445, 0.0]], ["C", [-1.875, 0.445, 0.0]], ["C", [-0.625, -0.445, 0.0]], ["C", [0.625, 0.445, 0.0]], ["C", [1.875, -0.445, 0.0]], ["C", [3.125, 0.445, 0.0]], ["H", [-2.92132, -1.3575, -0.56033]], ["H", [-3.95225, 0.09044, -0.46589]], ["H", [-3.38935, -0.70015, 1.02621]], ["H", [-1.875, 1.07431, 0.88998]], ["H", [-1.875, 1.07431, -0.88998]], ["H", [-0.625, -1.07431, -0.88998]], ["H", [-0.625, -1.07431, 0.88998]], ["H", [0.625, 1.07431, 0.88998]], ["H", [0.625, 1.07431, -0.88998]], ["H", [1.875, -1.07431, -0.88998]], ["H", [1.875, -1.07431, 0.88998]], ["H", [3.72396, 0.2302, 0.88499]], ["H", [2.82496, 1.49284, 0.0099]], ["H", [3.71401, 0.24417, -0.89489]]];
+/*
+  GeoChemAR – Ablenkungsversuch 1a
+  Makroebene: feiner senkrechter Flüssigkeitsstrahl, horizontaler negativ geladener Stab.
+  Submikroebene: bewegte Molekülreihe im Strahl.
+*/
 
-const ATOM_STYLE={
-  O: { color:0xd83b3b, radius:0.020 },
-  C: { color:0x1f2937, radius:0.0185 },
-  H: { color:0xffffff, radius:0.0135 }
-};
+const ANGSTROM_TO_SCENE = 0.033;
+const SURFACE_OPACITY = 0.86; // weniger transparent als EN1
 
-const BOND_STYLE={ color:0xcbd5e1, radius:0.0055 };
-const SURFACE_OPACITY=0.84;
+const DISPLAY = Object.freeze({
+  atomRadius: Object.freeze({ H:0.0070, C:0.0110, O:0.0100 }),
+  color: Object.freeze({ H:0xffffff, C:0x202020, O:0xd93636, bond:0xb8bec7 }),
+  bondRadius: 0.0020
+});
 
-function createAtom(symbol){
-  const style=ATOM_STYLE[symbol];
-  const geom=new THREE.SphereGeometry(style.radius, 24, 18);
-  const mat=new THREE.MeshStandardMaterial({
-    color:style.color, roughness:0.34, metalness:0.05
+function v(x,y,z){ return new THREE.Vector3(x,y,z); }
+
+function atomMaterial(element){
+  return new THREE.MeshStandardMaterial({
+    color:DISPLAY.color[element],
+    roughness:element==="H"?0.48:0.58,
+    metalness:0
   });
-  return new THREE.Mesh(geom,mat);
 }
 
-function createBond(a,b){
-  const start=new THREE.Vector3(...a);
-  const end=new THREE.Vector3(...b);
-  const delta=new THREE.Vector3().subVectors(end,start);
-  const len=delta.length();
-  const geom=new THREE.CylinderGeometry(BOND_STYLE.radius,BOND_STYLE.radius,len,18,1,true);
-  const mat=new THREE.MeshStandardMaterial({ color:BOND_STYLE.color, roughness:0.45, metalness:0.0 });
-  const mesh=new THREE.Mesh(geom,mat);
-  const mid=start.clone().add(end).multiplyScalar(0.5);
-  mesh.position.copy(mid);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), delta.normalize());
+function createAtom(element,position){
+  const r=DISPLAY.atomRadius[element];
+  const mesh=new THREE.Mesh(
+    new THREE.SphereGeometry(r,element==="H"?28:36,element==="H"?20:26),
+    atomMaterial(element)
+  );
+  mesh.position.copy(position);
+  mesh.userData.kind="atom";
   return mesh;
 }
 
-function buildWaterBallStick(){
-  const group=new THREE.Group();
-  const oxygen=WATER_MODEL[0][1];
-  const h1=WATER_MODEL[1][1];
-  const h2=WATER_MODEL[2][1];
-  group.add(createBond(oxygen,h1));
-  group.add(createBond(oxygen,h2));
-  for(const [sym,pos] of WATER_MODEL){
-    const atom=createAtom(sym);
-    atom.position.set(...pos);
-    group.add(atom);
-  }
-  return group;
+function createBond(start,end,elementA,elementB){
+  const axis=end.clone().sub(start);
+  const len=axis.length();
+  if(len<1e-9)return null;
+  const dir=axis.clone().normalize();
+  const a=start.clone().addScaledVector(dir,DISPLAY.atomRadius[elementA]);
+  const b=end.clone().addScaledVector(dir,-DISPLAY.atomRadius[elementB]);
+  const segment=b.clone().sub(a);
+  const mesh=new THREE.Mesh(
+    new THREE.CylinderGeometry(DISPLAY.bondRadius,DISPLAY.bondRadius,segment.length(),22,1,false),
+    new THREE.MeshStandardMaterial({color:DISPLAY.color.bond,roughness:0.62,metalness:0})
+  );
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(v(0,1,0),segment.normalize());
+  mesh.userData.kind="bond";
+  return mesh;
 }
 
-function buildHexaneBallStick(){
-  const group=new THREE.Group();
-  const carbons=[];
-  const hydrogens=[];
-  for(const [sym,pos] of HEXANE_MODEL){
-    if(sym==='C')carbons.push(pos);
-    else hydrogens.push(pos);
+function buildWater(){
+  const g=new THREE.Group();
+  g.name="H2O";
+  const gamma=THREE.MathUtils.degToRad(104.5);
+  const half=gamma/2;
+  const d=0.958*ANGSTROM_TO_SCENE;
+  // Gleiche zentrierte Geometrie wie die in EN1 verwendete Wasser-Oberfläche.
+  const rawO=v(0,0,0);
+  const rawH1=v( Math.sin(half)*d,0,-Math.cos(half)*d);
+  const rawH2=v(-Math.sin(half)*d,0,-Math.cos(half)*d);
+  const center=new THREE.Box3().setFromPoints([rawO,rawH1,rawH2]).getCenter(new THREE.Vector3());
+  const O=rawO.clone().sub(center);
+  const H1=rawH1.clone().sub(center);
+  const H2=rawH2.clone().sub(center);
+  g.add(createBond(O,H1,"O","H"));
+  g.add(createBond(O,H2,"O","H"));
+  g.add(createAtom("O",O));
+  g.add(createAtom("H",H1));
+  g.add(createAtom("H",H2));
+  return g;
+}
+
+const HEXANE_ATOMS = [
+  ["C",[-3.125,-0.445,0.000]],["C",[-1.875,0.445,0.000]],["C",[-0.625,-0.445,0.000]],
+  ["C",[0.625,0.445,0.000]],["C",[1.875,-0.445,0.000]],["C",[3.125,0.445,0.000]],
+  ["H",[-2.92132,-1.35750,-0.56033]],["H",[-3.95225,0.09044,-0.46589]],["H",[-3.38935,-0.70015,1.02621]],
+  ["H",[-1.875,1.07431,0.88998]],["H",[-1.875,1.07431,-0.88998]],
+  ["H",[-0.625,-1.07431,-0.88998]],["H",[-0.625,-1.07431,0.88998]],
+  ["H",[0.625,1.07431,0.88998]],["H",[0.625,1.07431,-0.88998]],
+  ["H",[1.875,-1.07431,-0.88998]],["H",[1.875,-1.07431,0.88998]],
+  ["H",[3.72396,0.23020,0.88499]],["H",[2.82496,1.49284,0.00990]],["H",[3.71401,0.24417,-0.89489]]
+];
+
+function buildHexane(){
+  const g=new THREE.Group();
+  g.name="C6H14";
+  const atoms=HEXANE_ATOMS.map(([el,p])=>({el,p:v(p[0],p[1],p[2]).multiplyScalar(ANGSTROM_TO_SCENE)}));
+  const carbonIndices=[];
+  atoms.forEach((a,i)=>{if(a.el==="C")carbonIndices.push(i);});
+  for(let i=0;i<carbonIndices.length-1;i++){
+    const a=atoms[carbonIndices[i]],b=atoms[carbonIndices[i+1]];
+    g.add(createBond(a.p,b.p,"C","C"));
   }
-  // Carbon-carbon bonds
-  for(let i=0;i<5;i++)group.add(createBond(carbons[i],carbons[i+1]));
-  // Carbon-hydrogen bonds: each hydrogen belongs to nearest carbon
-  for(const [sym,pos] of HEXANE_MODEL){
-    if(sym!=='H')continue;
-    let bestIdx=0,best=Infinity;
-    for(let i=0;i<6;i++){
-      const dx=pos[0]-carbons[i][0],dy=pos[1]-carbons[i][1],dz=pos[2]-carbons[i][2];
-      const d=dx*dx+dy*dy+dz*dz;
-      if(d<best){best=d;bestIdx=i;}
+  atoms.forEach((a,i)=>{
+    if(a.el!=="H")return;
+    let best=null,bestD=Infinity;
+    for(const ci of carbonIndices){
+      const d=a.p.distanceToSquared(atoms[ci].p);
+      if(d<bestD){bestD=d;best=atoms[ci];}
     }
-    group.add(createBond(carbons[bestIdx],pos));
-  }
-  for(const [sym,pos] of HEXANE_MODEL){
-    const atom=createAtom(sym);
-    atom.position.set(...pos);
-    group.add(atom);
-  }
-  return group;
+    g.add(createBond(best.p,a.p,"C","H"));
+  });
+  for(const a of atoms)g.add(createAtom(a.el,a.p));
+  return g;
 }
 
-function buildMolecule(data){
-  const group = data.key==='water' ? buildWaterBallStick() : buildHexaneBallStick();
-  group.traverse(obj=>{ obj.userData.moleculePart=true; });
-  return group;
+function flattenNested(arr){
+  if(!Array.isArray(arr))return arr;
+  if(!arr.length)return [];
+  return Array.isArray(arr[0])?arr.flat():arr;
 }
 
-function buildSurfaceMesh(surfaceData){
+function createSurfaceMesh(positions,indices,colors,scale=1){
+  const rawPos=flattenNested(positions);
+  const pos=new Float32Array(rawPos.length);
+  for(let i=0;i<rawPos.length;i++)pos[i]=rawPos[i]*scale;
+  const rawCol=flattenNested(colors);
+  const rawIdx=flattenNested(indices);
   const geometry=new THREE.BufferGeometry();
-  const positions=new Float32Array(surfaceData.positions.flat());
-  const colors=new Float32Array(surfaceData.colors.flat());
-  const indices=new Uint32Array(surfaceData.indices.flat());
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors,3));
-  geometry.setIndex(new THREE.BufferAttribute(indices,1));
+  geometry.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  geometry.setAttribute("color",new THREE.Float32BufferAttribute(rawCol,3));
+  geometry.setIndex(rawIdx);
   geometry.computeVertexNormals();
   const material=new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
     opacity:SURFACE_OPACITY,
-    side:THREE.FrontSide,
-    shininess:64,
-    specular:new THREE.Color(0xffffff),
+    shininess:72,
+    specular:0x555555,
+    side:THREE.DoubleSide,
     depthWrite:false
   });
   const mesh=new THREE.Mesh(geometry,material);
   mesh.renderOrder=4;
-  mesh.userData.kind='density-surface';
+  mesh.userData.kind="density-surface";
   return mesh;
 }
 
-export function createDensitySurfaceFor(data){
-  return buildSurfaceMesh(data.key==='water' ? WATER_SURFACE_DATA : HEXANE_SURFACE_DATA);
-}
-
-function createNegativeRod(height=0.30){
-  const group=new THREE.Group();
-  const rod=new THREE.Mesh(
-    new THREE.CylinderGeometry(0.008,0.008,height,22),
-    new THREE.MeshStandardMaterial({ color:0x4b5563, roughness:0.55, metalness:0.18 })
-  );
-  rod.rotation.z=Math.PI/16;
-  group.add(rod);
-  const positions=[0.09,0,-0.09];
-  for(const y of positions){
-    const badge=createTextBadge('−',{
-      fill:'#111827',
-      text:'#ffffff',
-      ring:'#ffffff',
-      size:160,
-      font:'bold 118px Arial'
-    });
-    badge.scale.set(0.048,0.048,0.048);
-    badge.position.set(0.028,y,0.0);
-    group.add(badge);
+function createDensitySurface(data){
+  if(data.key==="water"){
+    return createSurfaceMesh(WATER_SURFACE_POSITIONS,WATER_SURFACE_INDICES,WATER_SURFACE_COLORS,1);
   }
-  return group;
+  return createSurfaceMesh(
+    HEXANE_SURFACE_DATA.positions,
+    HEXANE_SURFACE_DATA.indices,
+    HEXANE_SURFACE_DATA.colors,
+    ANGSTROM_TO_SCENE
+  );
 }
 
-function createTextBadge(text, options={}){
-  const size=options.size||160;
-  const canvas=document.createElement('canvas');
-  canvas.width=size; canvas.height=size;
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,size,size);
-  ctx.beginPath();
-  ctx.arc(size/2,size/2,size*0.38,0,Math.PI*2);
-  ctx.fillStyle=options.fill||'#ffffff';
-  ctx.fill();
-  ctx.lineWidth=size*0.04;
-  ctx.strokeStyle=options.ring||'#111827';
-  ctx.stroke();
-  ctx.fillStyle=options.text||'#111827';
-  ctx.font=options.font||`bold ${Math.floor(size*0.55)}px Arial`;
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText(text,size/2,size/2+size*0.02);
-  const texture=new THREE.CanvasTexture(canvas);
-  texture.needsUpdate=true;
-  const material=new THREE.SpriteMaterial({ map:texture, transparent:true, depthWrite:false });
-  const sprite=new THREE.Sprite(material);
-  sprite.renderOrder=8;
+function createMoleculePrototype(data,withSurface){
+  const g=data.key==="water"?buildWater():buildHexane();
+  if(withSurface)g.add(createDensitySurface(data));
+  return g;
+}
+
+function createMinusSprite(worldSize=0.010){
+  const canvas=document.createElement("canvas");
+  canvas.width=64;canvas.height=64;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,64,64);
+  ctx.fillStyle="#ffffff";
+  ctx.font="700 54px Arial, sans-serif";
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.fillText("−",32,31);
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.minFilter=THREE.LinearFilter;tex.magFilter=THREE.LinearFilter;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
+  sprite.scale.set(worldSize,worldSize,1);
+  sprite.renderOrder=20;
   return sprite;
+}
+
+function createChargedRod({y=-0.008,z=0,length=0.135,radius=0.0085}={}){
+  const g=new THREE.Group();
+  const rod=new THREE.Mesh(
+    new THREE.CylinderGeometry(radius,radius,length,26,1,false),
+    new THREE.MeshStandardMaterial({color:0x344054,roughness:0.5,metalness:0.1})
+  );
+  rod.rotation.z=-Math.PI/2;
+  rod.position.set(0.085,y,z);
+  g.add(rod);
+
+  // Viele kleine negative Ladungszeichen entlang des Stabs.
+  const count=18;
+  for(let i=0;i<count;i++){
+    const s=createMinusSprite(0.0105);
+    const x=0.025+(i/(count-1))*0.120;
+    const row=(i%2===0)?0.006:-0.006;
+    s.position.set(x,y+row,z+radius+0.0025);
+    g.add(s);
+  }
+  return g;
 }
 
 function createMagnifierSprite(){
-  const size=256;
-  const canvas=document.createElement('canvas');
-  canvas.width=size; canvas.height=size;
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,size,size);
-  ctx.lineCap='round';
-  ctx.lineJoin='round';
-  ctx.strokeStyle='rgba(255,255,255,0.98)';
-  ctx.lineWidth=22;
-  ctx.beginPath();
-  ctx.arc(108,108,62,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(152,152); ctx.lineTo(212,212); ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,0.16)';
-  ctx.beginPath();
-  ctx.arc(108,108,52,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,0.92)';
-  ctx.font='bold 40px Arial';
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('Lupe', 116, 232);
-  const tex=new THREE.CanvasTexture(canvas);
-  tex.needsUpdate=true;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
-  sprite.scale.set(0.105,0.105,0.105);
-  sprite.userData.interactive='magnifier';
-  sprite.renderOrder=10;
+  const canvas=document.createElement("canvas");
+  canvas.width=256;canvas.height=256;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,256,256);
+  ctx.lineCap="round";
+  ctx.strokeStyle="rgba(255,255,255,.98)";
+  ctx.lineWidth=20;
+  ctx.beginPath();ctx.arc(105,103,58,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(147,145);ctx.lineTo(214,212);ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,.14)";
+  ctx.beginPath();ctx.arc(105,103,48,0,Math.PI*2);ctx.fill();
+  const texture=new THREE.CanvasTexture(canvas);
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthWrite:false,depthTest:false}));
+  sprite.scale.set(0.063,0.063,1);
+  sprite.renderOrder=15;
+  sprite.userData.interactive="magnifier";
+  sprite.userData.baseScale=0.063;
   return sprite;
 }
 
-function createStreamTube(points, color, radius=0.012, opacity=0.75){
-  const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
-  const geom=new THREE.TubeGeometry(curve, 60, radius, 18, false);
-  const mat=new THREE.MeshPhongMaterial({
-    color, transparent:true, opacity, shininess:60, specular:new THREE.Color(0xffffff)
-  });
-  const mesh=new THREE.Mesh(geom,mat);
-  return {curve, mesh};
+function createTube(points,{radius=0.005,color=0x9bd7ff,opacity=0.72}={}){
+  const curve=new THREE.CatmullRomCurve3(points.map(p=>v(...p)),false,"catmullrom",0.45);
+  const geometry=new THREE.TubeGeometry(curve,64,radius,20,false);
+  const material=new THREE.MeshPhongMaterial({color,transparent:true,opacity,shininess:80,specular:0xffffff,depthWrite:false});
+  return {curve,mesh:new THREE.Mesh(geometry,material)};
+}
+
+function createNozzle(x){
+  const g=new THREE.Group();
+  const glass=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012,0.008,0.052,22,1,false),
+    new THREE.MeshPhongMaterial({color:0xdce9f5,transparent:true,opacity:0.62,shininess:90,specular:0xffffff})
+  );
+  glass.position.set(x,0.156,0);
+  g.add(glass);
+  const tip=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0075,0.0052,0.026,20,1,false),
+    new THREE.MeshPhongMaterial({color:0xcfd8e3,transparent:true,opacity:0.78,shininess:85,specular:0xffffff})
+  );
+  tip.position.set(x,0.118,0);
+  g.add(tip);
+  return g;
 }
 
 export function buildMacroScene(data){
   const group=new THREE.Group();
-  const rod=createNegativeRod(0.28);
-  rod.position.set(0.12,0.005,0.0);
-  group.add(rod);
+  const startX=-0.055;
+  group.add(createNozzle(startX));
+  group.add(createChargedRod({y:-0.008,length:0.135,radius:0.0085}));
 
-  const streamPoints = data.key==='water'
-    ? [[-0.09,0.20,0],[-0.09,0.10,0],[-0.075,0.02,0],[-0.045,-0.06,0],[-0.015,-0.15,0]]
-    : [[-0.085,0.20,0],[-0.085,0.10,0],[-0.083,0.02,0],[-0.082,-0.07,0],[-0.081,-0.15,0]];
-  const streamColor = data.key==='water' ? 0x9bd7ff : 0xe5eef6;
-  const streamOpacity = data.key==='water' ? 0.72 : 0.58;
-  const mainStream=createStreamTube(streamPoints, streamColor, data.key==='water'?0.012:0.011, streamOpacity);
-  group.add(mainStream.mesh);
-  const highlight=createStreamTube(streamPoints, 0xffffff, data.key==='water'?0.005:0.004, data.key==='water'?0.26:0.18);
+  const points=data.key==="water"
+    ? [[startX,0.108,0],[startX,0.065,0],[-0.052,0.030,0],[-0.043,0.004,0],[-0.029,-0.028,0],[-0.020,-0.075,0],[-0.018,-0.122,0]]
+    : [[startX,0.108,0],[startX,0.060,0],[startX,0.012,0],[startX,-0.038,0],[startX,-0.083,0],[startX,-0.122,0]];
+
+  const main=createTube(points,{
+    radius:data.key==="water"?0.0052:0.0048,
+    color:data.key==="water"?0x9edaff:0xdde6ed,
+    opacity:data.key==="water"?0.74:0.63
+  });
+  group.add(main.mesh);
+  const highlight=createTube(points,{radius:data.key==="water"?0.0016:0.0014,color:0xffffff,opacity:0.30});
+  highlight.mesh.position.z=0.0036;
   group.add(highlight.mesh);
 
   const magnifier=createMagnifierSprite();
-  magnifier.position.set(data.key==='water' ? -0.055 : -0.062, 0.015, 0.03);
-  magnifier.userData.baseScale=0.105;
+  magnifier.position.set(data.key==="water"?-0.047:startX,0.038,0.018);
   group.add(magnifier);
 
-  const subtleMolecule = buildMolecule(data);
-  subtleMolecule.scale.setScalar(data.key==='water'?0.18:0.075);
-  subtleMolecule.position.copy(magnifier.position).add(new THREE.Vector3(0.0,0.0,-0.002));
-  if(data.key==='water'){
-    subtleMolecule.rotation.z=0.25;
-  } else {
-    subtleMolecule.rotation.set(0.5,-0.3,0.7);
-  }
-  subtleMolecule.traverse(obj=>{
-    if(obj.material){
-      obj.material=obj.material.clone();
-      obj.material.transparent=true;
-      obj.material.opacity=0.78;
-      if(obj.material.color&&obj.material.color.getHex()===0xffffff)obj.material.opacity=0.92;
-    }
-  });
-  group.add(subtleMolecule);
-
-  const topNozzle=new THREE.Mesh(
-    new THREE.CylinderGeometry(0.018,0.013,0.04,18),
-    new THREE.MeshStandardMaterial({ color:0x6b7280, roughness:0.6, metalness:0.22 })
-  );
-  topNozzle.position.set(streamPoints[0][0],0.23,0);
-  group.add(topNozzle);
-
-  return { group, magnifier, interactiveObjects:[magnifier] };
+  return {group,magnifier,interactiveObjects:[magnifier]};
 }
 
-function cloneMoleculeWithOptionalSurface(data, showSurface){
-  const group=buildMolecule(data);
-  if(showSurface){
-    const surface=createDensitySurfaceFor(data);
-    group.add(surface);
-  }
-  return group;
+function seededEuler(i){
+  const a=(i*1.73)%6.28;
+  const b=(i*2.41+0.7)%6.28;
+  const c=(i*0.93+1.1)%6.28;
+  return new THREE.Euler(a,b,c,"XYZ");
 }
 
-const WATER_ROTATIONS=[
-  [0.0,0.0,0.0],[0.0,0.0,0.08],[0.0,0.0,-0.10],[0.10,0.0,0.02],[-0.08,0.0,0.05],
-  [0.06,0.0,-0.03],[-0.06,0.0,0.03],[0.03,0.04,0.02],[-0.03,-0.04,-0.02],[0.05,-0.03,0.04],[-0.05,0.03,-0.02]
-];
-const HEXANE_ROTATIONS=[
-  [0.3,0.2,0.8],[-0.45,0.1,1.2],[0.18,-0.55,0.35],[-0.25,0.48,-0.75],[0.6,-0.2,0.95],[-0.35,-0.4,0.3],[0.2,0.55,-1.0],[-0.52,0.18,-0.15]
-];
+function createMicroCurve(data){
+  const x=-0.052;
+  const pts=data.key==="water"
+    ? [[x,0.125,0],[x,0.075,0],[-0.049,0.035,0],[-0.039,0.004,0],[-0.026,-0.035,0],[-0.019,-0.083,0],[-0.018,-0.125,0]]
+    : [[x,0.125,0],[x,0.075,0],[x,0.025,0],[x,-0.025,0],[x,-0.075,0],[x,-0.125,0]];
+  return new THREE.CatmullRomCurve3(pts.map(p=>v(...p)),false,"catmullrom",0.45);
+}
 
-export function buildSubmicroScene(data, showSurface=false){
+export function buildSubmicroScene(data,showSurface=false){
   const group=new THREE.Group();
-  const rod=createNegativeRod(0.34);
-  rod.position.set(0.165,0.0,0.0);
-  group.add(rod);
+  group.add(createChargedRod({y:-0.008,length:0.135,radius:0.0085}));
 
-  const streamGuidePoints = data.key==='water'
-    ? [[-0.11,0.19,0],[-0.10,0.11,0],[-0.085,0.03,0],[-0.055,-0.05,0],[-0.02,-0.14,0]]
-    : [[-0.09,0.19,0],[-0.088,0.10,0],[-0.086,0.02,0],[-0.084,-0.06,0],[-0.082,-0.14,0]];
-  const ghost=createStreamTube(streamGuidePoints, data.key==='water'?0x9bd7ff:0xe6eef7, data.key==='water'?0.048:0.055, data.key==='water'?0.08:0.06);
-  group.add(ghost.mesh);
+  const curve=createMicroCurve(data);
+  const count=data.key==="water"?9:5;
+  const prototype=createMoleculePrototype(data,showSurface);
+  const molecules=[];
 
-  const curve=new THREE.CatmullRomCurve3(streamGuidePoints.map(p=>new THREE.Vector3(...p)));
-  const count=data.key==='water'?11:8;
   for(let i=0;i<count;i++){
-    const t=(i+0.5)/count;
-    const pos=curve.getPoint(t);
-    const molecule=cloneMoleculeWithOptionalSurface(data,showSurface);
-    if(data.key==='water'){
-      molecule.scale.setScalar(0.22);
-      const [rx,ry,rz]=WATER_ROTATIONS[i % WATER_ROTATIONS.length];
-      molecule.rotation.set(rx,ry,rz);
-    } else {
-      molecule.scale.setScalar(0.082);
-      const [rx,ry,rz]=HEXANE_ROTATIONS[i % HEXANE_ROTATIONS.length];
-      molecule.rotation.set(rx,ry,rz);
-    }
-    molecule.position.copy(pos);
-    molecule.userData.kind='micro-molecule';
-    group.add(molecule);
+    const m=prototype.clone(true);
+    const scale=data.key==="water"?0.92:0.34;
+    m.scale.setScalar(scale);
+    m.userData.phase=i/count;
+    m.userData.speed=data.key==="water"?0.000115:0.000100;
+    m.userData.baseEuler=seededEuler(i);
+    m.userData.tumbleSpeed=0.00022+(i%3)*0.000055;
+    group.add(m);
+    molecules.push(m);
   }
 
+  const localWaterPositiveAxis=v(0,0,-1);
+  const rodTip=v(0.017,-0.008,0);
+  const alignedQuat=new THREE.Quaternion();
+  const rollQuat=new THREE.Quaternion();
+  const tempDir=new THREE.Vector3();
+
+  group.userData.update=(now)=>{
+    for(let i=0;i<molecules.length;i++){
+      const m=molecules[i];
+      const t=(m.userData.phase+now*m.userData.speed)%1;
+      const p=curve.getPointAt(t);
+      m.position.copy(p);
+
+      if(data.key==="water"){
+        tempDir.copy(rodTip).sub(p).normalize();
+        alignedQuat.setFromUnitVectors(localWaterPositiveAxis,tempDir);
+        // kleine Drehung um die Dipolachse, die H-Seite bleibt zum negativen Stab gerichtet
+        rollQuat.setFromAxisAngle(tempDir,0.10*Math.sin(now*0.0014+i*1.7));
+        m.quaternion.copy(rollQuat).multiply(alignedQuat);
+      }else{
+        const e=m.userData.baseEuler;
+        const q0=new THREE.Quaternion().setFromEuler(e);
+        const axis=v(0.35+0.1*(i%2),0.65,0.48).normalize();
+        const qSpin=new THREE.Quaternion().setFromAxisAngle(axis,now*m.userData.tumbleSpeed);
+        m.quaternion.copy(qSpin).multiply(q0);
+      }
+    }
+  };
+
+  group.userData.densityVisible=showSurface;
   return group;
 }
 
-export function setDensityVisibility(root, visible){
-  root.traverse(obj=>{ if(obj.userData&&obj.userData.kind==='density-surface') obj.visible=visible; });
+export function setDensityVisibility(root,visible){
+  root.traverse(obj=>{
+    if(obj.userData?.kind==="density-surface")obj.visible=visible;
+  });
+  root.userData.densityVisible=visible;
 }
 
 export function disposeObject3D(root){
+  if(!root)return;
+  const geometries=new Set();
+  const materials=new Set();
+  const textures=new Set();
   root.traverse(obj=>{
-    if(obj.geometry) obj.geometry.dispose();
-    if(obj.material){
-      if(Array.isArray(obj.material)) obj.material.forEach(m=>{ if(m.map)m.map.dispose(); m.dispose(); });
-      else { if(obj.material.map)obj.material.map.dispose(); obj.material.dispose(); }
+    if(obj.geometry)geometries.add(obj.geometry);
+    const mats=obj.material?(Array.isArray(obj.material)?obj.material:[obj.material]):[];
+    for(const m of mats){
+      materials.add(m);
+      if(m.map)textures.add(m.map);
     }
   });
+  for(const t of textures)t.dispose?.();
+  for(const m of materials)m.dispose?.();
+  for(const g of geometries)g.dispose?.();
 }

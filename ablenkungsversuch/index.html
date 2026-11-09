@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – Ablenkungsversuch</title>
+<title>GeoChemAR – Ablenkungsversuch 1a</title>
 <style>
 :root{
   --ui-green:#2fac16;
@@ -290,7 +290,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMacroScene, buildSubmicroScene, setDensityVisibility, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="EN1a Wasser vs. Methan / Methan grün homogen / Core EPA-6a";
+const VERSION="Ablenkungsversuch-1a / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -583,6 +583,7 @@ let currentMagnifier=null;
 let currentView="macro";
 let densityVisible=false;
 let moleculeZoom=selectedMolecule.zoom.default;
+let viewTransition=null;
 
 const raycaster=new THREE.Raycaster();
 const pointerNdc=new THREE.Vector2();
@@ -593,7 +594,7 @@ function clampZoom(value){
 
 function applyContentZoom(value){
   moleculeZoom=clampZoom(value);
-  contentRoot.scale.setScalar(moleculeZoom);
+  if(!viewTransition)contentRoot.scale.setScalar(moleculeZoom);
   zoomValue.textContent=`${Math.round(moleculeZoom*100)} %`;
   zoomOutButton.disabled=moleculeZoom<=selectedMolecule.zoom.min+1e-9;
   zoomInButton.disabled=moleculeZoom>=selectedMolecule.zoom.max-1e-9;
@@ -614,9 +615,9 @@ function updateControlUI(){
   modeChip.textContent=isMicro?"Submikroebene":"Makroebene";
   backToMacroButton.hidden=!isMicro;
   densityToggleButton.disabled=!isMicro;
-  densityToggleButton.classList.toggle("active", isMicro && densityVisible);
-  densityToggleButton.setAttribute("aria-pressed", isMicro && densityVisible ? "true" : "false");
-  densityLegend.classList.toggle("visible", isMicro && densityVisible);
+  densityToggleButton.classList.toggle("active",isMicro&&densityVisible);
+  densityToggleButton.setAttribute("aria-pressed",isMicro&&densityVisible?"true":"false");
+  densityLegend.classList.toggle("visible",isMicro&&densityVisible);
 }
 
 function rebuildContent(){
@@ -624,30 +625,40 @@ function rebuildContent(){
   if(currentView==="macro"){
     const built=buildMacroScene(selectedMolecule);
     currentContentGroup=built.group;
-    currentInteractiveObjects=built.interactiveObjects || [];
-    currentMagnifier=built.magnifier || null;
-  } else {
+    currentInteractiveObjects=built.interactiveObjects||[];
+    currentMagnifier=built.magnifier||null;
+  }else{
     currentContentGroup=buildSubmicroScene(selectedMolecule,densityVisible);
     setDensityVisibility(currentContentGroup,densityVisible);
   }
   contentRoot.add(currentContentGroup);
-  applyContentZoom(moleculeZoom);
+  contentRoot.scale.setScalar(moleculeZoom);
   updateControlUI();
 }
 
 function showMacroView(){
+  viewTransition=null;
   currentView="macro";
   rebuildContent();
 }
 
 function showMicroView(){
+  viewTransition=null;
   currentView="micro";
   rebuildContent();
+}
+
+function startMicroscopeTransition(){
+  if(currentView!=="macro"||viewTransition)return;
+  viewTransition={start:performance.now(),duration:520};
 }
 
 function setCurrentMolecule(key){
   selectedMolecule=getMoleculeData(key);
   moleculeZoom=selectedMolecule.zoom.default;
+  currentView="macro";
+  densityVisible=false;
+  viewTransition=null;
   rebuildContent();
 }
 
@@ -664,8 +675,8 @@ moleculeSelect.addEventListener("change",()=>setCurrentMolecule(moleculeSelect.v
 densityToggleButton.addEventListener("click",()=>{
   if(currentView!=="micro")return;
   densityVisible=!densityVisible;
-  if(currentContentGroup)setDensityVisibility(currentContentGroup,densityVisible);
-  updateControlUI();
+  // Neu aufbauen, damit jede bewegte Molekülkopie dieselbe Oberfläche trägt.
+  rebuildContent();
 });
 
 backToMacroButton.addEventListener("click",showMacroView);
@@ -674,18 +685,17 @@ zoomInButton.addEventListener("click",()=>applyContentZoom(moleculeZoom+selected
 zoomResetButton.addEventListener("click",()=>applyContentZoom(selectedMolecule.zoom.default));
 
 function handleCanvasPointerDown(event){
-  if(currentView!=="macro"||!currentInteractiveObjects.length) return;
+  if(currentView!=="macro"||viewTransition||!currentInteractiveObjects.length)return;
   const rect=threeCanvas.getBoundingClientRect();
   pointerNdc.x=((event.clientX-rect.left)/rect.width)*2-1;
   pointerNdc.y=-((event.clientY-rect.top)/rect.height)*2+1;
   raycaster.setFromCamera(pointerNdc,camera);
   const hits=raycaster.intersectObjects(currentInteractiveObjects,true);
-  if(!hits.length) return;
-  const target=hits[0].object;
-  let node=target;
-  while(node && node!==scene){
-    if(node.userData && node.userData.interactive==="magnifier"){
-      showMicroView();
+  if(!hits.length)return;
+  let node=hits[0].object;
+  while(node&&node!==scene){
+    if(node.userData?.interactive==="magnifier"){
+      startMicroscopeTransition();
       return;
     }
     node=node.parent;
@@ -694,11 +704,29 @@ function handleCanvasPointerDown(event){
 
 threeCanvas.addEventListener("pointerdown",handleCanvasPointerDown);
 
+function easeInOutCubic(t){
+  return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+}
+
 function updateLessonVisuals(now){
-  if(currentMagnifier){
-    const base=currentMagnifier.userData.baseScale || 0.105;
-    const pulse=1+0.06*Math.sin(now*0.0065);
-    currentMagnifier.scale.set(base*pulse,base*pulse,base*pulse);
+  if(currentContentGroup?.userData?.update){
+    currentContentGroup.userData.update(now);
+  }
+
+  if(currentMagnifier&&!viewTransition){
+    const base=currentMagnifier.userData.baseScale||0.063;
+    const pulse=1+0.055*Math.sin(now*0.0065);
+    currentMagnifier.scale.set(base*pulse,base*pulse,1);
+  }
+
+  if(viewTransition){
+    const p=THREE.MathUtils.clamp((now-viewTransition.start)/viewTransition.duration,0,1);
+    const e=easeInOutCubic(p);
+    contentRoot.scale.setScalar(moleculeZoom*(1+1.10*e));
+    if(p>=1){
+      showMicroView();
+      contentRoot.scale.setScalar(moleculeZoom);
+    }
   }
 }
 
