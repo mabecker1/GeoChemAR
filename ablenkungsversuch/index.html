@@ -589,11 +589,28 @@ const raycaster=new THREE.Raycaster();
 const pointerNdc=new THREE.Vector2();
 
 const parentWorldQuaternion=new THREE.Quaternion();
+const desiredWorldYawQuaternion=new THREE.Quaternion();
+const inverseParentQuaternion=new THREE.Quaternion();
+const yawReferenceVector=new THREE.Vector3();
+const worldYAxis=new THREE.Vector3(0,1,0);
 
 function updateTeachingFrameAlignment(){
   if(!trackedCubeRoot.visible)return;
   trackedCubeRoot.getWorldQuaternion(parentWorldQuaternion);
-  contentRoot.quaternion.copy(parentWorldQuaternion).invert().normalize();
+
+  yawReferenceVector.set(1,0,0).applyQuaternion(parentWorldQuaternion);
+  yawReferenceVector.y=0;
+
+  if(yawReferenceVector.lengthSq()<1e-8){
+    desiredWorldYawQuaternion.identity();
+  }else{
+    yawReferenceVector.normalize();
+    const yawAngle=Math.atan2(-yawReferenceVector.z,yawReferenceVector.x);
+    desiredWorldYawQuaternion.setFromAxisAngle(worldYAxis,yawAngle);
+  }
+
+  inverseParentQuaternion.copy(parentWorldQuaternion).invert();
+  contentRoot.quaternion.copy(inverseParentQuaternion).multiply(desiredWorldYawQuaternion).normalize();
 }
 
 function clampZoom(value){

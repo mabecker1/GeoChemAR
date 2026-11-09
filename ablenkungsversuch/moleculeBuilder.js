@@ -319,10 +319,15 @@ export function buildSubmicroScene(data,showSurface=false){
   const alignedQuat=new THREE.Quaternion();
   const rollQuat=new THREE.Quaternion();
   const randomQuat=new THREE.Quaternion();
+  const desiredQuat=new THREE.Quaternion();
   const q0=new THREE.Quaternion();
   const tempDir=new THREE.Vector3();
+  let lastNow=null;
 
   group.userData.update=(now)=>{
+    const dt=Math.min(lastNow===null?0.016:Math.max((now-lastNow)/1000,0),0.05);
+    lastNow=now;
+
     for(let i=0;i<molecules.length;i++){
       const m=molecules[i];
       const t=(m.userData.phase+now*m.userData.speed)%1;
@@ -343,7 +348,17 @@ export function buildSubmicroScene(data,showSurface=false){
         const alignStart=0.26;
         const alignEnd=0.58;
         const s=THREE.MathUtils.smoothstep(t,alignStart,alignEnd);
-        m.quaternion.copy(randomQuat).slerp(alignedQuat,s);
+        desiredQuat.copy(randomQuat).slerp(alignedQuat,s).normalize();
+
+        if(!m.userData.currentQuaternion){
+          m.userData.currentQuaternion=desiredQuat.clone();
+        }
+        const current=m.userData.currentQuaternion;
+        if(current.dot(desiredQuat)<0)desiredQuat.multiplyScalar(-1);
+        const turnSpeed=2.8+3.6*s;
+        current.rotateTowards(desiredQuat,turnSpeed*dt);
+        current.normalize();
+        m.quaternion.copy(current);
       }else{
         q0.setFromEuler(m.userData.baseEuler);
         const qSpin=new THREE.Quaternion().setFromAxisAngle(m.userData.spinAxis,now*m.userData.tumbleSpeed);
