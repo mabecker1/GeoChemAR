@@ -7,8 +7,9 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1e
-  Makroebene: feiner senkrechter Flüssigkeitsstrahl, horizontaler negativ geladener Stab.
+  GeoChemAR – Ablenkungsversuch 1f
+  Makroebene: feiner senkrechter Flüssigkeitsstrahl und schräg geführter negativ geladener Stab.
+  Der Wasserstrahl wird geometrisch aus der tatsächlichen 3D-Lage des Stabs zu dessen Mantelfläche hin abgelenkt.
   Submikroebene: bewegte Molekülreihe im Strahl.
 */
 
@@ -183,10 +184,34 @@ function createMinusSprite(worldSize=0.010){
   return sprite;
 }
 
-const ROD_CENTER=v(0.018,-0.012,-0.010);
+const STREAM_X=-0.058;
+const STREAM_Z=0;
 const ROD_AXIS=v(1,0.27,0.08).normalize();
+const ROD_BASE_CENTER=v(0.018,-0.012,-0.010);
 const ROD_LENGTH=0.190;
 const ROD_RADIUS=0.0085;
+
+/* 1f: Der Stab bleibt exakt in der in 1e korrigierten Orientierung.
+   Nur sein Abstand zum Strahl wird vergrößert. Weil der Stab in der
+   Projektion am Strahl vorbeilaufen soll, liegt der reale Abstand vor
+   allem in der Tiefe. Wir verschieben daher entlang der echten kürzesten
+   Verbindung zwischen senkrechter Strahlachse und Stabachse. */
+function getRodGapDirection(center=ROD_BASE_CENTER){
+  const denom=ROD_AXIS.x*ROD_AXIS.x+ROD_AXIS.z*ROD_AXIS.z;
+  if(denom<1e-10)return v(0,0,-1);
+  const half=ROD_LENGTH*0.5;
+  const t=THREE.MathUtils.clamp(
+    -(((center.x-STREAM_X)*ROD_AXIS.x)+((center.z-STREAM_Z)*ROD_AXIS.z))/denom,
+    -half,half
+  );
+  const closest=center.clone().addScaledVector(ROD_AXIS,t);
+  const dir=v(closest.x-STREAM_X,0,closest.z-STREAM_Z);
+  return dir.lengthSq()>1e-12?dir.normalize():v(0,0,-1);
+}
+
+const ROD_GAP_DIRECTION=getRodGapDirection();
+const ROD_DISTANCE_INCREASE=0.010; // +10 mm gegenüber 1e
+const ROD_CENTER=ROD_BASE_CENTER.clone().addScaledVector(ROD_GAP_DIRECTION,ROD_DISTANCE_INCREASE);
 
 function createChargedRod({center=ROD_CENTER,axis=ROD_AXIS,length=ROD_LENGTH,radius=ROD_RADIUS}={}){
   const g=new THREE.Group();
@@ -265,14 +290,39 @@ function createNozzle(x){
   return g;
 }
 
+function createWaterStreamPoints({micro=false}={}){
+  /*
+    Die Screenshots des realen Versuchs zeigen:
+    - oberhalb des Stabs zunächst nahezu senkrechter Verlauf,
+    - erst im Nahbereich zunehmende Krümmung,
+    - danach einseitiges Weiterlaufen in der bereits aufgebauten Ablenkungsrichtung.
+
+    Die Richtung ist NICHT mehr fest +x wie in 1e, sondern die tatsächliche
+    kürzeste 3D-Richtung vom Strahl zur Stabachse. Dadurch passt die Kurve
+    auch beim Drehen des Aufbaus immer zur sichtbaren Stabseite.
+  */
+  const ys=micro
+    ? [0.125,0.093,0.064,0.038,0.014,-0.012,-0.041,-0.078,-0.126]
+    : [0.108,0.078,0.052,0.030,0.008,-0.016,-0.043,-0.077,-0.122];
+  const offsets=micro
+    ? [0,0,0,0.0004,0.0018,0.0047,0.0088,0.0138,0.0200]
+    : [0,0,0,0.0005,0.0020,0.0050,0.0090,0.0140,0.0200];
+
+  return ys.map((y,i)=>[
+    STREAM_X+ROD_GAP_DIRECTION.x*offsets[i],
+    y,
+    STREAM_Z+ROD_GAP_DIRECTION.z*offsets[i]
+  ]);
+}
+
 export function buildMacroScene(data){
   const group=new THREE.Group();
-  const startX=-0.058;
+  const startX=STREAM_X;
   group.add(createNozzle(startX));
   group.add(createChargedRod());
 
   const points=data.key==="water"
-    ? [[startX,0.108,0],[startX,0.073,0],[-0.057,0.043,0],[-0.053,0.020,0],[-0.044,-0.004,0],[-0.029,-0.030,0],[-0.011,-0.066,0],[0.001,-0.101,0],[0.006,-0.122,0]]
+    ? createWaterStreamPoints()
     : [[startX,0.108,0],[startX,0.064,0],[startX,0.018,0],[startX,-0.028,0],[startX,-0.076,0],[startX,-0.122,0]];
 
   const main=createTube(points,{
@@ -300,9 +350,9 @@ function seededEuler(i){
 }
 
 function createMicroCurve(data){
-  const x=-0.052;
+  const x=STREAM_X;
   const pts=data.key==="water"
-    ? [[x,0.125,0],[x,0.088,0],[-0.051,0.055,0],[-0.047,0.026,0],[-0.038,-0.002,0],[-0.024,-0.034,0],[-0.008,-0.070,0],[0.002,-0.106,0],[0.006,-0.126,0]]
+    ? createWaterStreamPoints({micro:true})
     : [[x,0.125,0],[x,0.082,0],[x,0.036,0],[x,-0.010,0],[x,-0.058,0],[x,-0.104,0],[x,-0.126,0]];
   return new THREE.CatmullRomCurve3(pts.map(p=>v(...p)),false,"catmullrom",0.45);
 }
