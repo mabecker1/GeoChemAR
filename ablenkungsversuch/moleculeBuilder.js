@@ -7,10 +7,10 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1f
+  GeoChemAR – Ablenkungsversuch 1g
   Makroebene: feiner senkrechter Flüssigkeitsstrahl und schräg geführter negativ geladener Stab.
-  Der Wasserstrahl wird geometrisch aus der tatsächlichen 3D-Lage des Stabs zu dessen Mantelfläche hin abgelenkt.
-  Submikroebene: bewegte Molekülreihe im Strahl.
+  Der Wasserstrahl wird nun deutlich stärker und weiterhin geometrisch korrekt zur Stabmantelfläche hin abgelenkt.
+  Für Wasser und Hexan wird der Stababstand getrennt gewählt; bei Hexan ist er extra groß, damit keine Moleküle den Stab schneiden.
 */
 
 const ANGSTROM_TO_SCENE = 0.033;
@@ -210,10 +210,15 @@ function getRodGapDirection(center=ROD_BASE_CENTER){
 }
 
 const ROD_GAP_DIRECTION=getRodGapDirection();
-const ROD_DISTANCE_INCREASE=0.010; // +10 mm gegenüber 1e
-const ROD_CENTER=ROD_BASE_CENTER.clone().addScaledVector(ROD_GAP_DIRECTION,ROD_DISTANCE_INCREASE);
+const WATER_ROD_DISTANCE_INCREASE=0.018;  // größerer Abstand, aber sichtbare Ablenkung bleibt gut erkennbar
+const HEXANE_ROD_DISTANCE_INCREASE=0.028; // besonders groß, damit Hexan-Moleküle den Stab sicher nicht schneiden
 
-function createChargedRod({center=ROD_CENTER,axis=ROD_AXIS,length=ROD_LENGTH,radius=ROD_RADIUS}={}){
+function getRodCenterForKey(key="water"){
+  const distanceIncrease=key==="hexane"?HEXANE_ROD_DISTANCE_INCREASE:WATER_ROD_DISTANCE_INCREASE;
+  return ROD_BASE_CENTER.clone().addScaledVector(ROD_GAP_DIRECTION,distanceIncrease);
+}
+
+function createChargedRod({center=getRodCenterForKey("water"),axis=ROD_AXIS,length=ROD_LENGTH,radius=ROD_RADIUS}={}){
   const g=new THREE.Group();
   g.position.copy(center);
   g.quaternion.setFromUnitVectors(v(0,1,0),axis.clone().normalize());
@@ -238,11 +243,11 @@ function createChargedRod({center=ROD_CENTER,axis=ROD_AXIS,length=ROD_LENGTH,rad
   return g;
 }
 
-function closestPointOnRodAxis(point,target=new THREE.Vector3()){
-  const rel=point.clone().sub(ROD_CENTER);
+function closestPointOnRodAxis(point,rodCenter,target=new THREE.Vector3()){
+  const rel=point.clone().sub(rodCenter);
   const half=ROD_LENGTH*0.5;
   const along=THREE.MathUtils.clamp(rel.dot(ROD_AXIS),-half,half);
-  return target.copy(ROD_CENTER).addScaledVector(ROD_AXIS,along);
+  return target.copy(rodCenter).addScaledVector(ROD_AXIS,along);
 }
 
 function createMagnifierSprite(){
@@ -305,8 +310,8 @@ function createWaterStreamPoints({micro=false}={}){
     ? [0.125,0.093,0.064,0.038,0.014,-0.012,-0.041,-0.078,-0.126]
     : [0.108,0.078,0.052,0.030,0.008,-0.016,-0.043,-0.077,-0.122];
   const offsets=micro
-    ? [0,0,0,0.0004,0.0018,0.0047,0.0088,0.0138,0.0200]
-    : [0,0,0,0.0005,0.0020,0.0050,0.0090,0.0140,0.0200];
+    ? [0,0,0.0003,0.0012,0.0046,0.0105,0.0190,0.0300,0.0430]
+    : [0,0,0.0003,0.0013,0.0048,0.0108,0.0185,0.0280,0.0400];
 
   return ys.map((y,i)=>[
     STREAM_X+ROD_GAP_DIRECTION.x*offsets[i],
@@ -318,8 +323,9 @@ function createWaterStreamPoints({micro=false}={}){
 export function buildMacroScene(data){
   const group=new THREE.Group();
   const startX=STREAM_X;
+  const rodCenter=getRodCenterForKey(data.key);
   group.add(createNozzle(startX));
-  group.add(createChargedRod());
+  group.add(createChargedRod({center:rodCenter}));
 
   const points=data.key==="water"
     ? createWaterStreamPoints()
@@ -359,7 +365,8 @@ function createMicroCurve(data){
 
 export function buildSubmicroScene(data,showSurface=false){
   const group=new THREE.Group();
-  group.add(createChargedRod());
+  const rodCenter=getRodCenterForKey(data.key);
+  group.add(createChargedRod({center:rodCenter}));
 
   const curve=createMicroCurve(data);
   const count=data.key==="water"?12:8;
@@ -411,7 +418,7 @@ export function buildSubmicroScene(data,showSurface=false){
         randomQuat.multiply(q0).normalize();
 
         // Im Feld: positive H-Seite richtet sich kontinuierlich zur negativen Staboberfläche aus.
-        closestPointOnRodAxis(p,rodAxisPoint);
+        closestPointOnRodAxis(p,rodCenter,rodAxisPoint);
         tempDir.copy(rodAxisPoint).sub(p).normalize();
         alignedQuat.setFromUnitVectors(localWaterPositiveAxis,tempDir);
         rollQuat.setFromAxisAngle(tempDir,0.055*Math.sin(now*0.0015+i*1.31));
