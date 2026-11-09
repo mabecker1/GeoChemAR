@@ -183,23 +183,23 @@ function createMinusSprite(worldSize=0.010){
   return sprite;
 }
 
-function createChargedRod({y=-0.008,z=0,length=0.135,radius=0.0085}={}){
+function createChargedRod({x=0.072,y=-0.004,z=0,length=0.135,radius=0.0085}={}){
   const g=new THREE.Group();
   const rod=new THREE.Mesh(
     new THREE.CylinderGeometry(radius,radius,length,26,1,false),
     new THREE.MeshStandardMaterial({color:0x344054,roughness:0.5,metalness:0.1})
   );
   rod.rotation.z=-Math.PI/2;
-  rod.position.set(0.085,y,z);
+  rod.position.set(x,y,z);
   g.add(rod);
 
   // Viele kleine negative Ladungszeichen entlang des Stabs.
   const count=18;
   for(let i=0;i<count;i++){
     const s=createMinusSprite(0.0105);
-    const x=0.025+(i/(count-1))*0.120;
-    const row=(i%2===0)?0.006:-0.006;
-    s.position.set(x,y+row,z+radius+0.0025);
+    const sx=(x-length*0.5+0.010)+(i/(count-1))*(length-0.020);
+    const row=(i%2===0)?0.0056:-0.0056;
+    s.position.set(sx,y+row,z+radius+0.0025);
     g.add(s);
   }
   return g;
@@ -252,13 +252,13 @@ function createNozzle(x){
 
 export function buildMacroScene(data){
   const group=new THREE.Group();
-  const startX=-0.055;
+  const startX=-0.058;
   group.add(createNozzle(startX));
-  group.add(createChargedRod({y:-0.008,length:0.135,radius:0.0085}));
+  group.add(createChargedRod({x:0.074,y:-0.004,length:0.135,radius:0.0085}));
 
   const points=data.key==="water"
-    ? [[startX,0.108,0],[startX,0.065,0],[-0.052,0.030,0],[-0.043,0.004,0],[-0.029,-0.028,0],[-0.020,-0.075,0],[-0.018,-0.122,0]]
-    : [[startX,0.108,0],[startX,0.060,0],[startX,0.012,0],[startX,-0.038,0],[startX,-0.083,0],[startX,-0.122,0]];
+    ? [[startX,0.108,0],[startX,0.070,0],[-0.056,0.038,0],[-0.049,0.014,0],[-0.034,-0.010,0],[-0.018,-0.040,0],[-0.002,-0.080,0],[0.006,-0.122,0]]
+    : [[startX,0.108,0],[startX,0.064,0],[startX,0.018,0],[startX,-0.028,0],[startX,-0.076,0],[startX,-0.122,0]];
 
   const main=createTube(points,{
     radius:data.key==="water"?0.0052:0.0048,
@@ -271,7 +271,7 @@ export function buildMacroScene(data){
   group.add(highlight.mesh);
 
   const magnifier=createMagnifierSprite();
-  magnifier.position.set(data.key==="water"?-0.047:startX,0.038,0.018);
+  magnifier.position.set(data.key==="water"?-0.040:startX,0.040,0.018);
   group.add(magnifier);
 
   return {group,magnifier,interactiveObjects:[magnifier]};
@@ -287,36 +287,39 @@ function seededEuler(i){
 function createMicroCurve(data){
   const x=-0.052;
   const pts=data.key==="water"
-    ? [[x,0.125,0],[x,0.075,0],[-0.049,0.035,0],[-0.039,0.004,0],[-0.026,-0.035,0],[-0.019,-0.083,0],[-0.018,-0.125,0]]
-    : [[x,0.125,0],[x,0.075,0],[x,0.025,0],[x,-0.025,0],[x,-0.075,0],[x,-0.125,0]];
+    ? [[x,0.125,0],[x,0.086,0],[-0.051,0.050,0],[-0.043,0.018,0],[-0.028,-0.010,0],[-0.012,-0.044,0],[0.000,-0.086,0],[0.006,-0.126,0]]
+    : [[x,0.125,0],[x,0.082,0],[x,0.036,0],[x,-0.010,0],[x,-0.058,0],[x,-0.104,0],[x,-0.126,0]];
   return new THREE.CatmullRomCurve3(pts.map(p=>v(...p)),false,"catmullrom",0.45);
 }
 
 export function buildSubmicroScene(data,showSurface=false){
   const group=new THREE.Group();
-  group.add(createChargedRod({y:-0.008,length:0.135,radius:0.0085}));
+  group.add(createChargedRod({x:0.074,y:-0.004,length:0.135,radius:0.0085}));
 
   const curve=createMicroCurve(data);
-  const count=data.key==="water"?9:5;
+  const count=data.key==="water"?12:8;
   const prototype=createMoleculePrototype(data,showSurface);
   const molecules=[];
 
   for(let i=0;i<count;i++){
     const m=prototype.clone(true);
-    const scale=data.key==="water"?0.92:0.34;
+    const scale=data.key==="water"?0.66:0.24;
     m.scale.setScalar(scale);
     m.userData.phase=i/count;
     m.userData.speed=data.key==="water"?0.000115:0.000100;
     m.userData.baseEuler=seededEuler(i);
-    m.userData.tumbleSpeed=0.00022+(i%3)*0.000055;
+    m.userData.tumbleSpeed=0.00016+(i%4)*0.000045;
+    m.userData.spinAxis=v(0.35+0.11*(i%3),0.48+0.07*((i+1)%3),0.60+0.05*(i%2)).normalize();
     group.add(m);
     molecules.push(m);
   }
 
   const localWaterPositiveAxis=v(0,0,-1);
-  const rodTip=v(0.017,-0.008,0);
+  const rodTip=v(0.022,-0.004,0);
   const alignedQuat=new THREE.Quaternion();
   const rollQuat=new THREE.Quaternion();
+  const randomQuat=new THREE.Quaternion();
+  const q0=new THREE.Quaternion();
   const tempDir=new THREE.Vector3();
 
   group.userData.update=(now)=>{
@@ -327,16 +330,23 @@ export function buildSubmicroScene(data,showSurface=false){
       m.position.copy(p);
 
       if(data.key==="water"){
+        q0.setFromEuler(m.userData.baseEuler);
+        randomQuat.setFromAxisAngle(m.userData.spinAxis,now*m.userData.tumbleSpeed);
+        randomQuat.multiply(q0);
+
         tempDir.copy(rodTip).sub(p).normalize();
         alignedQuat.setFromUnitVectors(localWaterPositiveAxis,tempDir);
         // kleine Drehung um die Dipolachse, die H-Seite bleibt zum negativen Stab gerichtet
-        rollQuat.setFromAxisAngle(tempDir,0.10*Math.sin(now*0.0014+i*1.7));
-        m.quaternion.copy(rollQuat).multiply(alignedQuat);
+        rollQuat.setFromAxisAngle(tempDir,0.06*Math.sin(now*0.0016+i*1.3));
+        alignedQuat.premultiply(rollQuat);
+
+        const alignStart=0.26;
+        const alignEnd=0.58;
+        const s=THREE.MathUtils.smoothstep(t,alignStart,alignEnd);
+        m.quaternion.copy(randomQuat).slerp(alignedQuat,s);
       }else{
-        const e=m.userData.baseEuler;
-        const q0=new THREE.Quaternion().setFromEuler(e);
-        const axis=v(0.35+0.1*(i%2),0.65,0.48).normalize();
-        const qSpin=new THREE.Quaternion().setFromAxisAngle(axis,now*m.userData.tumbleSpeed);
+        q0.setFromEuler(m.userData.baseEuler);
+        const qSpin=new THREE.Quaternion().setFromAxisAngle(m.userData.spinAxis,now*m.userData.tumbleSpeed);
         m.quaternion.copy(qSpin).multiply(q0);
       }
     }

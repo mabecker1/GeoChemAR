@@ -588,6 +588,14 @@ let viewTransition=null;
 const raycaster=new THREE.Raycaster();
 const pointerNdc=new THREE.Vector2();
 
+const parentWorldQuaternion=new THREE.Quaternion();
+
+function updateTeachingFrameAlignment(){
+  if(!trackedCubeRoot.visible)return;
+  trackedCubeRoot.getWorldQuaternion(parentWorldQuaternion);
+  contentRoot.quaternion.copy(parentWorldQuaternion).invert().normalize();
+}
+
 function clampZoom(value){
   return THREE.MathUtils.clamp(value,selectedMolecule.zoom.min,selectedMolecule.zoom.max);
 }
@@ -709,6 +717,8 @@ function easeInOutCubic(t){
 }
 
 function updateLessonVisuals(now){
+  updateTeachingFrameAlignment();
+
   if(currentContentGroup?.userData?.update){
     currentContentGroup.userData.update(now);
   }
