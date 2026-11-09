@@ -7,10 +7,10 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1g
+  GeoChemAR – Ablenkungsversuch 1h
   Makroebene: feiner senkrechter Flüssigkeitsstrahl und schräg geführter negativ geladener Stab.
-  Der Wasserstrahl wird nun deutlich stärker und weiterhin geometrisch korrekt zur Stabmantelfläche hin abgelenkt.
-  Für Wasser und Hexan wird der Stababstand getrennt gewählt; bei Hexan ist er extra groß, damit keine Moleküle den Stab schneiden.
+  Der Wasserstrahl bleibt stark abgelenkt; für Wasser wird der Stab nun zusätzlich weiter nach links/oben und weiter weg gesetzt.
+  Wasser- und Hexan-Abstand bleiben getrennt; bei Hexan ist der Abstand weiterhin extra groß, damit keine Moleküle den Stab schneiden.
 */
 
 const ANGSTROM_TO_SCENE = 0.033;
@@ -209,13 +209,18 @@ function getRodGapDirection(center=ROD_BASE_CENTER){
   return dir.lengthSq()>1e-12?dir.normalize():v(0,0,-1);
 }
 
-const ROD_GAP_DIRECTION=getRodGapDirection();
-const WATER_ROD_DISTANCE_INCREASE=0.018;  // größerer Abstand, aber sichtbare Ablenkung bleibt gut erkennbar
-const HEXANE_ROD_DISTANCE_INCREASE=0.028; // besonders groß, damit Hexan-Moleküle den Stab sicher nicht schneiden
+const DEFAULT_ROD_GAP_DIRECTION=getRodGapDirection();
+const WATER_ROD_DISTANCE_INCREASE=0.032;  // Wasser: nochmals deutlich weiter weg
+const HEXANE_ROD_DISTANCE_INCREASE=0.028; // Hexan bleibt besonders weit entfernt
+const WATER_ROD_BASE_SHIFT=v(-0.012,0.012,0.0); // entsprechend der Nutzermarkierung: weiter links und etwas höher
+const HEXANE_ROD_BASE_SHIFT=v(0,0,0);
 
 function getRodCenterForKey(key="water"){
+  const baseShift=key==="hexane"?HEXANE_ROD_BASE_SHIFT:WATER_ROD_BASE_SHIFT;
+  const shiftedBase=ROD_BASE_CENTER.clone().add(baseShift);
+  const rodGapDirection=getRodGapDirection(shiftedBase);
   const distanceIncrease=key==="hexane"?HEXANE_ROD_DISTANCE_INCREASE:WATER_ROD_DISTANCE_INCREASE;
-  return ROD_BASE_CENTER.clone().addScaledVector(ROD_GAP_DIRECTION,distanceIncrease);
+  return shiftedBase.addScaledVector(rodGapDirection,distanceIncrease);
 }
 
 function createChargedRod({center=getRodCenterForKey("water"),axis=ROD_AXIS,length=ROD_LENGTH,radius=ROD_RADIUS}={}){
@@ -295,7 +300,7 @@ function createNozzle(x){
   return g;
 }
 
-function createWaterStreamPoints({micro=false}={}){
+function createWaterStreamPoints({micro=false,rodCenter=getRodCenterForKey("water")}={}){
   /*
     Die Screenshots des realen Versuchs zeigen:
     - oberhalb des Stabs zunächst nahezu senkrechter Verlauf,
@@ -313,10 +318,11 @@ function createWaterStreamPoints({micro=false}={}){
     ? [0,0,0.0003,0.0012,0.0046,0.0105,0.0190,0.0300,0.0430]
     : [0,0,0.0003,0.0013,0.0048,0.0108,0.0185,0.0280,0.0400];
 
+  const rodGapDirection=getRodGapDirection(rodCenter);
   return ys.map((y,i)=>[
-    STREAM_X+ROD_GAP_DIRECTION.x*offsets[i],
+    STREAM_X+rodGapDirection.x*offsets[i],
     y,
-    STREAM_Z+ROD_GAP_DIRECTION.z*offsets[i]
+    STREAM_Z+rodGapDirection.z*offsets[i]
   ]);
 }
 
@@ -328,7 +334,7 @@ export function buildMacroScene(data){
   group.add(createChargedRod({center:rodCenter}));
 
   const points=data.key==="water"
-    ? createWaterStreamPoints()
+    ? createWaterStreamPoints({rodCenter})
     : [[startX,0.108,0],[startX,0.064,0],[startX,0.018,0],[startX,-0.028,0],[startX,-0.076,0],[startX,-0.122,0]];
 
   const main=createTube(points,{
@@ -358,7 +364,7 @@ function seededEuler(i){
 function createMicroCurve(data){
   const x=STREAM_X;
   const pts=data.key==="water"
-    ? createWaterStreamPoints({micro:true})
+    ? createWaterStreamPoints({micro:true,rodCenter})
     : [[x,0.125,0],[x,0.082,0],[x,0.036,0],[x,-0.010,0],[x,-0.058,0],[x,-0.104,0],[x,-0.126,0]];
   return new THREE.CatmullRomCurve3(pts.map(p=>v(...p)),false,"catmullrom",0.45);
 }
