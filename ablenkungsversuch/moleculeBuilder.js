@@ -7,7 +7,7 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1a
+  GeoChemAR – Ablenkungsversuch 1d
   Makroebene: feiner senkrechter Flüssigkeitsstrahl, horizontaler negativ geladener Stab.
   Submikroebene: bewegte Molekülreihe im Strahl.
 */
@@ -183,23 +183,25 @@ function createMinusSprite(worldSize=0.010){
   return sprite;
 }
 
-function createChargedRod({x=0.072,y=-0.004,z=0,length=0.135,radius=0.0085}={}){
+function createChargedRod({x=0.028,y=-0.015,z=0,length=0.180,radius=0.0085}={}){
   const g=new THREE.Group();
   const rod=new THREE.Mesh(
     new THREE.CylinderGeometry(radius,radius,length,26,1,false),
     new THREE.MeshStandardMaterial({color:0x344054,roughness:0.5,metalness:0.1})
   );
-  rod.rotation.z=-Math.PI/2;
+  // CylinderGeometry liegt standardmäßig entlang der y-Achse.
+  // Damit ist der Stab parallel zum senkrechten Flüssigkeitsstrahl und
+  // seine Mantelfläche zeigt zum Strahl – wie im realen Versuch.
   rod.position.set(x,y,z);
   g.add(rod);
 
-  // Viele kleine negative Ladungszeichen entlang des Stabs.
-  const count=18;
+  // Viele kleine negative Ladungszeichen auf der sichtbaren Mantelfläche.
+  const count=20;
   for(let i=0;i<count;i++){
-    const s=createMinusSprite(0.0105);
-    const sx=(x-length*0.5+0.010)+(i/(count-1))*(length-0.020);
-    const row=(i%2===0)?0.0056:-0.0056;
-    s.position.set(sx,y+row,z+radius+0.0025);
+    const s=createMinusSprite(0.0092);
+    const sy=(y-length*0.5+0.010)+(i/(count-1))*(length-0.020);
+    const sideOffset=(i%2===0)?-0.0032:0.0032;
+    s.position.set(x+sideOffset,sy,z+radius+0.0022);
     g.add(s);
   }
   return g;
@@ -254,7 +256,7 @@ export function buildMacroScene(data){
   const group=new THREE.Group();
   const startX=-0.058;
   group.add(createNozzle(startX));
-  group.add(createChargedRod({x:0.074,y:-0.004,length:0.135,radius:0.0085}));
+  group.add(createChargedRod({x:0.028,y:-0.015,length:0.180,radius:0.0085}));
 
   const points=data.key==="water"
     ? [[startX,0.108,0],[startX,0.070,0],[-0.056,0.038,0],[-0.049,0.014,0],[-0.034,-0.010,0],[-0.018,-0.040,0],[-0.002,-0.080,0],[0.006,-0.122,0]]
@@ -294,7 +296,7 @@ function createMicroCurve(data){
 
 export function buildSubmicroScene(data,showSurface=false){
   const group=new THREE.Group();
-  group.add(createChargedRod({x:0.074,y:-0.004,length:0.135,radius:0.0085}));
+  group.add(createChargedRod({x:0.028,y:-0.015,length:0.180,radius:0.0085}));
 
   const curve=createMicroCurve(data);
   const count=data.key==="water"?12:8;
@@ -305,8 +307,8 @@ export function buildSubmicroScene(data,showSurface=false){
     const m=prototype.clone(true);
     const scale=data.key==="water"?0.66:0.24;
     m.scale.setScalar(scale);
-    m.userData.phase=i/count;
-    m.userData.speed=data.key==="water"?0.000115:0.000100;
+    m.userData.progress=i/count;
+    m.userData.speedPerSecond=data.key==="water"?0.145:0.125;
     m.userData.baseEuler=seededEuler(i);
     m.userData.tumbleSpeed=0.00016+(i%4)*0.000045;
     m.userData.spinAxis=v(0.35+0.11*(i%3),0.48+0.07*((i+1)%3),0.60+0.05*(i%2)).normalize();
@@ -315,7 +317,8 @@ export function buildSubmicroScene(data,showSurface=false){
   }
 
   const localWaterPositiveAxis=v(0,0,-1);
-  const rodTip=v(0.022,-0.004,0);
+  // Nächster Punkt der Mantelfläche des negativ geladenen, parallelen Stabs.
+  const rodSurfaceTarget=v(0.0195,-0.015,0);
   const alignedQuat=new THREE.Quaternion();
   const rollQuat=new THREE.Quaternion();
   const randomQuat=new THREE.Quaternion();
@@ -325,44 +328,50 @@ export function buildSubmicroScene(data,showSurface=false){
   let lastNow=null;
 
   group.userData.update=(now)=>{
-    const dt=Math.min(lastNow===null?0.016:Math.max((now-lastNow)/1000,0),0.05);
+    const dt=Math.min(lastNow===null?1/60:Math.max((now-lastNow)/1000,0),0.05);
     lastNow=now;
 
     for(let i=0;i<molecules.length;i++){
       const m=molecules[i];
-      const t=(m.userData.phase+now*m.userData.speed)%1;
-      const p=curve.getPointAt(t);
+      const previousProgress=m.userData.progress;
+      let progress=previousProgress+dt*m.userData.speedPerSecond;
+      const wrapped=progress>=1;
+      if(wrapped)progress-=Math.floor(progress);
+      m.userData.progress=progress;
+
+      const p=curve.getPointAt(progress);
       m.position.copy(p);
 
       if(data.key==="water"){
+        // Oberhalb des Feldbereichs: kontinuierliche, zufällige Rotation in allen drei Raumrichtungen.
         q0.setFromEuler(m.userData.baseEuler);
         randomQuat.setFromAxisAngle(m.userData.spinAxis,now*m.userData.tumbleSpeed);
-        randomQuat.multiply(q0);
+        randomQuat.multiply(q0).normalize();
 
-        tempDir.copy(rodTip).sub(p).normalize();
+        // Im Feld: positive H-Seite richtet sich kontinuierlich zur negativen Staboberfläche aus.
+        tempDir.copy(rodSurfaceTarget).sub(p).normalize();
         alignedQuat.setFromUnitVectors(localWaterPositiveAxis,tempDir);
-        // kleine Drehung um die Dipolachse, die H-Seite bleibt zum negativen Stab gerichtet
-        rollQuat.setFromAxisAngle(tempDir,0.06*Math.sin(now*0.0016+i*1.3));
-        alignedQuat.premultiply(rollQuat);
+        rollQuat.setFromAxisAngle(tempDir,0.055*Math.sin(now*0.0015+i*1.31));
+        alignedQuat.premultiply(rollQuat).normalize();
 
-        const alignStart=0.26;
-        const alignEnd=0.58;
-        const s=THREE.MathUtils.smoothstep(t,alignStart,alignEnd);
-        desiredQuat.copy(randomQuat).slerp(alignedQuat,s).normalize();
+        const alignStart=0.28;
+        const alignEnd=0.62;
+        const alignment=THREE.MathUtils.smoothstep(progress,alignStart,alignEnd);
+        desiredQuat.copy(randomQuat).slerp(alignedQuat,alignment).normalize();
 
-        if(!m.userData.currentQuaternion){
-          m.userData.currentQuaternion=desiredQuat.clone();
+        if(!m.userData.currentQuaternion||wrapped){
+          // Nach dem Wiedereintritt oben ist es ein neues, zufällig orientiertes Molekül.
+          m.userData.currentQuaternion=randomQuat.clone();
         }
-        const current=m.userData.currentQuaternion;
-        if(current.dot(desiredQuat)<0)desiredQuat.multiplyScalar(-1);
-        const turnSpeed=2.8+3.6*s;
-        current.rotateTowards(desiredQuat,turnSpeed*dt);
-        current.normalize();
-        m.quaternion.copy(current);
+
+        // Maximaler Drehwinkel pro Frame: verhindert jedes schlagartige "Springen".
+        const maxAngularSpeed=2.6+3.8*alignment; // rad/s
+        m.userData.currentQuaternion.rotateTowards(desiredQuat,maxAngularSpeed*dt).normalize();
+        m.quaternion.copy(m.userData.currentQuaternion);
       }else{
         q0.setFromEuler(m.userData.baseEuler);
         const qSpin=new THREE.Quaternion().setFromAxisAngle(m.userData.spinAxis,now*m.userData.tumbleSpeed);
-        m.quaternion.copy(qSpin).multiply(q0);
+        m.quaternion.copy(qSpin).multiply(q0).normalize();
       }
     }
   };
