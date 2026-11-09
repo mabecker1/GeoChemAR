@@ -7,7 +7,7 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1d
+  GeoChemAR – Ablenkungsversuch 1e
   Makroebene: feiner senkrechter Flüssigkeitsstrahl, horizontaler negativ geladener Stab.
   Submikroebene: bewegte Molekülreihe im Strahl.
 */
@@ -183,28 +183,41 @@ function createMinusSprite(worldSize=0.010){
   return sprite;
 }
 
-function createChargedRod({x=0.028,y=-0.015,z=0,length=0.180,radius=0.0085}={}){
+const ROD_CENTER=v(0.018,-0.012,-0.010);
+const ROD_AXIS=v(1,0.27,0.08).normalize();
+const ROD_LENGTH=0.190;
+const ROD_RADIUS=0.0085;
+
+function createChargedRod({center=ROD_CENTER,axis=ROD_AXIS,length=ROD_LENGTH,radius=ROD_RADIUS}={}){
   const g=new THREE.Group();
+  g.position.copy(center);
+  g.quaternion.setFromUnitVectors(v(0,1,0),axis.clone().normalize());
+
   const rod=new THREE.Mesh(
-    new THREE.CylinderGeometry(radius,radius,length,26,1,false),
+    new THREE.CylinderGeometry(radius,radius,length,30,1,false),
     new THREE.MeshStandardMaterial({color:0x344054,roughness:0.5,metalness:0.1})
   );
-  // CylinderGeometry liegt standardmäßig entlang der y-Achse.
-  // Damit ist der Stab parallel zum senkrechten Flüssigkeitsstrahl und
-  // seine Mantelfläche zeigt zum Strahl – wie im realen Versuch.
-  rod.position.set(x,y,z);
   g.add(rod);
 
-  // Viele kleine negative Ladungszeichen auf der sichtbaren Mantelfläche.
-  const count=20;
+  // Viele kleine negative Ladungszeichen entlang der sichtbaren Mantelfläche.
+  // Die Zeichen liegen im lokalen Stab-Koordinatensystem und drehen sich daher
+  // exakt mit der schrägen Stabachse mit.
+  const count=22;
   for(let i=0;i<count;i++){
-    const s=createMinusSprite(0.0092);
-    const sy=(y-length*0.5+0.010)+(i/(count-1))*(length-0.020);
-    const sideOffset=(i%2===0)?-0.0032:0.0032;
-    s.position.set(x+sideOffset,sy,z+radius+0.0022);
+    const s=createMinusSprite(0.0078);
+    const sy=(-length*0.5+0.012)+(i/(count-1))*(length-0.024);
+    const sideOffset=(i%2===0)?-0.0028:0.0028;
+    s.position.set(sideOffset,sy,radius+0.0020);
     g.add(s);
   }
   return g;
+}
+
+function closestPointOnRodAxis(point,target=new THREE.Vector3()){
+  const rel=point.clone().sub(ROD_CENTER);
+  const half=ROD_LENGTH*0.5;
+  const along=THREE.MathUtils.clamp(rel.dot(ROD_AXIS),-half,half);
+  return target.copy(ROD_CENTER).addScaledVector(ROD_AXIS,along);
 }
 
 function createMagnifierSprite(){
@@ -256,10 +269,10 @@ export function buildMacroScene(data){
   const group=new THREE.Group();
   const startX=-0.058;
   group.add(createNozzle(startX));
-  group.add(createChargedRod({x:0.028,y:-0.015,length:0.180,radius:0.0085}));
+  group.add(createChargedRod());
 
   const points=data.key==="water"
-    ? [[startX,0.108,0],[startX,0.070,0],[-0.056,0.038,0],[-0.049,0.014,0],[-0.034,-0.010,0],[-0.018,-0.040,0],[-0.002,-0.080,0],[0.006,-0.122,0]]
+    ? [[startX,0.108,0],[startX,0.073,0],[-0.057,0.043,0],[-0.053,0.020,0],[-0.044,-0.004,0],[-0.029,-0.030,0],[-0.011,-0.066,0],[0.001,-0.101,0],[0.006,-0.122,0]]
     : [[startX,0.108,0],[startX,0.064,0],[startX,0.018,0],[startX,-0.028,0],[startX,-0.076,0],[startX,-0.122,0]];
 
   const main=createTube(points,{
@@ -289,14 +302,14 @@ function seededEuler(i){
 function createMicroCurve(data){
   const x=-0.052;
   const pts=data.key==="water"
-    ? [[x,0.125,0],[x,0.086,0],[-0.051,0.050,0],[-0.043,0.018,0],[-0.028,-0.010,0],[-0.012,-0.044,0],[0.000,-0.086,0],[0.006,-0.126,0]]
+    ? [[x,0.125,0],[x,0.088,0],[-0.051,0.055,0],[-0.047,0.026,0],[-0.038,-0.002,0],[-0.024,-0.034,0],[-0.008,-0.070,0],[0.002,-0.106,0],[0.006,-0.126,0]]
     : [[x,0.125,0],[x,0.082,0],[x,0.036,0],[x,-0.010,0],[x,-0.058,0],[x,-0.104,0],[x,-0.126,0]];
   return new THREE.CatmullRomCurve3(pts.map(p=>v(...p)),false,"catmullrom",0.45);
 }
 
 export function buildSubmicroScene(data,showSurface=false){
   const group=new THREE.Group();
-  group.add(createChargedRod({x:0.028,y:-0.015,length:0.180,radius:0.0085}));
+  group.add(createChargedRod());
 
   const curve=createMicroCurve(data);
   const count=data.key==="water"?12:8;
@@ -317,8 +330,7 @@ export function buildSubmicroScene(data,showSurface=false){
   }
 
   const localWaterPositiveAxis=v(0,0,-1);
-  // Nächster Punkt der Mantelfläche des negativ geladenen, parallelen Stabs.
-  const rodSurfaceTarget=v(0.0195,-0.015,0);
+  const rodAxisPoint=new THREE.Vector3();
   const alignedQuat=new THREE.Quaternion();
   const rollQuat=new THREE.Quaternion();
   const randomQuat=new THREE.Quaternion();
@@ -349,7 +361,8 @@ export function buildSubmicroScene(data,showSurface=false){
         randomQuat.multiply(q0).normalize();
 
         // Im Feld: positive H-Seite richtet sich kontinuierlich zur negativen Staboberfläche aus.
-        tempDir.copy(rodSurfaceTarget).sub(p).normalize();
+        closestPointOnRodAxis(p,rodAxisPoint);
+        tempDir.copy(rodAxisPoint).sub(p).normalize();
         alignedQuat.setFromUnitVectors(localWaterPositiveAxis,tempDir);
         rollQuat.setFromAxisAngle(tempDir,0.055*Math.sin(now*0.0015+i*1.31));
         alignedQuat.premultiply(rollQuat).normalize();
