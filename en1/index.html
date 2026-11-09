@@ -123,35 +123,6 @@ html.debug-mode #status{display:block}
   background:var(--ui-green-dark);
   border-color:var(--ui-green-dark);
 }
-#epaControls .infoGroup{
-  padding-left:8px;
-  border-left:1px solid rgba(255,255,255,.16);
-  gap:6px;
-}
-#epaControls .infoItem{
-  height:40px;
-  display:flex;
-  align-items:center;
-  gap:6px;
-  padding:0 10px;
-  border:1px solid rgba(255,255,255,.16);
-  border-radius:10px;
-  background:rgba(255,255,255,.08);
-  white-space:nowrap;
-}
-#epaControls .infoLabel{
-  color:var(--ui-muted);
-  font-size:12px;
-  font-weight:700;
-}
-#epaControls .infoValue{
-  min-width:16px;
-  color:#fff;
-  font-size:15px;
-  font-weight:800;
-  text-align:center;
-  font-variant-numeric:tabular-nums;
-}
 #zoomValue{
   min-width:52px;text-align:center;
   color:#fff;font-size:13px;font-weight:700;
@@ -234,20 +205,7 @@ html.debug-mode #status{display:block}
   #epaControls .moleculeGroup label{display:none}
   #epaControls .overlayGroup,
   #epaControls .zoomGroup,
-  #epaControls .infoGroup{
-    padding-left:0;border-left:none;
-  }
-  #epaControls .infoGroup{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:6px;
-  }
-  #epaControls .infoItem{
-    justify-content:center;
-    min-width:0;
-    padding:0 7px;
-  }
-  #epaControls .overlayGroup{
+        #epaControls .overlayGroup{
     display:grid;
     grid-template-columns:repeat(1,1fr);
     gap:6px;
@@ -289,16 +247,6 @@ html.debug-mode #status{display:block}
     <label for="moleculeSelect">Molekül</label>
     <select id="moleculeSelect" aria-label="Molekül auswählen"></select>
   </div>
-  <div class="controlGroup infoGroup" aria-label="Vergleichsinformationen">
-    <div class="infoItem" title="Einschätzung der Bindungspolarität">
-      <span class="infoLabel">Bindungspolarität:</span>
-      <span id="bondPolarityValue" class="infoValue">polar</span>
-    </div>
-    <div class="infoItem" title="Elektronenverteilung im Molekül">
-      <span class="infoLabel">Ladungsverteilung:</span>
-      <span id="chargeDistributionValue" class="infoValue">ungleich</span>
-    </div>
-  </div>
   <div class="controlGroup overlayGroup" aria-label="Darstellung">
     <button id="densityToggle" class="toggleControl" type="button" aria-pressed="false">Elektronendichteoberfläche</button>
   </div>
@@ -326,7 +274,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { DEFAULT_MOLECULE, MOLECULES, getMoleculeData } from "./moleculeData.js";
 import { buildMolecule, createElectronDensitySurfaceOverlay, disposeMolecule, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="EN1-1 Wasser vs. Methan / Core EPA-6a";
+const VERSION="EN1a Wasser vs. Methan / Methan grün homogen / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -514,8 +462,6 @@ const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
 if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
 const errorBox=document.getElementById("error");
 const moleculeSelect=document.getElementById("moleculeSelect");
-const bondPolarityValue=document.getElementById("bondPolarityValue");
-const chargeDistributionValue=document.getElementById("chargeDistributionValue");
 const densityToggleButton=document.getElementById("densityToggle");
 const densityLegend=document.getElementById("densityLegend");
 const zoomOutButton=document.getElementById("zoomOut");
@@ -641,10 +587,6 @@ function disposeCurrentOverlays(){
   }
 }
 
-function updateMoleculeInfo(){
-  bondPolarityValue.textContent=selectedMolecule.bondPolarity || "–";
-  chargeDistributionValue.textContent=selectedMolecule.chargeDistribution || "–";
-}
 
 function updateToggleUI(){
   densityToggleButton.classList.toggle("active",densityVisible);
@@ -684,7 +626,6 @@ async function showMolecule(key,resetZoom=false){
 
   if(resetZoom)moleculeZoom=selectedMolecule.zoom.default;
   applyMoleculeZoom(moleculeZoom);
-  updateMoleculeInfo();
   updateToggleUI();
   await rebuildOverlays();
 }
