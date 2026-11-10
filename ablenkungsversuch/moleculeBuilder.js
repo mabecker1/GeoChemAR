@@ -7,7 +7,7 @@ import {
 import { HEXANE_SURFACE_DATA } from "./hexaneSurfaceData.js";
 
 /*
-  GeoChemAR – Ablenkungsversuch 1h
+  GeoChemAR – Ablenkungsversuch 1i
   Makroebene: feiner senkrechter Flüssigkeitsstrahl und schräg geführter negativ geladener Stab.
   Der Wasserstrahl bleibt stark abgelenkt; für Wasser wird der Stab nun zusätzlich weiter nach links/oben und weiter weg gesetzt.
   Wasser- und Hexan-Abstand bleiben getrennt; bei Hexan ist der Abstand weiterhin extra groß, damit keine Moleküle den Stab schneiden.
@@ -361,7 +361,7 @@ function seededEuler(i){
   return new THREE.Euler(a,b,c,"XYZ");
 }
 
-function createMicroCurve(data){
+function createMicroCurve(data,rodCenter){
   const x=STREAM_X;
   const pts=data.key==="water"
     ? createWaterStreamPoints({micro:true,rodCenter})
@@ -374,7 +374,7 @@ export function buildSubmicroScene(data,showSurface=false){
   const rodCenter=getRodCenterForKey(data.key);
   group.add(createChargedRod({center:rodCenter}));
 
-  const curve=createMicroCurve(data);
+  const curve=createMicroCurve(data,rodCenter);
   const count=data.key==="water"?12:8;
   const prototype=createMoleculePrototype(data,showSurface);
   const molecules=[];
