@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – Dipol 1f</title>
+<title>GeoChemAR – Dipol 1g</title>
 <style>
 :root{
   --green:#2fac16;
@@ -157,7 +157,7 @@ html.debug-mode #status{display:block}
 .feedback.bad{background:#fef2f2;color:#991b1b}
 
 #successCard{
-  display:none;border:1px solid #a9d99f;border-radius:14px;background:#f0fdf4;padding:13px;margin-bottom:10px
+  display:none;border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;margin-bottom:10px
 }
 #successCard.show{display:block}
 .successTitle{font-size:17px;font-weight:800;color:#166534;margin-bottom:5px}
@@ -319,7 +319,6 @@ html.debug-mode #status{display:block}
 
     <section id="step1" class="step">
       <div class="stepTitle"><span class="stepNumber">1</span><span>Bindungspolarität</span></div>
-      <div class="ruleBox">Berechne ΔEN = |EN(A) − EN(B)|. In dieser Aufgabe gilt: <strong>ΔEN ≤ 0,4 unpolar</strong>, <strong>ΔEN &gt; 0,4 polar</strong>.</div>
       <div id="enFields"></div>
       <div class="question">Gibt es im Molekül mindestens eine polare Bindung?</div>
       <div class="choiceRow">
@@ -401,7 +400,7 @@ import {
 } from "./dipolData.js";
 import { buildDipoleScene, setDipoleVisualState, disposeObject3D } from "./dipolBuilder.js";
 
-const VERSION="Dipol-1f / Core EPA-6a";
+const VERSION="Dipol-1g / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -998,9 +997,6 @@ function completeTask(){
   visualState.centers=!!selectedMolecule.polarBonds;
   visualState.density=true;
   finalCentersToggle.hidden=!selectedMolecule.polarBonds;
-  successText.textContent=selectedMolecule.polarBonds
-    ? "Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche und den Ladungsschwerpunkten angezeigt."
-    : "Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche angezeigt.";
   applyVisualState();
   successCard.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
