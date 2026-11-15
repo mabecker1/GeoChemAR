@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – Dipol 1b</title>
+<title>GeoChemAR – Dipol 1c</title>
 <style>
 :root{
   --green:#2fac16;
@@ -108,6 +108,7 @@ html.debug-mode #status{display:block}
 }
 .helpButton:hover{border-color:var(--green)}
 .helpButton.active{background:var(--green);border-color:var(--green);color:#fff}
+.helpButton:disabled{opacity:.45;cursor:default;background:#f3f4f6;color:#8a94a3}
 .helpHint{font-size:11px;color:var(--muted);margin:-2px 0 10px}
 #markerHint{
   background:rgba(31,41,55,.86);color:#fff;border-radius:10px;padding:8px 10px;
@@ -192,7 +193,7 @@ html.debug-mode #status{display:block}
 .centerLegendRow{display:flex;align-items:center;gap:7px;white-space:nowrap}
 .centerLegendRow+.centerLegendRow{margin-top:4px}
 .centerSwatch{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 0 1px rgba(255,255,255,.65)}
-.centerSwatch.plus{background:#2575e6}.centerSwatch.minus{background:#e53935}.centerSwatch.same{background:#8b5cf6}
+.centerSwatch.plus{background:#2575e6}.centerSwatch.minus{background:#e53935}
 
 #densityLegend{
   position:fixed;left:14px;bottom:14px;z-index:25;display:none;align-items:center;gap:9px;
@@ -286,7 +287,7 @@ html.debug-mode #status{display:block}
 
     <div id="successCard">
       <div class="successTitle">Richtig gelöst!</div>
-      <div class="successText">Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche und den Ladungsschwerpunkten angezeigt.</div>
+      <div id="successText" class="successText">Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche und den Ladungsschwerpunkten angezeigt.</div>
       <div class="finalControls">
         <button id="finalDensityToggle" class="active" type="button">Elektronendichte</button>
         <button id="finalCentersToggle" class="active" type="button">Ladungsschwerpunkte</button>
@@ -345,9 +346,8 @@ html.debug-mode #status{display:block}
 </div>
 
 <div id="centerLegend" aria-hidden="true">
-  <div class="centerLegendRow"><span class="centerSwatch plus"></span><span><strong>S⁺</strong> positiver Ladungsschwerpunkt</span></div>
-  <div class="centerLegendRow"><span class="centerSwatch minus"></span><span><strong>S⁻</strong> negativer Ladungsschwerpunkt</span></div>
-  <div class="centerLegendRow"><span class="centerSwatch same"></span><span><strong>S⁺ = S⁻</strong> Schwerpunkte fallen zusammen</span></div>
+  <div class="centerLegendRow"><span class="centerSwatch plus"></span><span>positiver Ladungsschwerpunkt</span></div>
+  <div class="centerLegendRow"><span class="centerSwatch minus"></span><span>negativer Ladungsschwerpunkt</span></div>
 </div>
 
 <div id="densityLegend">
@@ -374,7 +374,7 @@ import {
 } from "./dipolData.js";
 import { buildDipoleScene, setDipoleVisualState, disposeObject3D } from "./dipolBuilder.js";
 
-const VERSION="Dipol-1b / Core EPA-6a";
+const VERSION="Dipol-1c / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -581,6 +581,7 @@ const checkStep2Button=document.getElementById("checkStep2");
 const checkStep3Button=document.getElementById("checkStep3");
 const checkStep4Button=document.getElementById("checkStep4");
 const successCard=document.getElementById("successCard");
+const successText=document.getElementById("successText");
 const finalDensityToggle=document.getElementById("finalDensityToggle");
 const finalCentersToggle=document.getElementById("finalCentersToggle");
 const densityLegend=document.getElementById("densityLegend");
@@ -688,6 +689,7 @@ let selectedMolecule=null;
 let currentContentGroup=null;
 let moleculeZoom=1.0;
 let solved=false;
+let reducedPath=false;
 const visualState={model:false,geometry:false,centers:false,density:false};
 
 function updateTeachingFrameAlignment(){
@@ -723,8 +725,9 @@ function applyVisualState(){
   finalDensityToggle.classList.toggle("active",visualState.density);
   finalCentersToggle.classList.toggle("active",visualState.centers);
   densityLegend.classList.toggle("visible",!!(selectedMolecule&&visualState.density));
-  centerLegend.classList.toggle("visible",!!(selectedMolecule&&visualState.centers));
-  centerLegend.setAttribute("aria-hidden",selectedMolecule&&visualState.centers?"false":"true");
+  const showCenterLegend=!!(selectedMolecule&&selectedMolecule.polarBonds&&visualState.centers);
+  centerLegend.classList.toggle("visible",showCenterLegend);
+  centerLegend.setAttribute("aria-hidden",showCenterLegend?"false":"true");
   const any3d=visualState.model||visualState.geometry||visualState.centers||visualState.density;
   markerHint.classList.toggle("visible",!!(selectedMolecule&&any3d&&!trackedCubeRoot.visible));
 }
@@ -749,7 +752,19 @@ function setStepDone(index,done){
 }
 
 function updateProgress(activeStep){
+  if(reducedPath){
+    progressDots[0].style.display="";
+    progressDots[1].style.display="none";
+    progressDots[2].style.display="none";
+    progressDots[3].style.display="";
+    progressDots[0].classList.toggle("done",activeStep>1||solved);
+    progressDots[0].classList.toggle("active",!solved&&activeStep===1);
+    progressDots[3].classList.toggle("done",!!solved);
+    progressDots[3].classList.toggle("active",!solved&&activeStep===2);
+    return;
+  }
   progressDots.forEach((dot,i)=>{
+    dot.style.display="";
     dot.classList.toggle("done",i+1<activeStep || solved);
     dot.classList.toggle("active",!solved&&i+1===activeStep);
   });
@@ -757,6 +772,7 @@ function updateProgress(activeStep){
 
 function resetTaskUI(){
   solved=false;
+  reducedPath=false;
   visualState.model=false;
   visualState.geometry=false;
   visualState.centers=false;
@@ -773,6 +789,14 @@ function resetTaskUI(){
     setStepUnlocked(i,i===1);
     clearFeedback(i);
   }
+  steps[1].hidden=false;
+  steps[2].hidden=false;
+  steps[3].querySelector(".stepNumber").textContent="4";
+  helpGeometryButton.style.display="";
+  helpCentersButton.style.display="";
+  helpCentersButton.disabled=true;
+  finalCentersToggle.hidden=false;
+  successText.textContent="Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche und den Ladungsschwerpunkten angezeigt.";
   updateProgress(1);
 
   for(const radio of document.querySelectorAll('input[type="radio"]'))radio.checked=false;
@@ -804,7 +828,7 @@ function populateEnFields(){
     input.type="text";
     input.inputMode="decimal";
     input.autocomplete="off";
-    input.placeholder="z. B. 1,4";
+    input.placeholder="ΔEN eingeben";
     input.className="deltaInput";
     input.dataset.bondIndex=String(index);
     row.append(label,input);
@@ -828,6 +852,7 @@ function selectMolecule(key){
 function returnToChooser(){
   selectedMolecule=null;
   solved=false;
+  reducedPath=false;
   taskPanel.hidden=true;
   pseDock.hidden=true;
   centerLegend.classList.remove("visible");
@@ -872,8 +897,26 @@ checkStep1Button.addEventListener("click",()=>{
 
   if(allDeltaCorrect&&polarCorrect){
     setFeedback(1,true,"Richtig. Die Bindungspolarität ist korrekt bestimmt.");
-    setStepDone(1,true);setStepUnlocked(2,true);updateProgress(2);
-    steps[1].scrollIntoView({behavior:"smooth",block:"nearest"});
+    setStepDone(1,true);
+    if(selectedMolecule.polarBonds){
+      helpCentersButton.disabled=false;
+      setStepUnlocked(2,true);
+      updateProgress(2);
+      steps[1].scrollIntoView({behavior:"smooth",block:"nearest"});
+    }else{
+      reducedPath=true;
+      steps[1].hidden=true;
+      steps[2].hidden=true;
+      helpGeometryButton.style.display="none";
+      helpCentersButton.style.display="none";
+      visualState.geometry=false;
+      visualState.centers=false;
+      applyVisualState();
+      steps[3].querySelector(".stepNumber").textContent="2";
+      setStepUnlocked(4,true);
+      updateProgress(2);
+      steps[3].scrollIntoView({behavior:"smooth",block:"nearest"});
+    }
   }else{
     setFeedback(1,false,"Noch nicht vollständig richtig. Prüfe die EN-Werte aus der Tabelle, bilde jeweils den Betrag der Differenz und beachte die Grenze bei ΔEN = 0,4.");
   }
@@ -918,12 +961,16 @@ checkStep4Button.addEventListener("click",()=>{
 
 function completeTask(){
   solved=true;
-  updateProgress(5);
+  updateProgress(reducedPath?3:5);
   successCard.classList.add("show");
   visualState.model=true;
   visualState.geometry=false;
-  visualState.centers=true;
+  visualState.centers=!!selectedMolecule.polarBonds;
   visualState.density=true;
+  finalCentersToggle.hidden=!selectedMolecule.polarBonds;
+  successText.textContent=selectedMolecule.polarBonds
+    ? "Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche und den Ladungsschwerpunkten angezeigt."
+    : "Das Ball-and-Stick-Modell wird jetzt zusammen mit der berechneten Elektronendichteoberfläche angezeigt.";
   applyVisualState();
   successCard.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
@@ -946,7 +993,7 @@ helpGeometryButton.addEventListener("click",()=>{
 });
 
 helpCentersButton.addEventListener("click",()=>{
-  if(solved)return;
+  if(solved||helpCentersButton.disabled||!selectedMolecule?.polarBonds)return;
   visualState.centers=!visualState.centers;
   if(visualState.centers)visualState.model=true;
   applyVisualState();
@@ -959,7 +1006,7 @@ finalDensityToggle.addEventListener("click",()=>{
 });
 
 finalCentersToggle.addEventListener("click",()=>{
-  if(!solved)return;
+  if(!solved||!selectedMolecule?.polarBonds)return;
   visualState.centers=!visualState.centers;
   applyVisualState();
 });

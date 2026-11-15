@@ -281,59 +281,39 @@ function createDensitySurface(data,displayCenter){
   const mesh=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
-    opacity:0.72,
+    opacity:0.66,
     shininess:72,
     specular:0x666666,
-    side:THREE.DoubleSide,
-    depthWrite:false
+    side:THREE.FrontSide,
+    depthWrite:true
   }));
   mesh.name="density-surface";
   mesh.renderOrder=8;
   return mesh;
 }
 
-function createCenterLabel(text,color,worldWidth=0.030){
-  return createTextSprite(text,{
-    fg:"#ffffff",
-    bg:color,
-    worldWidth,
-    worldHeight:0.015,
-    font:"700 38px Arial"
-  });
+function nearestAtomAtPosition(point,positions){
+  let bestIndex=-1;
+  let bestDistance=Infinity;
+  for(let i=0;i<positions.length;i++){
+    const d=point.distanceTo(positions[i]);
+    if(d<bestDistance){bestDistance=d;bestIndex=i;}
+  }
+  return {index:bestIndex,distance:bestDistance};
 }
 
 function createPreciseCenterMarker(position,kind){
-  const isPlus=kind==="plus";
-  const color=isPlus?STYLE.positiveColor:STYLE.negativeColor;
-  const group=new THREE.Group();
-  group.position.copy(position);
-  group.name=isPlus?"positive-charge-center":"negative-charge-center";
-
-  // Kleiner, exakter Schwerpunktpunkt. depthTest=false macht ihn auch dann
-  // sichtbar, wenn er im Atomzentrum oder hinter der Elektronendichte liegt.
+  const color=kind==="plus"?STYLE.positiveColor:STYLE.negativeColor;
   const sphere=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0042,24,18),
+    new THREE.SphereGeometry(0.0028,22,16),
     new THREE.MeshBasicMaterial({
       color,transparent:true,opacity:0.98,depthTest:false,depthWrite:false
     })
   );
+  sphere.position.copy(position);
   sphere.renderOrder=60;
-  group.add(sphere);
-
-  // Ein dünner weißer Ring kennzeichnet exakt den Mittelpunkt, ohne das Atom
-  // mit einem großen Halo zu überdecken.
-  const ring=new THREE.Mesh(
-    new THREE.TorusGeometry(0.0060,0.00055,10,36),
-    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.92,depthTest:false,depthWrite:false})
-  );
-  ring.renderOrder=61;
-  group.add(ring);
-
-  const label=createCenterLabel(isPlus?"S⁺":"S⁻",isPlus?"rgba(37,117,230,.94)":"rgba(229,57,53,.94)",0.031);
-  label.position.set(0,0.013,0);
-  label.renderOrder=70;
-  group.add(label);
-  return group;
+  sphere.name=kind==="plus"?"positive-charge-center":"negative-charge-center";
+  return sphere;
 }
 
 function createCoincidentCenterMarker(position){
@@ -341,24 +321,27 @@ function createCoincidentCenterMarker(position){
   group.position.copy(position);
   group.name="coincident-charge-centers";
 
-  const sphere=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0048,24,18),
-    new THREE.MeshBasicMaterial({color:0x8b5cf6,transparent:true,opacity:0.98,depthTest:false,depthWrite:false})
+  // Eine gemeinsame Kugel mit zwei Farbhälften: beide Schwerpunkte liegen
+  // exakt am selben Ort, ohne einen zusätzlichen Text oder einen Versatz.
+  const plusHalf=new THREE.Mesh(
+    new THREE.SphereGeometry(0.0030,24,16,0,Math.PI),
+    new THREE.MeshBasicMaterial({
+      color:STYLE.positiveColor,transparent:true,opacity:0.98,depthTest:false,depthWrite:false,
+      side:THREE.DoubleSide
+    })
   );
-  sphere.renderOrder=60;
-  group.add(sphere);
+  plusHalf.renderOrder=60;
+  group.add(plusHalf);
 
-  const ring=new THREE.Mesh(
-    new THREE.TorusGeometry(0.0066,0.0006,10,36),
-    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.95,depthTest:false,depthWrite:false})
+  const minusHalf=new THREE.Mesh(
+    new THREE.SphereGeometry(0.0030,24,16,Math.PI,Math.PI),
+    new THREE.MeshBasicMaterial({
+      color:STYLE.negativeColor,transparent:true,opacity:0.98,depthTest:false,depthWrite:false,
+      side:THREE.DoubleSide
+    })
   );
-  ring.renderOrder=61;
-  group.add(ring);
-
-  const label=createCenterLabel("S⁺ = S⁻","rgba(139,92,246,.96)",0.052);
-  label.position.set(0,0.014,0);
-  label.renderOrder=70;
-  group.add(label);
+  minusHalf.renderOrder=60;
+  group.add(minusHalf);
   return group;
 }
 
@@ -378,30 +361,43 @@ function createCenterConnection(plus,minus){
   }
   const line=lineSegmentsGeometry(points);
   line.material.color.set(0xffffff);
-  line.material.opacity=0.58;
+  line.material.opacity=0.42;
   line.material.depthTest=false;
   line.renderOrder=50;
   return line;
 }
 
 function createCenters(data,positions,displayCenter){
-  const result=calculateChargeCenters(data);
   const group=new THREE.Group();
   group.name="charge-centers";
+  const fadeAtomIndices=new Set();
 
+  // Ohne polare Bindung existiert in diesem didaktischen Modell keine
+  // Trennung von Ladungsschwerpunkten; entsprechend wird nichts gezeichnet.
+  if(!data.polarBonds)return {group,fadeAtomIndices:[]};
+
+  const result=calculateChargeCenters(data);
   const plus=toScenePoint(result.plus,displayCenter);
   const minus=toScenePoint(result.minus,displayCenter);
   const coincident=plus.distanceTo(minus)<0.003;
 
+  const markAtomIfInside=(point)=>{
+    const nearest=nearestAtomAtPosition(point,positions);
+    if(nearest.index>=0&&nearest.distance<0.0018)fadeAtomIndices.add(nearest.index);
+  };
+
   if(coincident){
+    markAtomIfInside(plus);
     group.add(createCoincidentCenterMarker(plus));
   }else{
+    markAtomIfInside(plus);
+    markAtomIfInside(minus);
     group.add(createPreciseCenterMarker(plus,"plus"));
     group.add(createPreciseCenterMarker(minus,"minus"));
     const connection=createCenterConnection(plus,minus);
     if(connection)group.add(connection);
   }
-  return group;
+  return {group,fadeAtomIndices:[...fadeAtomIndices]};
 }
 
 export function buildDipoleScene(data){
@@ -414,10 +410,16 @@ export function buildDipoleScene(data){
   const modelGroup=new THREE.Group();
   modelGroup.name="model";
   for(const b of data.bonds)modelGroup.add(createBond(data,b,positions));
-  for(let i=0;i<data.atoms.length;i++)modelGroup.add(createAtom(data.atoms[i],positions[i]));
+  const atomMeshes=[];
+  for(let i=0;i<data.atoms.length;i++){
+    const atomMesh=createAtom(data.atoms[i],positions[i]);
+    atomMeshes.push(atomMesh);
+    modelGroup.add(atomMesh);
+  }
 
   const geometryGroup=createGeometryOverlay(data,positions);
-  const centersGroup=createCenters(data,positions,displayCenter);
+  const centerBuild=createCenters(data,positions,displayCenter);
+  const centersGroup=centerBuild.group;
   const densityGroup=new THREE.Group();
   densityGroup.name="density";
   densityGroup.add(createDensitySurface(data,displayCenter));
@@ -432,16 +434,32 @@ export function buildDipoleScene(data){
   densityGroup.visible=false;
 
   root.userData.visualGroups={modelGroup,geometryGroup,centersGroup,densityGroup};
+  root.userData.atomMeshes=atomMeshes;
+  root.userData.centerAtomIndices=new Set(centerBuild.fadeAtomIndices);
+  root.userData.hasPolarBonds=!!data.polarBonds;
   return root;
 }
 
 export function setDipoleVisualState(root,{model=false,geometry=false,centers=false,density=false}={}){
   const groups=root?.userData?.visualGroups;
   if(!groups)return;
+  const showCenters=!!centers&&!!root.userData.hasPolarBonds;
   groups.modelGroup.visible=!!model;
   groups.geometryGroup.visible=!!geometry;
-  groups.centersGroup.visible=!!centers;
+  groups.centersGroup.visible=showCenters;
   groups.densityGroup.visible=!!density;
+
+  // Liegt ein Schwerpunkt exakt in einem Atomzentrum, wird nur dieses Atom
+  // während der Schwerpunktdarstellung transparent. Die kleine Kugel bleibt
+  // unverändert am exakten Schwerpunktort im Inneren.
+  const faded=root.userData.centerAtomIndices??new Set();
+  (root.userData.atomMeshes??[]).forEach((atomMesh,index)=>{
+    const shouldFade=showCenters&&faded.has(index);
+    atomMesh.material.transparent=shouldFade;
+    atomMesh.material.opacity=shouldFade?0.20:1.0;
+    atomMesh.material.depthWrite=!shouldFade;
+    atomMesh.material.needsUpdate=true;
+  });
 }
 
 export function disposeObject3D(root){
