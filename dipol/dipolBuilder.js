@@ -18,6 +18,11 @@ const STYLE=Object.freeze({
   negativeColor:0xe53935
 });
 
+const DENSITY_SURFACE_SCALE=0.80;
+const ETHYNE_NEUTRAL_GREEN=[92,204,88];
+const ETHYNE_COOL_GREEN=[67,193,174];
+const ETHYNE_WARM_GREEN=[186,214,84];
+
 function v(x=0,y=0,z=0){return new THREE.Vector3(x,y,z);}
 
 function getDisplayCenter(data){
@@ -58,18 +63,36 @@ function bondOffsetDirection(axis){
   return new THREE.Vector3().crossVectors(axis,ref).normalize();
 }
 
-function createBondCylinder(start,end,radius=0.00185,offset=null){
+function computeBondTrim(atomRadius,offsetLength){
+  const inside=Math.max(0,atomRadius*atomRadius-offsetLength*offsetLength);
+  return Math.sqrt(inside);
+}
+
+function createBondCylinder(start,end,{radius=0.00185,startRadius=0.010,endRadius=0.010,offset=null}={}){
   const a=start.clone();
   const b=end.clone();
+  const offsetLength=offset?offset.length():0;
   if(offset){a.add(offset);b.add(offset);}
-  const segment=b.clone().sub(a);
+  const fullSegment=b.clone().sub(a);
+  const fullLength=fullSegment.length();
+  if(fullLength<1e-8)return null;
+
+  const direction=fullSegment.clone().normalize();
+  const startTrim=computeBondTrim(startRadius,offsetLength);
+  const endTrim=computeBondTrim(endRadius,offsetLength);
+  const safetyGap=Math.max(0.00025,radius*0.18);
+  const trimmedA=a.clone().addScaledVector(direction,startTrim+safetyGap);
+  const trimmedB=b.clone().addScaledVector(direction,-(endTrim+safetyGap));
+
+  const segment=trimmedB.clone().sub(trimmedA);
   const len=segment.length();
   if(len<1e-8)return null;
+
   const mesh=new THREE.Mesh(
     new THREE.CylinderGeometry(radius,radius,len,20,1,false),
     new THREE.MeshStandardMaterial({color:STYLE.bondColor,roughness:0.60,metalness:0})
   );
-  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.position.copy(trimmedA).add(trimmedB).multiplyScalar(0.5);
   mesh.quaternion.setFromUnitVectors(v(0,1,0),segment.clone().normalize());
   mesh.userData.kind="bond";
   return mesh;
@@ -81,44 +104,52 @@ function createBond(data,bond,positions){
   const axis=end.clone().sub(start).normalize();
   const side=bondOffsetDirection(axis);
   const spacing=0.0030;
+  const startRadius=STYLE.atomRadius[data.atoms[bond.a].element] ?? 0.010;
+  const endRadius=STYLE.atomRadius[data.atoms[bond.b].element] ?? 0.010;
 
   if(bond.order===1){
-    group.add(createBondCylinder(start,end));
+    group.add(createBondCylinder(start,end,{radius:0.00185,startRadius,endRadius}));
   }else if(bond.order===2){
-    group.add(createBondCylinder(start,end,0.00155,side.clone().multiplyScalar(-spacing/2)));
-    group.add(createBondCylinder(start,end,0.00155,side.clone().multiplyScalar( spacing/2)));
+    group.add(createBondCylinder(start,end,{radius:0.00155,startRadius,endRadius,offset:side.clone().multiplyScalar(-spacing/2)}));
+    group.add(createBondCylinder(start,end,{radius:0.00155,startRadius,endRadius,offset:side.clone().multiplyScalar( spacing/2)}));
   }else{
-    group.add(createBondCylinder(start,end,0.00142,side.clone().multiplyScalar(-spacing)));
-    group.add(createBondCylinder(start,end,0.00142));
-    group.add(createBondCylinder(start,end,0.00142,side.clone().multiplyScalar( spacing)));
+    group.add(createBondCylinder(start,end,{radius:0.00142,startRadius,endRadius,offset:side.clone().multiplyScalar(-spacing)}));
+    group.add(createBondCylinder(start,end,{radius:0.00142,startRadius,endRadius}));
+    group.add(createBondCylinder(start,end,{radius:0.00142,startRadius,endRadius,offset:side.clone().multiplyScalar( spacing)}));
   }
   return group;
 }
 
-function createTextSprite(text,{fg="#ffffff",bg="rgba(0,0,0,.70)",worldWidth=0.055,worldHeight=0.022,font="700 76px Arial"}={}){
-  // Hochaufgelöste Canvas-Textur: verhindert die stark verpixelten
-  // Geometrie-Labels der früheren Versionen.
+function createTextSprite(text,{fg="#ffffff",bg="rgba(0,0,0,.78)",worldWidth=0.066,worldHeight=0.027,font="700 136px Arial"}={}){
   const canvas=document.createElement("canvas");
-  canvas.width=1024;canvas.height=256;
-  const ctx=canvas.getContext("2d");
+  canvas.width=2048;canvas.height=512;
+  const ctx=canvas.getContext("2d",{alpha:true});
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle=bg;
   ctx.beginPath();
-  if(ctx.roundRect)ctx.roundRect(12,24,1000,208,44);
-  else ctx.rect(12,24,1000,208);
+  if(ctx.roundRect)ctx.roundRect(22,52,2004,408,84);
+  else ctx.rect(22,52,2004,408);
   ctx.fill();
-  ctx.fillStyle=fg;
+
   ctx.font=font;
-  ctx.textAlign="center";ctx.textBaseline="middle";
-  ctx.fillText(text,512,132,950);
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.lineJoin="round";
+  ctx.miterLimit=2;
+  ctx.strokeStyle="rgba(0,0,0,0.55)";
+  ctx.lineWidth=24;
+  ctx.strokeText(text,1024,263,1880);
+  ctx.fillStyle=fg;
+  ctx.fillText(text,1024,263,1880);
+
   const tex=new THREE.CanvasTexture(canvas);
   tex.colorSpace=THREE.SRGBColorSpace;
   tex.generateMipmaps=true;
   tex.minFilter=THREE.LinearMipmapLinearFilter;
   tex.magFilter=THREE.LinearFilter;
-  tex.anisotropy=8;
+  tex.needsUpdate=true;
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({
-    map:tex,transparent:true,depthTest:false,depthWrite:false
+    map:tex,transparent:true,depthTest:false,depthWrite:false,sizeAttenuation:true
   }));
   sprite.scale.set(worldWidth,worldHeight,1);
   sprite.renderOrder=40;
@@ -231,9 +262,9 @@ function createGeometryOverlay(data,positions){
   }
 
   const label=createTextSprite(data.geometryLabel,{
-    fg:"#effff0",bg:"rgba(20,105,29,.88)",
-    worldWidth:Math.max(0.050,0.012+data.geometryLabel.length*0.0033),
-    worldHeight:0.020
+    fg:"#f5fff5",bg:"rgba(20,105,29,.92)",
+    worldWidth:Math.max(0.068,0.018+data.geometryLabel.length*0.0045),
+    worldHeight:0.028
   });
   const box=new THREE.Box3().setFromPoints(positions);
   const top=box.max.clone();
@@ -250,6 +281,28 @@ function decodeBase64Bytes(b64){
   return bytes;
 }
 
+function mixRGB(a,b,t){
+  return [
+    Math.round(a[0]*(1-t)+b[0]*t),
+    Math.round(a[1]*(1-t)+b[1]*t),
+    Math.round(a[2]*(1-t)+b[2]*t)
+  ];
+}
+
+function recolorEthyneSurface(colorBytes){
+  const recolored=new Uint8Array(colorBytes.length);
+  for(let i=0;i<colorBytes.length;i+=3){
+    const r=colorBytes[i], g=colorBytes[i+1], b=colorBytes[i+2];
+    const warm=Math.max(0,(r-b)/255);
+    const cool=Math.max(0,(b-r)/255);
+    let c=ETHYNE_NEUTRAL_GREEN;
+    if(warm>0.06)c=mixRGB(ETHYNE_NEUTRAL_GREEN,ETHYNE_WARM_GREEN,Math.min(0.35,warm*0.45));
+    else if(cool>0.06)c=mixRGB(ETHYNE_NEUTRAL_GREEN,ETHYNE_COOL_GREEN,Math.min(0.35,cool*0.45));
+    recolored[i]=c[0]; recolored[i+1]=c[1]; recolored[i+2]=c[2];
+  }
+  return recolored;
+}
+
 function createDensitySurface(data,displayCenter){
   const raw=SURFACE_DATA[data.key];
   if(!raw)return new THREE.Group();
@@ -258,12 +311,13 @@ function createDensitySurface(data,displayCenter){
   const sourcePos=new Float32Array(pBytes.buffer);
   const positions=new Float32Array(sourcePos.length);
   for(let i=0;i<sourcePos.length;i+=3){
-    positions[i]=(sourcePos[i]-displayCenter.x)*ANGSTROM_TO_SCENE;
-    positions[i+1]=(sourcePos[i+1]-displayCenter.y)*ANGSTROM_TO_SCENE;
-    positions[i+2]=(sourcePos[i+2]-displayCenter.z)*ANGSTROM_TO_SCENE;
+    positions[i]=(sourcePos[i]-displayCenter.x)*ANGSTROM_TO_SCENE*DENSITY_SURFACE_SCALE;
+    positions[i+1]=(sourcePos[i+1]-displayCenter.y)*ANGSTROM_TO_SCENE*DENSITY_SURFACE_SCALE;
+    positions[i+2]=(sourcePos[i+2]-displayCenter.z)*ANGSTROM_TO_SCENE*DENSITY_SURFACE_SCALE;
   }
 
-  const cBytes=decodeBase64Bytes(raw.colorsB64);
+  let cBytes=decodeBase64Bytes(raw.colorsB64);
+  if(data.key==="C2H2")cBytes=recolorEthyneSurface(cBytes);
   const iBytes=decodeBase64Bytes(raw.indicesB64);
   const indices=raw.indexType==="u32"?new Uint32Array(iBytes.buffer):new Uint16Array(iBytes.buffer);
 
