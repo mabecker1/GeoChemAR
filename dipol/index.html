@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – Dipol 1d</title>
+<title>GeoChemAR – Dipol 1f</title>
 <style>
 :root{
   --green:#2fac16;
@@ -30,6 +30,8 @@ button{cursor:pointer}
   position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1;
 }
 #threeCanvas{position:fixed;z-index:2;pointer-events:none}
+#geometryLabelOverlay{position:fixed;left:0;top:0;z-index:24;display:none;pointer-events:none;transform:translate(-50%,-50%);}
+#geometryLabelOverlay .geometryLabelChip{display:inline-block;padding:10px 18px;border-radius:16px;background:rgba(20,105,29,.94);color:#f7fff7;border:2px solid rgba(255,255,255,.88);box-shadow:0 6px 18px rgba(0,0,0,.30);font-weight:800;font-size:22px;line-height:1;letter-spacing:.2px;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35)}
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
 #status{
   display:none;position:fixed;left:10px;top:10px;z-index:90;
@@ -270,6 +272,7 @@ html.debug-mode #status{display:block}
 <canvas id="recoveryCanvas" width="320" height="320"></canvas>
 <canvas id="flowCanvas" width="320" height="240"></canvas>
 <canvas id="threeCanvas" width="640" height="480"></canvas>
+<div id="geometryLabelOverlay" aria-hidden="true"><span class="geometryLabelChip"></span></div>
 <div id="status">AprilTag wird geladen …</div>
 <div id="error"></div>
 
@@ -398,7 +401,7 @@ import {
 } from "./dipolData.js";
 import { buildDipoleScene, setDipoleVisualState, disposeObject3D } from "./dipolBuilder.js";
 
-const VERSION="Dipol-1e / Core EPA-6a";
+const VERSION="Dipol-1f / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -581,6 +584,8 @@ const recoveryCtx=recoveryCanvas.getContext("2d",{willReadFrequently:true});
 const flowCanvas=document.getElementById("flowCanvas");
 const flowCtx=flowCanvas.getContext("2d",{willReadFrequently:true});
 const threeCanvas=document.getElementById("threeCanvas");
+const geometryLabelOverlay=document.getElementById("geometryLabelOverlay");
+const geometryLabelChip=geometryLabelOverlay.querySelector(".geometryLabelChip");
 const status=document.getElementById("status");
 const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
 if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
@@ -753,6 +758,7 @@ function applyVisualState(){
   const showCenterLegend=!!(selectedMolecule&&selectedMolecule.polarBonds&&visualState.centers);
   centerLegend.classList.toggle("visible",showCenterLegend);
   centerLegend.setAttribute("aria-hidden",showCenterLegend?"false":"true");
+  if(!visualState.geometry||!currentContentGroup)geometryLabelOverlay.style.display="none";
 }
 
 function setFeedback(index,ok,text){
@@ -863,6 +869,7 @@ function selectMolecule(key){
   selectedMolecule=getMolecule(key);
   taskFormula.textContent=selectedMolecule.formula;
   taskName.textContent=selectedMolecule.name;
+  geometryLabelChip.textContent=selectedMolecule.geometryLabel;
   chooser.style.display="none";
   taskPanel.hidden=false;
   pseDock.hidden=false;
@@ -883,6 +890,7 @@ function returnToChooser(){
   zoomBar.classList.remove("visible");
   densityLegend.classList.remove("visible");
   clearCurrentContent();
+  geometryLabelOverlay.style.display="none";
 }
 
 for(const key of MOLECULE_ORDER){
@@ -1044,8 +1052,37 @@ zoomOutButton.addEventListener("click",()=>setZoom(moleculeZoom-0.10));
 zoomInButton.addEventListener("click",()=>setZoom(moleculeZoom+0.10));
 zoomResetButton.addEventListener("click",()=>setZoom(1.0));
 
+const _labelWorld=new THREE.Vector3();
+const _labelClip=new THREE.Vector3();
+function updateGeometryLabelOverlay(){
+  if(!selectedMolecule||!currentContentGroup||!visualState.geometry||!trackedCubeRoot.visible){
+    geometryLabelOverlay.style.display="none";
+    return;
+  }
+  const anchor=currentContentGroup.userData?.geometryLabelAnchor;
+  if(!anchor){
+    geometryLabelOverlay.style.display="none";
+    return;
+  }
+  anchor.getWorldPosition(_labelWorld);
+  _labelClip.copy(_labelWorld).project(camera);
+  if(_labelClip.z<-1||_labelClip.z>1||Math.abs(_labelClip.x)>1.18||Math.abs(_labelClip.y)>1.18){
+    geometryLabelOverlay.style.display="none";
+    return;
+  }
+  const rect=threeCanvas.getBoundingClientRect();
+  const x=rect.left + (_labelClip.x*0.5 + 0.5)*rect.width;
+  const y=rect.top + (-_labelClip.y*0.5 + 0.5)*rect.height;
+  const distance=Math.max(0.12,camera.position.distanceTo(_labelWorld));
+  const scale=Math.max(0.88,Math.min(1.28,1.05/distance));
+  geometryLabelChip.style.transform=`scale(${scale.toFixed(3)})`;
+  geometryLabelOverlay.style.left=`${x}px`;
+  geometryLabelOverlay.style.top=`${y}px`;
+  geometryLabelOverlay.style.display="block";
+}
 function updateLessonVisuals(){
   updateTeachingFrameAlignment();
+  updateGeometryLabelOverlay();
 }
 
 const basisChange=new THREE.Matrix4().set(1,0,0,0, 0,-1,0,0, 0,0,-1,0, 0,0,0,1);

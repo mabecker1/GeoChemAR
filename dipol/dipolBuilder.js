@@ -18,7 +18,7 @@ const STYLE=Object.freeze({
   negativeColor:0xe53935
 });
 
-const DENSITY_SURFACE_SCALE=0.80;
+const DENSITY_SURFACE_SCALE=0.68;
 const ETHYNE_NEUTRAL_GREEN=[92,204,88];
 const ETHYNE_COOL_GREEN=[67,193,174];
 const ETHYNE_WARM_GREEN=[186,214,84];
@@ -261,15 +261,13 @@ function createGeometryOverlay(data,positions){
     group.add(faces);
   }
 
-  const label=createTextSprite(data.geometryLabel,{
-    fg:"#f5fff5",bg:"rgba(20,105,29,.92)",
-    worldWidth:Math.max(0.068,0.018+data.geometryLabel.length*0.0045),
-    worldHeight:0.028
-  });
   const box=new THREE.Box3().setFromPoints(positions);
   const top=box.max.clone();
-  label.position.set(0,top.y+0.025,0);
-  group.add(label);
+  const labelAnchor=new THREE.Object3D();
+  labelAnchor.name="geometry-label-anchor";
+  labelAnchor.position.set(0,top.y+0.031,0);
+  labelAnchor.userData.labelText=data.geometryLabel;
+  group.add(labelAnchor);
 
   return group;
 }
@@ -366,18 +364,34 @@ function nearestAtomAtPosition(point,positions){
   return {index:bestIndex,distance:bestDistance};
 }
 
-function createPreciseCenterMarker(position,kind){
-  const color=kind==="plus"?STYLE.positiveColor:STYLE.negativeColor;
-  const sphere=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0020,24,18),
-    new THREE.MeshPhongMaterial({
-      color,shininess:80,specular:0xffffff,transparent:false,depthTest:true,depthWrite:true
+function createMarkerShell(radius,color,opacity=0.96){
+  const shell=new THREE.Mesh(
+    new THREE.SphereGeometry(radius,26,20),
+    new THREE.MeshBasicMaterial({
+      color,transparent:true,opacity,depthTest:true,depthWrite:false,side:THREE.BackSide
     })
   );
-  sphere.position.copy(position);
+  shell.renderOrder=5;
+  return shell;
+}
+
+function createPreciseCenterMarker(position,kind){
+  const color=kind==="plus"?STYLE.positiveColor:STYLE.negativeColor;
+  const group=new THREE.Group();
+  group.position.copy(position);
+
+  const sphere=new THREE.Mesh(
+    new THREE.SphereGeometry(0.0029,28,22),
+    new THREE.MeshPhongMaterial({
+      color,emissive:color,emissiveIntensity:0.32,shininess:92,specular:0xffffff,transparent:false,depthTest:true,depthWrite:true
+    })
+  );
   sphere.renderOrder=6;
   sphere.name=kind==="plus"?"positive-charge-center":"negative-charge-center";
-  return sphere;
+  group.add(sphere);
+  group.add(createMarkerShell(0.0036,0xffffff,0.92));
+  group.add(createMarkerShell(0.0042,color,0.55));
+  return group;
 }
 
 function createCoincidentCenterMarker(position){
@@ -385,12 +399,10 @@ function createCoincidentCenterMarker(position){
   group.position.copy(position);
   group.name="coincident-charge-centers";
 
-  // Eine gemeinsame Kugel mit zwei Farbhälften: beide Schwerpunkte liegen
-  // exakt am selben Ort, ohne einen zusätzlichen Text oder einen Versatz.
   const plusHalf=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0022,26,18,0,Math.PI),
+    new THREE.SphereGeometry(0.0031,28,20,0,Math.PI),
     new THREE.MeshPhongMaterial({
-      color:STYLE.positiveColor,shininess:80,specular:0xffffff,depthTest:true,depthWrite:true,
+      color:STYLE.positiveColor,emissive:STYLE.positiveColor,emissiveIntensity:0.26,shininess:92,specular:0xffffff,depthTest:true,depthWrite:true,
       side:THREE.DoubleSide
     })
   );
@@ -398,14 +410,15 @@ function createCoincidentCenterMarker(position){
   group.add(plusHalf);
 
   const minusHalf=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0022,26,18,Math.PI,Math.PI),
+    new THREE.SphereGeometry(0.0031,28,20,Math.PI,Math.PI),
     new THREE.MeshPhongMaterial({
-      color:STYLE.negativeColor,shininess:80,specular:0xffffff,depthTest:true,depthWrite:true,
+      color:STYLE.negativeColor,emissive:STYLE.negativeColor,emissiveIntensity:0.26,shininess:92,specular:0xffffff,depthTest:true,depthWrite:true,
       side:THREE.DoubleSide
     })
   );
   minusHalf.renderOrder=6;
   group.add(minusHalf);
+  group.add(createMarkerShell(0.0038,0xffffff,0.92));
   return group;
 }
 
@@ -498,6 +511,8 @@ export function buildDipoleScene(data){
   densityGroup.visible=false;
 
   root.userData.visualGroups={modelGroup,geometryGroup,centersGroup,densityGroup};
+  root.userData.geometryLabelAnchor=geometryGroup.getObjectByName("geometry-label-anchor") ?? null;
+  root.userData.geometryLabelText=data.geometryLabel;
   root.userData.atomMeshes=atomMeshes;
   root.userData.centerAtomIndices=new Set(centerBuild.fadeAtomIndices);
   root.userData.centerInsideAtom=centerBuild.fadeAtomIndices.length>0;
