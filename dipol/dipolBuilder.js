@@ -292,68 +292,96 @@ function createDensitySurface(data,displayCenter){
   return mesh;
 }
 
-function nearestAtomInfo(point,positions,data){
-  let bestIndex=-1,best=Infinity;
-  for(let i=0;i<positions.length;i++){
-    const d=point.distanceTo(positions[i]);
-    if(d<best){best=d;bestIndex=i;}
-  }
-  return {
-    index:bestIndex,
-    distance:best,
-    radius:bestIndex>=0?(STYLE.atomRadius[data.atoms[bestIndex].element]??0.01):0.01
-  };
+function createCenterLabel(text,color,worldWidth=0.030){
+  return createTextSprite(text,{
+    fg:"#ffffff",
+    bg:color,
+    worldWidth,
+    worldHeight:0.015,
+    font:"700 38px Arial"
+  });
 }
 
-function createCenterMarker(position,kind,positions,data,{coincident=false}={}){
+function createPreciseCenterMarker(position,kind){
   const isPlus=kind==="plus";
   const color=isPlus?STYLE.positiveColor:STYLE.negativeColor;
-  const near=nearestAtomInfo(position,positions,data);
-  const onAtom=near.distance<0.0040;
-  const baseRadius=coincident
-    ? (isPlus?0.0048:0.0084)
-    : (onAtom?near.radius+0.0032:0.0058);
-
   const group=new THREE.Group();
   group.position.copy(position);
-  group.renderOrder=30;
+  group.name=isPlus?"positive-charge-center":"negative-charge-center";
 
+  // Kleiner, exakter Schwerpunktpunkt. depthTest=false macht ihn auch dann
+  // sichtbar, wenn er im Atomzentrum oder hinter der Elektronendichte liegt.
   const sphere=new THREE.Mesh(
-    new THREE.SphereGeometry(baseRadius,28,20),
+    new THREE.SphereGeometry(0.0042,24,18),
     new THREE.MeshBasicMaterial({
-      color,transparent:true,
-      opacity:coincident&&!isPlus?0.30:(onAtom?0.42:0.88),
-      depthTest:false,depthWrite:false,
-      wireframe:coincident&&!isPlus
+      color,transparent:true,opacity:0.98,depthTest:false,depthWrite:false
     })
   );
-  sphere.renderOrder=30;
+  sphere.renderOrder=60;
   group.add(sphere);
 
-  if(onAtom && !(coincident&&!isPlus)){
-    const halo=new THREE.Mesh(
-      new THREE.SphereGeometry(baseRadius+0.0015,24,18),
-      new THREE.MeshBasicMaterial({
-        color,transparent:true,opacity:0.38,
-        wireframe:true,depthTest:false,depthWrite:false
-      })
-    );
-    halo.renderOrder=31;
-    group.add(halo);
-  }
+  // Ein dünner weißer Ring kennzeichnet exakt den Mittelpunkt, ohne das Atom
+  // mit einem großen Halo zu überdecken.
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(0.0060,0.00055,10,36),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.92,depthTest:false,depthWrite:false})
+  );
+  ring.renderOrder=61;
+  group.add(ring);
 
-  const label=createTextSprite(isPlus?"+":"−",{
-    fg:"#ffffff",
-    bg:isPlus?"rgba(37,117,230,.94)":"rgba(229,57,53,.94)",
-    worldWidth:0.018,worldHeight:0.018,font:"700 54px Arial"
-  });
-  label.position.set(coincident?(isPlus?0.014:-0.014):0,baseRadius+0.010,0);
-  label.renderOrder=42;
+  const label=createCenterLabel(isPlus?"S⁺":"S⁻",isPlus?"rgba(37,117,230,.94)":"rgba(229,57,53,.94)",0.031);
+  label.position.set(0,0.013,0);
+  label.renderOrder=70;
   group.add(label);
-
-  group.userData.centerKind=kind;
-  group.userData.onAtom=onAtom;
   return group;
+}
+
+function createCoincidentCenterMarker(position){
+  const group=new THREE.Group();
+  group.position.copy(position);
+  group.name="coincident-charge-centers";
+
+  const sphere=new THREE.Mesh(
+    new THREE.SphereGeometry(0.0048,24,18),
+    new THREE.MeshBasicMaterial({color:0x8b5cf6,transparent:true,opacity:0.98,depthTest:false,depthWrite:false})
+  );
+  sphere.renderOrder=60;
+  group.add(sphere);
+
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(0.0066,0.0006,10,36),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.95,depthTest:false,depthWrite:false})
+  );
+  ring.renderOrder=61;
+  group.add(ring);
+
+  const label=createCenterLabel("S⁺ = S⁻","rgba(139,92,246,.96)",0.052);
+  label.position.set(0,0.014,0);
+  label.renderOrder=70;
+  group.add(label);
+  return group;
+}
+
+function createCenterConnection(plus,minus){
+  const direction=minus.clone().sub(plus);
+  const distance=direction.length();
+  if(distance<1e-6)return null;
+  const dashCount=Math.max(3,Math.floor(distance/0.006));
+  const points=[];
+  for(let i=0;i<dashCount;i++){
+    const a=(i+0.12)/dashCount;
+    const b=(i+0.55)/dashCount;
+    points.push(
+      plus.clone().lerp(minus,a),
+      plus.clone().lerp(minus,Math.min(b,0.96))
+    );
+  }
+  const line=lineSegmentsGeometry(points);
+  line.material.color.set(0xffffff);
+  line.material.opacity=0.58;
+  line.material.depthTest=false;
+  line.renderOrder=50;
+  return line;
 }
 
 function createCenters(data,positions,displayCenter){
@@ -365,17 +393,14 @@ function createCenters(data,positions,displayCenter){
   const minus=toScenePoint(result.minus,displayCenter);
   const coincident=plus.distanceTo(minus)<0.003;
 
-  group.add(createCenterMarker(plus,"plus",positions,data,{coincident}));
-  group.add(createCenterMarker(minus,"minus",positions,data,{coincident}));
-
-  if(!coincident){
-    const line=lineGeometry([plus,minus]);
-    line.material.color.set(0xffffff);
-    line.material.opacity=0.48;
-    line.material.dashed=true;
-    group.add(line);
+  if(coincident){
+    group.add(createCoincidentCenterMarker(plus));
+  }else{
+    group.add(createPreciseCenterMarker(plus,"plus"));
+    group.add(createPreciseCenterMarker(minus,"minus"));
+    const connection=createCenterConnection(plus,minus);
+    if(connection)group.add(connection);
   }
-
   return group;
 }
 

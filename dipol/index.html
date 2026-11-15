@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – Dipol 1a</title>
+<title>GeoChemAR – Dipol 1b</title>
 <style>
 :root{
   --green:#2fac16;
@@ -27,7 +27,7 @@ html,body{
 button,input,select{font:inherit}
 button{cursor:pointer}
 #video{
-  position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;
+  position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:1;
 }
 #threeCanvas{position:fixed;z-index:2;pointer-events:none}
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
@@ -170,9 +170,29 @@ html.debug-mode #status{display:block}
 }
 .finalControls button.active{background:var(--green);color:#fff;border-color:var(--green)}
 
-.pseCard{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;margin-top:10px}
+#pseDock{
+  position:fixed;left:12px;bottom:12px;z-index:26;
+  width:min(520px,calc(100vw - 548px));
+  max-height:calc(100vh - 90px);
+  border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.97);
+  padding:9px;box-shadow:0 8px 26px rgba(0,0,0,.20);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+#pseDock[hidden]{display:none}
 .pseTitle{font-size:12px;font-weight:800;color:#475467;margin-bottom:6px}
-.pseCard img{display:block;width:100%;height:auto;border-radius:8px}
+#pseDock img{display:block;width:100%;height:auto;max-height:calc(100vh - 128px);object-fit:contain;border-radius:8px}
+
+#centerLegend{
+  position:fixed;left:14px;top:62px;z-index:27;display:none;
+  background:rgba(18,22,27,.86);color:#fff;border:1px solid rgba(255,255,255,.14);
+  border-radius:11px;padding:8px 10px;font-size:11px;line-height:1.4;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+#centerLegend.visible{display:block}
+.centerLegendRow{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.centerLegendRow+.centerLegendRow{margin-top:4px}
+.centerSwatch{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 0 1px rgba(255,255,255,.65)}
+.centerSwatch.plus{background:#2575e6}.centerSwatch.minus{background:#e53935}.centerSwatch.same{background:#8b5cf6}
 
 #densityLegend{
   position:fixed;left:14px;bottom:14px;z-index:25;display:none;align-items:center;gap:9px;
@@ -206,6 +226,13 @@ html.debug-mode #status{display:block}
   .helpButton{padding:8px}
   #densityLegend{top:12px;bottom:auto;left:12px}
   .zoomBar{top:12px;right:12px;left:auto}
+  #pseDock{
+    left:8px;right:8px;top:8px;bottom:auto;width:auto;
+    height:28vh;max-height:28vh;padding:6px;
+  }
+  #pseDock .pseTitle{display:none}
+  #pseDock img{width:100%;height:100%;max-height:none;object-fit:contain}
+  #centerLegend{top:calc(28vh + 16px);left:8px}
 }
 @media(max-width:450px){
   .chooserCard{padding:18px 14px}.chooserHeader h1{font-size:24px}
@@ -309,12 +336,19 @@ html.debug-mode #status{display:block}
       <div id="feedback4" class="feedback"></div>
     </section>
 
-    <div class="pseCard">
-      <div class="pseTitle">Elektronegativitäten – nutze die Werte aus dieser Tabelle</div>
-      <img src="./periodensystem_en.png" alt="Periodensystem mit Elektronegativitätswerten">
-    </div>
   </div>
 </aside>
+
+<div id="pseDock" hidden>
+  <div class="pseTitle">Elektronegativitäten – nutze die Werte aus dieser Tabelle</div>
+  <img src="./periodensystem_en.png" alt="Periodensystem mit Elektronegativitätswerten">
+</div>
+
+<div id="centerLegend" aria-hidden="true">
+  <div class="centerLegendRow"><span class="centerSwatch plus"></span><span><strong>S⁺</strong> positiver Ladungsschwerpunkt</span></div>
+  <div class="centerLegendRow"><span class="centerSwatch minus"></span><span><strong>S⁻</strong> negativer Ladungsschwerpunkt</span></div>
+  <div class="centerLegendRow"><span class="centerSwatch same"></span><span><strong>S⁺ = S⁻</strong> Schwerpunkte fallen zusammen</span></div>
+</div>
 
 <div id="densityLegend">
   <div>
@@ -340,7 +374,7 @@ import {
 } from "./dipolData.js";
 import { buildDipoleScene, setDipoleVisualState, disposeObject3D } from "./dipolBuilder.js";
 
-const VERSION="Dipol-1a / Core EPA-6a";
+const VERSION="Dipol-1b / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -550,6 +584,8 @@ const successCard=document.getElementById("successCard");
 const finalDensityToggle=document.getElementById("finalDensityToggle");
 const finalCentersToggle=document.getElementById("finalCentersToggle");
 const densityLegend=document.getElementById("densityLegend");
+const pseDock=document.getElementById("pseDock");
+const centerLegend=document.getElementById("centerLegend");
 const zoomBar=document.getElementById("zoomBar");
 const zoomOutButton=document.getElementById("zoomOut");
 const zoomInButton=document.getElementById("zoomIn");
@@ -654,26 +690,11 @@ let moleculeZoom=1.0;
 let solved=false;
 const visualState={model:false,geometry:false,centers:false,density:false};
 
-const parentWorldQuaternion=new THREE.Quaternion();
-const desiredWorldYawQuaternion=new THREE.Quaternion();
-const inverseParentQuaternion=new THREE.Quaternion();
-const yawReferenceVector=new THREE.Vector3();
-const worldYAxis=new THREE.Vector3(0,1,0);
-
 function updateTeachingFrameAlignment(){
-  if(!trackedCubeRoot.visible)return;
-  trackedCubeRoot.getWorldQuaternion(parentWorldQuaternion);
-  yawReferenceVector.set(1,0,0).applyQuaternion(parentWorldQuaternion);
-  yawReferenceVector.y=0;
-  if(yawReferenceVector.lengthSq()<1e-8){
-    desiredWorldYawQuaternion.identity();
-  }else{
-    yawReferenceVector.normalize();
-    const yawAngle=Math.atan2(-yawReferenceVector.z,yawReferenceVector.x);
-    desiredWorldYawQuaternion.setFromAxisAngle(worldYAxis,yawAngle);
-  }
-  inverseParentQuaternion.copy(parentWorldQuaternion).invert();
-  contentRoot.quaternion.copy(inverseParentQuaternion).multiply(desiredWorldYawQuaternion).normalize();
+  // Dipol 1b: keine künstliche Welt-Ausrichtung mehr.
+  // contentRoot bleibt im lokalen Würfelkoordinatensystem und folgt damit
+  // der vollständigen 3D-Pose (Yaw, Pitch und Roll).
+  contentRoot.quaternion.identity();
 }
 
 function clearCurrentContent(){
@@ -702,6 +723,8 @@ function applyVisualState(){
   finalDensityToggle.classList.toggle("active",visualState.density);
   finalCentersToggle.classList.toggle("active",visualState.centers);
   densityLegend.classList.toggle("visible",!!(selectedMolecule&&visualState.density));
+  centerLegend.classList.toggle("visible",!!(selectedMolecule&&visualState.centers));
+  centerLegend.setAttribute("aria-hidden",selectedMolecule&&visualState.centers?"false":"true");
   const any3d=visualState.model||visualState.geometry||visualState.centers||visualState.density;
   markerHint.classList.toggle("visible",!!(selectedMolecule&&any3d&&!trackedCubeRoot.visible));
 }
@@ -795,6 +818,7 @@ function selectMolecule(key){
   taskName.textContent=selectedMolecule.name;
   chooser.style.display="none";
   taskPanel.hidden=false;
+  pseDock.hidden=false;
   zoomBar.classList.add("visible");
   populateEnFields();
   resetTaskUI();
@@ -805,6 +829,8 @@ function returnToChooser(){
   selectedMolecule=null;
   solved=false;
   taskPanel.hidden=true;
+  pseDock.hidden=true;
+  centerLegend.classList.remove("visible");
   chooser.style.display="block";
   zoomBar.classList.remove("visible");
   densityLegend.classList.remove("visible");
@@ -2696,8 +2722,15 @@ function updateRenderedPose(now){
   stabilizedPoseReady=false;
 }
 function resize(){
-  const sw=innerWidth,sh=innerHeight,va=WIDTH/HEIGHT,sa=sw/sh;let w,h;if(sa>va){h=sh;w=h*va;}else{w=sw;h=w/va;}const l=(sw-w)/2,t=(sh-h)/2;
-  threeCanvas.style.width=w+"px";threeCanvas.style.height=h+"px";threeCanvas.style.left=l+"px";threeCanvas.style.top=t+"px";
+  // Kamera nutzt object-fit: cover. Das AR-Canvas erhält exakt dieselbe
+  // Cover-Geometrie, damit keine schwarzen Balken entstehen und Projektion
+  // sowie Kamerabild pixelgenau zusammenbleiben.
+  const sw=innerWidth,sh=innerHeight,va=WIDTH/HEIGHT,sa=sw/sh;
+  let w,h;
+  if(sa>va){w=sw;h=w/va;}else{h=sh;w=h*va;}
+  const l=(sw-w)/2,t=(sh-h)/2;
+  threeCanvas.style.width=w+"px";threeCanvas.style.height=h+"px";
+  threeCanvas.style.left=l+"px";threeCanvas.style.top=t+"px";
 }
 addEventListener("resize",resize);resize();
 function updateStatus(now){
