@@ -1,0 +1,328 @@
+{
+  "reference_scale_source": "GeoChemAR_Mesomerie1",
+  "reference_density_isovalue_e_per_bohr3": 0.002,
+  "reference_color_scaling": "2nd–98th percentile of surface ESP",
+  "reference_palette": [
+    "#e53020",
+    "#ffe234",
+    "#35d14f",
+    "#18c9ff",
+    "#1a59f2"
+  ],
+  "reference_labels": [
+    "relativ elektronreich",
+    "relativ elektronenarm"
+  ],
+  "note": "Mesomerie1 itself used RHF/STO-3G. Dipol 1d uses an EHT-informed normalized multi-Gaussian density approximation because the local build environment has no ab-initio RHF engine; the displayed isovalue, potential coloring rule and palette are intentionally matched to Mesomerie1.",
+  "molecules": {
+    "H2O": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.059782448009896676,
+      "esp_color_max": 0.05339169231173086,
+      "esp_raw_min": -0.06176638170201604,
+      "esp_raw_max": 0.05461343911667356,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        -0.8315235163706044,
+        0.4157617581853022,
+        0.4157617581853022
+      ],
+      "surface_vertices": 13908,
+      "surface_faces": 27812,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 10.559998666550912,
+      "eht_total_energy": -162.53455352783203,
+      "eht_num_electrons": 8,
+      "eht_num_orbitals": 6
+    },
+    "PCl3": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.020526512700830845,
+      "esp_color_max": 0.07222704464345894,
+      "esp_raw_min": -0.020825195366057536,
+      "esp_raw_max": 0.07663067207079613,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        0.7419965439041789,
+        -0.24733221247129222,
+        -0.24733218114101874,
+        -0.24733215029186795
+      ],
+      "surface_vertices": 24338,
+      "surface_faces": 48672,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 66.83971209906373,
+      "eht_total_energy": -457.83394622802734,
+      "eht_num_electrons": 26,
+      "eht_num_orbitals": 16
+    },
+    "CO2": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.043374458548430715,
+      "esp_color_max": 0.06540639978996278,
+      "esp_raw_min": -0.044822031304511734,
+      "esp_raw_max": 0.06558027570977432,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        1.5544877439582099,
+        -0.7772438719791049,
+        -0.7772438719791049
+      ],
+      "surface_vertices": 18560,
+      "surface_faces": 37116,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 23.119994646539183,
+      "eht_total_energy": -327.52196311950684,
+      "eht_num_electrons": 16,
+      "eht_num_orbitals": 12
+    },
+    "C2H2": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.012607414714394787,
+      "esp_color_max": 0.01345676261690095,
+      "esp_raw_min": -0.012634310213996178,
+      "esp_raw_max": 0.013786230551998445,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        0.11951869772747159,
+        -0.11951869772747159,
+        -0.11951869772747159,
+        0.11951869772747159
+      ],
+      "surface_vertices": 16848,
+      "surface_faces": 33692,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 15.399990141318517,
+      "eht_total_energy": -179.7933692932129,
+      "eht_num_electrons": 10,
+      "eht_num_orbitals": 10
+    },
+    "H2CO": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.10372905719186963,
+      "esp_color_max": 0.09084174401490992,
+      "esp_raw_min": -0.1066531266376438,
+      "esp_raw_max": 0.09393964760861359,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        0.9312063089382718,
+        -0.9783233247944736,
+        0.02355850792810088,
+        0.02355850792810088
+      ],
+      "surface_vertices": 16040,
+      "surface_faces": 32076,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 17.119996680591875,
+      "eht_total_energy": -235.04382133483887,
+      "eht_num_electrons": 12,
+      "eht_num_orbitals": 10
+    },
+    "BrF": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.08979121055421574,
+      "esp_color_max": 0.06521236471113283,
+      "esp_raw_min": -0.09137045976379608,
+      "esp_raw_max": 0.06620610303815412,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        0.6600302768929396,
+        -0.6600302768929396
+      ],
+      "surface_vertices": 21928,
+      "surface_faces": 43852,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 44.27909218937571,
+      "eht_total_energy": -284.7126350402832,
+      "eht_num_electrons": 14,
+      "eht_num_orbitals": 8
+    },
+    "CH2F2": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.05678077909945602,
+      "esp_color_max": 0.08558514309575509,
+      "esp_raw_min": -0.0576157509211423,
+      "esp_raw_max": 0.0911561534047459,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        1.1824165004015867,
+        -0.5860750248017439,
+        -0.5860750248017439,
+        -0.005133225399049479,
+        -0.005133225399049479
+      ],
+      "surface_vertices": 17964,
+      "surface_faces": 35924,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 27.11999936602897,
+      "eht_total_energy": -455.44372367858887,
+      "eht_num_electrons": 20,
+      "eht_num_orbitals": 14
+    },
+    "PH2Cl": {
+      "electronic_structure_model": "Extended Hückel (RDKit/YAeHMOP) atomic charges + normalized multi-Gaussian molecular electron-density approximation",
+      "density_isovalue_e_per_bohr3": 0.002,
+      "density_grid": [
+        96,
+        96,
+        96
+      ],
+      "grid_margin_angstrom": 3.2,
+      "esp_coloring": "Mesomerie1 relative potential scale; 2nd–98th percentile of ESP on surface",
+      "esp_color_min": -0.01476697380384376,
+      "esp_color_max": 0.014384869639473215,
+      "esp_raw_min": -0.015026498371307545,
+      "esp_raw_max": 0.01518242866642341,
+      "palette": [
+        "#e53020",
+        "#ffe234",
+        "#35d14f",
+        "#18c9ff",
+        "#1a59f2"
+      ],
+      "palette_meaning": "red = relatively electron-rich / lower ESP; blue = relatively electron-poor / higher ESP",
+      "atomic_charges_eht": [
+        0.06093471789790783,
+        -0.12036424705001991,
+        0.02971476457605604,
+        0.02971476457605604
+      ],
+      "surface_vertices": 18878,
+      "surface_faces": 37752,
+      "watertight": true,
+      "nonmanifold_or_boundary_edges": 0,
+      "connected_components": 1,
+      "boundary_vertex_hits": 0,
+      "total_density_grid_integral_electrons_approx": 34.8398953836285,
+      "eht_total_energy": -247.9100742340088,
+      "eht_num_electrons": 14,
+      "eht_num_orbitals": 10
+    }
+  }
+}

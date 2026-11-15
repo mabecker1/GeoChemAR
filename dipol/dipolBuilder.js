@@ -95,22 +95,28 @@ function createBond(data,bond,positions){
   return group;
 }
 
-function createTextSprite(text,{fg="#ffffff",bg="rgba(0,0,0,.70)",worldWidth=0.055,worldHeight=0.022,font="700 34px Arial"}={}){
+function createTextSprite(text,{fg="#ffffff",bg="rgba(0,0,0,.70)",worldWidth=0.055,worldHeight=0.022,font="700 76px Arial"}={}){
+  // Hochaufgelöste Canvas-Textur: verhindert die stark verpixelten
+  // Geometrie-Labels der früheren Versionen.
   const canvas=document.createElement("canvas");
-  canvas.width=420;canvas.height=150;
+  canvas.width=1024;canvas.height=256;
   const ctx=canvas.getContext("2d");
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle=bg;
   ctx.beginPath();
-  if(ctx.roundRect)ctx.roundRect(6,18,408,114,26);
-  else ctx.rect(6,18,408,114);
+  if(ctx.roundRect)ctx.roundRect(12,24,1000,208,44);
+  else ctx.rect(12,24,1000,208);
   ctx.fill();
   ctx.fillStyle=fg;
   ctx.font=font;
   ctx.textAlign="center";ctx.textBaseline="middle";
-  ctx.fillText(text,210,76);
+  ctx.fillText(text,512,132,950);
   const tex=new THREE.CanvasTexture(canvas);
-  tex.minFilter=THREE.LinearFilter;tex.magFilter=THREE.LinearFilter;
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.generateMipmaps=true;
+  tex.minFilter=THREE.LinearMipmapLinearFilter;
+  tex.magFilter=THREE.LinearFilter;
+  tex.anisotropy=8;
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({
     map:tex,transparent:true,depthTest:false,depthWrite:false
   }));
@@ -160,19 +166,8 @@ function createGeometryOverlay(data,positions){
 
   if(data.geometry==="bent"){
     const p1=terminals[0],p2=terminals[1];
+    // Nur die Geometrie-Hilfslinien – kein Winkelbogen.
     group.add(lineSegmentsGeometry([center,p1,center,p2,p1,p2]));
-
-    const d1=p1.clone().sub(center).normalize();
-    const d2=p2.clone().sub(center).normalize();
-    const axis=new THREE.Vector3().crossVectors(d1,d2).normalize();
-    const angle=d1.angleTo(d2);
-    const arc=[];
-    const radius=0.021;
-    for(let i=0;i<=28;i++){
-      const q=d1.clone().applyAxisAngle(axis,angle*i/28).multiplyScalar(radius).add(center);
-      arc.push(q);
-    }
-    group.add(lineGeometry(arc));
   }
 
   if(data.geometry==="trigonal-planar"){
@@ -270,22 +265,37 @@ function createDensitySurface(data,displayCenter){
 
   const cBytes=decodeBase64Bytes(raw.colorsB64);
   const iBytes=decodeBase64Bytes(raw.indicesB64);
-  const indices=new Uint16Array(iBytes.buffer);
+  const indices=raw.indexType==="u32"?new Uint32Array(iBytes.buffer):new Uint16Array(iBytes.buffer);
 
   const geo=new THREE.BufferGeometry();
   geo.setAttribute("position",new THREE.BufferAttribute(positions,3));
   geo.setAttribute("color",new THREE.BufferAttribute(cBytes,3,true));
-  geo.setIndex(new THREE.BufferAttribute(indices,1));
+
+  // Wie in Mesomerie1 liefert marching_cubes die Dreiecke für dieses
+  // Dichtefeld mit nach innen gerichtetem Winding. Für die sichtbare
+  // Außenseite wird die Orientierung deshalb explizit umgedreht.
+  const IndexArray=raw.indexType==="u32"?Uint32Array:Uint16Array;
+  const correctedIndices=new IndexArray(indices.length);
+  for(let i=0;i<indices.length;i+=3){
+    correctedIndices[i]=indices[i];
+    correctedIndices[i+1]=indices[i+2];
+    correctedIndices[i+2]=indices[i+1];
+  }
+  geo.setIndex(new THREE.BufferAttribute(correctedIndices,1));
   geo.computeVertexNormals();
 
   const mesh=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({
     vertexColors:true,
     transparent:true,
-    opacity:0.66,
+    opacity:0.82,
     shininess:72,
-    specular:0x666666,
+    specular:0x555555,
     side:THREE.FrontSide,
-    depthWrite:true
+    // Die Oberfläche bleibt transparent und schreibt nicht in den Tiefenpuffer.
+    // Dadurch können die Schwerpunktkugeln weiterhin durch die Oberfläche
+    // gesehen werden, während Atome ihre räumliche Verdeckung korrekt behalten.
+    depthTest:true,
+    depthWrite:false
   }));
   mesh.name="density-surface";
   mesh.renderOrder=8;
@@ -305,13 +315,13 @@ function nearestAtomAtPosition(point,positions){
 function createPreciseCenterMarker(position,kind){
   const color=kind==="plus"?STYLE.positiveColor:STYLE.negativeColor;
   const sphere=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0028,22,16),
-    new THREE.MeshBasicMaterial({
-      color,transparent:true,opacity:0.98,depthTest:false,depthWrite:false
+    new THREE.SphereGeometry(0.0020,24,18),
+    new THREE.MeshPhongMaterial({
+      color,shininess:80,specular:0xffffff,transparent:false,depthTest:true,depthWrite:true
     })
   );
   sphere.position.copy(position);
-  sphere.renderOrder=60;
+  sphere.renderOrder=6;
   sphere.name=kind==="plus"?"positive-charge-center":"negative-charge-center";
   return sphere;
 }
@@ -324,23 +334,23 @@ function createCoincidentCenterMarker(position){
   // Eine gemeinsame Kugel mit zwei Farbhälften: beide Schwerpunkte liegen
   // exakt am selben Ort, ohne einen zusätzlichen Text oder einen Versatz.
   const plusHalf=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0030,24,16,0,Math.PI),
-    new THREE.MeshBasicMaterial({
-      color:STYLE.positiveColor,transparent:true,opacity:0.98,depthTest:false,depthWrite:false,
+    new THREE.SphereGeometry(0.0022,26,18,0,Math.PI),
+    new THREE.MeshPhongMaterial({
+      color:STYLE.positiveColor,shininess:80,specular:0xffffff,depthTest:true,depthWrite:true,
       side:THREE.DoubleSide
     })
   );
-  plusHalf.renderOrder=60;
+  plusHalf.renderOrder=6;
   group.add(plusHalf);
 
   const minusHalf=new THREE.Mesh(
-    new THREE.SphereGeometry(0.0030,24,16,Math.PI,Math.PI),
-    new THREE.MeshBasicMaterial({
-      color:STYLE.negativeColor,transparent:true,opacity:0.98,depthTest:false,depthWrite:false,
+    new THREE.SphereGeometry(0.0022,26,18,Math.PI,Math.PI),
+    new THREE.MeshPhongMaterial({
+      color:STYLE.negativeColor,shininess:80,specular:0xffffff,depthTest:true,depthWrite:true,
       side:THREE.DoubleSide
     })
   );
-  minusHalf.renderOrder=60;
+  minusHalf.renderOrder=6;
   group.add(minusHalf);
   return group;
 }
@@ -362,8 +372,8 @@ function createCenterConnection(plus,minus){
   const line=lineSegmentsGeometry(points);
   line.material.color.set(0xffffff);
   line.material.opacity=0.42;
-  line.material.depthTest=false;
-  line.renderOrder=50;
+  line.material.depthTest=true;
+  line.renderOrder=5;
   return line;
 }
 
@@ -436,6 +446,7 @@ export function buildDipoleScene(data){
   root.userData.visualGroups={modelGroup,geometryGroup,centersGroup,densityGroup};
   root.userData.atomMeshes=atomMeshes;
   root.userData.centerAtomIndices=new Set(centerBuild.fadeAtomIndices);
+  root.userData.centerInsideAtom=centerBuild.fadeAtomIndices.length>0;
   root.userData.hasPolarBonds=!!data.polarBonds;
   return root;
 }
@@ -449,16 +460,20 @@ export function setDipoleVisualState(root,{model=false,geometry=false,centers=fa
   groups.centersGroup.visible=showCenters;
   groups.densityGroup.visible=!!density;
 
-  // Liegt ein Schwerpunkt exakt in einem Atomzentrum, wird nur dieses Atom
-  // während der Schwerpunktdarstellung transparent. Die kleine Kugel bleibt
-  // unverändert am exakten Schwerpunktort im Inneren.
-  const faded=root.userData.centerAtomIndices??new Set();
-  (root.userData.atomMeshes??[]).forEach((atomMesh,index)=>{
-    const shouldFade=showCenters&&faded.has(index);
-    atomMesh.material.transparent=shouldFade;
-    atomMesh.material.opacity=shouldFade?0.20:1.0;
-    atomMesh.material.depthWrite=!shouldFade;
-    atomMesh.material.needsUpdate=true;
+  // Liegt mindestens ein Schwerpunkt in einem Atomzentrum, wird das GESAMTE
+  // Ball-and-Stick-Modell moderat transparent. Die Schwerpunktkugel bleibt
+  // exakt an ihrer räumlichen Position im Atominneren. Durch die moderate
+  // Transparenz bleibt die Molekülgeometrie weiterhin gut erkennbar.
+  const fadeWholeModel=showCenters&&!!root.userData.centerInsideAtom;
+  groups.modelGroup.traverse(obj=>{
+    if(!obj.material)return;
+    const mats=Array.isArray(obj.material)?obj.material:[obj.material];
+    for(const mat of mats){
+      mat.transparent=fadeWholeModel;
+      mat.opacity=fadeWholeModel?0.62:1.0;
+      mat.depthWrite=!fadeWholeModel;
+      mat.needsUpdate=true;
+    }
   });
 }
 
