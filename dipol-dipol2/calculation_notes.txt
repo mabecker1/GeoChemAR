@@ -1,0 +1,77 @@
+GeoChemAR dipol-dipol2 – Berechnungsmodell
+============================================
+
+Darstellung
+-----------
+- Ethanal-Geometrie und Elektronendichteoberfläche entsprechen dipol-dipol1.
+- Elektronendichte: RHF/STO-3G, Isodichte rho = 0.002 e/bohr^3.
+- ESP-Farbskala: dieselbe Rot-Gelb-Grün-Cyan-Blau-Skala wie in mesomerie1 / dipol-dipol1.
+- Ball-and-Stick bleibt immer sichtbar; alle Oberflächen lassen sich gemeinsam ausblenden.
+
+Partialladungen und Dipol
+-------------------------
+Aus dem RHF/STO-3G-Elektrostatikpotential wurden atomzentrierte Punktladungen
+per beschränkter Least-Squares-Anpassung bestimmt (Gesamtladung = 0). Alle
+Ladungen wurden danach mit demselben Faktor skaliert, sodass der Betrag des
+Moleküldipols 2.69 D beträgt. Die räumliche Ladungsverteilung und Dipolrichtung
+bleiben dadurch aus der ESP-Anpassung erhalten.
+
+Atomreihenfolge und verwendete Ladungen [e]:
+C(CH3)  -0.74898317
+C(CHO)  +0.80751800
+O       -0.54760863
+H       +0.15698331
+H       +0.21186732
+H       +0.21195320
+H(CHO)  -0.09173003
+
+Berechneter positiver Ladungsschwerpunkt [Angstrom]:
+( 0.17793577, -0.13195663, 0.11047179 )
+Berechneter negativer Ladungsschwerpunkt [Angstrom]:
+(-0.08011782, -0.44194984, 0.10411029 )
+Kalibrierter Dipolvektor [Debye]:
+(1.72080298, 2.06715688, 0.04242101), Betrag 2.69 D
+
+Wechselwirkungsenergie
+----------------------
+Für jedes Paar aus aktuellem und bereits festem Molekül wird in jedem Frame
+berechnet:
+
+U_pair = U_Coulomb + U_LJ
+
+Coulomb-Anteil:
+U_Coulomb = Sum_ij 138.935456 * q_i*q_j/(epsilon_eff*r_ij[nm])  kJ/mol
+mit epsilon_eff = 2.5 als kurzreichweitiger Dämpfung der atomzentrierten
+Punktladungen im kondensierten Modell.
+
+Kurzreichweitige Abstoßung/Dispersion:
+12-6-Lennard-Jones-Terme mit generischen elementweisen vdW-Radien und kleinen
+Dispersions-Welltiefen. Dieser Anteil verhindert insbesondere, dass eine nur
+elektrostatisch günstige Anordnung Atome unrealistisch ineinanderschiebt.
+
+Die angezeigte Günstigkeit ist eine glatte 0–100-%-Abbildung der aktuellen
+negativen Gesamt-Wechselwirkungsenergie mit allen festen Nachbarn innerhalb
+von 8 Angstrom. Sterische Kollisionen werden unabhängig von der Coulomb-
+Energie als ungünstig bewertet.
+
+Dipol-Dipol-Linien und Fixierung
+--------------------------------
+Zwischen positivem und negativem Ladungsschwerpunkt zweier Moleküle erscheint
+eine gestrichelte Linie, wenn
+- das Molekülpaar insgesamt deutlich günstig ist (U_pair <= -2.5 kJ/mol),
+- keine sterische Kollision vorliegt und
+- der Abstand der gegensinnigen Ladungsschwerpunkte 2.15 bis 4.10 Angstrom beträgt.
+
+Sobald das aktuell würfelgebundene Molekül mindestens zwei solche Kontakte
+für 320 ms gleichzeitig hält, wird seine vollständige aktuelle 3D-Pose
+fixiert. Danach ist es unabhängig von weiteren Würfelbewegungen. Maximal fünf
+zusätzliche Ethanal-Moleküle können so an das anfangs feste Zentralmolekül
+angebaut werden.
+
+Festkörper-Modell
+-----------------
+Das Programm bildet einen starren, energetisch orientierten Molekülcluster.
+Es beansprucht keine exakte kristallographische Elementarzelle von festem
+Ethanal. Das entspricht der didaktischen Abstraktion der referenzierten
+Lern-Chemie-Simulation, die ebenfalls ausdrücklich ein vereinfachtes festes
+Molekülgitter verwendet.
