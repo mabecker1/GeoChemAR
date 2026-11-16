@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – dipol-dipol2c</title>
+<title>GeoChemAR – dipol-dipol2e</title>
 <style>
 :root{
   --ui-green:#2fac16;
@@ -350,11 +350,29 @@ window.__geoChemARCameraPromise=(async()=>{
 </script>
 <script type="module">
 import * as THREE from "../libs/three.module.min.js";
-import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
-import { buildEthanalInstance, setSurfaceVisible, disposeObject3D } from "./ethanalBuilder.js";
-import { evaluateActive, collectAllLinks } from "./interactionModel.js";
 
-const VERSION="dipol-dipol2d / Core EPA-6a";
+let Comlink=null;
+let buildEthanalInstance=null;
+let setSurfaceVisible=null;
+let disposeObject3D=null;
+let evaluateActive=null;
+let collectAllLinks=null;
+
+async function loadMoleculeModules(){
+  const builder=await import("./ethanalBuilder.js");
+  const interaction=await import("./interactionModel.js");
+  buildEthanalInstance=builder.buildEthanalInstance;
+  setSurfaceVisible=builder.setSurfaceVisible;
+  disposeObject3D=builder.disposeObject3D;
+  evaluateActive=interaction.evaluateActive;
+  collectAllLinks=interaction.collectAllLinks;
+  if(typeof buildEthanalInstance!=="function"||typeof setSurfaceVisible!=="function"||
+     typeof evaluateActive!=="function"||typeof collectAllLinks!=="function"){
+    throw new Error("Molekülmodule konnten nicht vollständig geladen werden.");
+  }
+}
+
+const VERSION="dipol-dipol2e / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -1300,6 +1318,9 @@ function processDetections(detections,frameTime){
 }
 
 async function initializeAprilTag(){
+  if(!Comlink){
+    Comlink=await import("https://unpkg.com/comlink/dist/esm/comlink.mjs");
+  }
   const worker=new Worker("../libs/apriltag.js"),Apriltag=Comlink.wrap(worker);
   apriltag=await new Apriltag(Comlink.proxy(()=>{detectorReady=true;}));
   const start=performance.now();while(!detectorReady){await new Promise(r=>setTimeout(r,20));if(performance.now()-start>15000)throw new Error("AprilTag-WASM wurde nicht bereit.");}
@@ -2638,21 +2659,26 @@ async function start(){
     status.textContent="Kamera wird gestartet …";
     await startCamera();
 
-    // Sichtbare Anwendung sofort aufbauen. Kamera und Renderloop dürfen nicht
-    // auf AprilTag/WASM warten.
-    try{resetCluster();}catch(clusterError){console.error("Cluster-Aufbau:",clusterError);showError(clusterError);}
-    startVideoProcessing();
+    // Sichtbaren Molekülteil vollständig lokal starten, bevor externe
+    // Tracking-Abhängigkeiten geladen werden.
+    status.textContent="Kamera bereit ✓\nMolekül wird aufgebaut …";
+    await loadMoleculeModules();
+    resetCluster();
     requestAnimationFrame(animate);
+    startVideoProcessing();
 
-    status.textContent="Kamera bereit ✓\nAprilTag wird geladen …";
+    status.textContent="Kamera bereit ✓\nMolekül sichtbar ✓\nAprilTag wird geladen …";
     try{
       await initializeAprilTag();
-      status.textContent="Kamera bereit ✓\nAprilTag bereit ✓";
+      status.textContent="Kamera bereit ✓\nMolekül sichtbar ✓\nAprilTag bereit ✓";
     }catch(detectorError){
       console.error("AprilTag-Initialisierung:",detectorError);
       showError(detectorError);
     }
-  }catch(e){showError(e);}
+  }catch(e){
+    console.error("Anwendungsstart:",e);
+    showError(e);
+  }
 }
 start();
 </script>
