@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – dipol-dipol2g</title>
+<title>GeoChemAR – dipol-dipol2j</title>
 <style>
 :root{
   --ui-green:#2fac16;
@@ -658,7 +658,7 @@ for(let id=0;id<=5;id++){
 }
 
 /* =====================================================
-   dipol-dipol2i – manuelles Ankerpaar + berechnetes 3D-Wachstum
+   dipol-dipol2j – manuelles Ankerpaar + würfelgebundener 3D-Cluster
    ===================================================== */
 
 const CLUSTER_PIVOT=new THREE.Vector3(0,0,-0.40);
@@ -672,7 +672,7 @@ scene.add(orbitRoot);
 
 const interactionLineGroup=new THREE.Group();
 scene.add(interactionLineGroup);
-const MAX_LINES=40;
+const MAX_LINES=120;
 const linePool=[];
 const lineMaterial=new THREE.LineDashedMaterial({
   color:0xf8fafc,transparent:true,opacity:.94,
@@ -693,8 +693,8 @@ let manualPlacementCompleted=false;
 let lockCandidateSince=null;
 let displayedScore=0;
 let placementAnimation=null;
-const LOCK_DWELL_MS=340;
-const AUTO_ANIMATION_MS=420;
+const LOCK_SCORE_MIN=75;
+const LOCK_DWELL_MS=0;
 
 let orbitYaw=0,orbitPitch=0,orbitPointerId=null,orbitLastX=0,orbitLastY=0;
 function applyOrbitRotation(){
@@ -704,11 +704,13 @@ function applyOrbitRotation(){
 }
 function orbitEventBlocked(target){return !!target?.closest?.("#epaControls,#scorePanel,#densityLegend,button,select,input");}
 window.addEventListener("pointerdown",event=>{
-  if(orbitPointerId!==null||orbitEventBlocked(event.target))return;
+  // Nach dem Einfrieren wird die komplette Struktur vom Würfel bewegt.
+  // Maus/Finger dienen dann nicht mehr als zweite, konkurrierende Rotation.
+  if(manualPlacementCompleted||orbitPointerId!==null||orbitEventBlocked(event.target))return;
   orbitPointerId=event.pointerId;orbitLastX=event.clientX;orbitLastY=event.clientY;
 });
 window.addEventListener("pointermove",event=>{
-  if(event.pointerId!==orbitPointerId)return;
+  if(manualPlacementCompleted||event.pointerId!==orbitPointerId)return;
   const dx=event.clientX-orbitLastX,dy=event.clientY-orbitLastY;
   orbitLastX=event.clientX;orbitLastY=event.clientY;
   orbitYaw+=dx*.0075;
@@ -732,8 +734,12 @@ function updateActiveFromTrackedPose(){
   _activeWorldPos.copy(trackedCubeRoot.position).add(cubeOffset);
   _activeWorldQuat.copy(trackedCubeRoot.quaternion);
   _activeWorldMatrix.compose(_activeWorldPos,_activeWorldQuat,_activeWorldScale);
-  orbitRoot.updateMatrixWorld(true);
-  _activeLocalMatrix.copy(orbitRoot.matrixWorld).invert().multiply(_activeWorldMatrix);
+  // Vor dem Einfrieren soll die Finger-/Mausrotation die *gesamte* Paaransicht
+  // drehen. Deshalb rechnen wir hier nur die feste Pivot-Translation heraus,
+  // nicht die aktuelle Orbit-Rotation. Diese wirkt anschließend gemeinsam auf
+  // das feste und das würfelgesteuerte Molekül.
+  const pivotOnly=new THREE.Matrix4().makeTranslation(CLUSTER_PIVOT.x,CLUSTER_PIVOT.y,CLUSTER_PIVOT.z);
+  _activeLocalMatrix.copy(pivotOnly).invert().multiply(_activeWorldMatrix);
   _activeLocalMatrix.decompose(activeMolecule.position,activeMolecule.quaternion,activeMolecule.scale);
 }
 
@@ -753,21 +759,18 @@ function updateLinePool(links){
 function applyDensityVisibility(){
   for(const m of fixedMolecules)setSurfaceVisible(m,densityVisible);
   if(activeMolecule)setSurfaceVisible(activeMolecule,densityVisible);
-  if(placementAnimation?.root)setSurfaceVisible(placementAnimation.root,densityVisible);
   densityToggleButton.classList.toggle("active",densityVisible);
   densityToggleButton.setAttribute("aria-pressed",densityVisible?"true":"false");
   densityLegend.classList.toggle("visible",densityVisible);
 }
 
 function updateButtons(){
-  const maxTotal=packingConstants?.totalMolecules??10;
-  const busy=!!activeMolecule||!!placementAnimation;
+  const maxTotal=packingConstants?.totalMolecules??20;
+  const busy=!!activeMolecule;
   addMoleculeButton.disabled=busy||fixedMolecules.length>=maxTotal;
 
   if(activeMolecule){
     addMoleculeButton.textContent="Ethanal wird ausgerichtet …";
-  }else if(placementAnimation){
-    addMoleculeButton.textContent="Ethanal wird hinzugefügt …";
   }else if(fixedMolecules.length>=maxTotal){
     addMoleculeButton.textContent=`Maximum erreicht (${maxTotal}/${maxTotal})`;
   }else if(!manualPlacementCompleted){
@@ -784,8 +787,13 @@ function createInitialFixedMolecule(){
 }
 
 function resetCluster(){
+  // Nach der manuellen Paarbildung hängt orbitRoot am Würfel. Für einen echten
+  // Neustart wieder in den festen Kameraraum zurücksetzen.
+  if(orbitRoot.parent!==scene)scene.attach(orbitRoot);
+  orbitRoot.position.copy(CLUSTER_PIVOT);
+  orbitRoot.quaternion.identity();
+  orbitRoot.scale.set(1,1,1);
   if(activeMolecule){orbitRoot.remove(activeMolecule);disposeObject3D(activeMolecule);activeMolecule=null;}
-  if(placementAnimation?.root){orbitRoot.remove(placementAnimation.root);disposeObject3D(placementAnimation.root);}
   placementAnimation=null;
   for(const m of fixedMolecules){orbitRoot.remove(m);disposeObject3D(m);}
   fixedMolecules=[];manualPlacementCompleted=false;lockCandidateSince=null;displayedScore=0;
@@ -796,24 +804,31 @@ function resetCluster(){
 }
 
 function startManualMolecule(){
-  if(activeMolecule||placementAnimation||manualPlacementCompleted||fixedMolecules.length!==1)return;
+  if(activeMolecule||manualPlacementCompleted||fixedMolecules.length!==1)return;
   activeMolecule=buildEthanalInstance();activeMolecule.visible=false;orbitRoot.add(activeMolecule);
   setSurfaceVisible(activeMolecule,densityVisible);
   lockCandidateSince=null;displayedScore=0;scoreValue.textContent="0 %";scoreFill.style.width="0%";updateButtons();
 }
 
-function clusterSmoothstep01(t){t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);}
-function beginAutomaticPlacement(root,pose){
-  root.position.copy(pose.position);root.quaternion.copy(pose.quaternion);root.scale.setScalar(.18);root.visible=true;
-  placementAnimation={root,start:performance.now(),duration:AUTO_ANIMATION_MS,targetScale:1,meta:pose.meta};
-  updateButtons();
+function bindClusterToTrackedCube(){
+  // Object3D.attach() erhält die aktuelle Weltpose exakt. Danach ist der
+  // gesamte Cluster eine starre Unterstruktur des getrackten Würfels.
+  scene.updateMatrixWorld(true);
+  trackedCubeRoot.updateMatrixWorld(true);
+  trackedCubeRoot.attach(orbitRoot);
+  orbitPointerId=null;
 }
 
-function finishPlacementAnimation(){
-  const a=placementAnimation;if(!a)return;
-  a.root.scale.setScalar(1);
-  fixedMolecules.push(a.root);
-  placementAnimation=null;lockCandidateSince=null;displayedScore=0;
+function placeAutomaticMolecule(root,pose){
+  // Kein Hereinzoomen: das neue Molekül erscheint direkt in seiner berechneten
+  // Position. Das vermeidet außerdem den falschen Eindruck einer Bewegung aus
+  // der Tiefe.
+  root.position.copy(pose.position);
+  root.quaternion.copy(pose.quaternion);
+  root.scale.setScalar(1);
+  root.visible=true;
+  fixedMolecules.push(root);
+  lockCandidateSince=null;displayedScore=0;
   scene.updateMatrixWorld(true);
   const cluster=evaluateCluster(fixedMolecules);
   updateLinePool(cluster.links);
@@ -821,22 +836,17 @@ function finishPlacementAnimation(){
   applyDensityVisibility();updateButtons();
 }
 
-function updatePlacementAnimation(now){
-  if(!placementAnimation)return;
-  const a=placementAnimation,t=clusterSmoothstep01((now-a.start)/a.duration);
-  a.root.scale.setScalar(THREE.MathUtils.lerp(.18,a.targetScale,t));
-  if(t>=1)finishPlacementAnimation();
-}
-
 function lockFirstMolecule(){
   if(!activeMolecule)return;
-  // WICHTIG: exakt die vom Würfel eingestellte Pose übernehmen. Keine
-  // nachträgliche Drehung, Verschiebung oder Kristall-Snap-Animation.
+  // Exakt die vom Würfel + der gemeinsamen Orbitansicht erzeugte Pose behalten.
+  // Kein Snap, keine Nachkorrektur.
   const root=activeMolecule;activeMolecule=null;
   root.visible=true;root.scale.setScalar(1);
   fixedMolecules.push(root);
   manualPlacementCompleted=true;
   lockCandidateSince=null;displayedScore=0;
+  // Ab jetzt folgt die komplette Anordnung wieder dem Würfel.
+  bindClusterToTrackedCube();
   scene.updateMatrixWorld(true);
   const cluster=evaluateCluster(fixedMolecules);
   updateLinePool(cluster.links);
@@ -846,7 +856,7 @@ function lockFirstMolecule(){
 
 function addAutomaticMolecule(){
   const maxTotal=packingConstants.totalMolecules;
-  if(!manualPlacementCompleted||activeMolecule||placementAnimation||fixedMolecules.length>=maxTotal)return;
+  if(!manualPlacementCompleted||activeMolecule||fixedMolecules.length>=maxTotal)return;
   const pose=findBestNextPose(fixedMolecules);
   if(!pose){
     showError(new Error("Für die aktuelle Ankeranordnung wurde kein kollisionsfreier günstiger Carbonyl-Nachbar gefunden."));
@@ -854,7 +864,7 @@ function addAutomaticMolecule(){
   }
   const root=buildEthanalInstance();
   orbitRoot.add(root);setSurfaceVisible(root,densityVisible);
-  beginAutomaticPlacement(root,pose);
+  placeAutomaticMolecule(root,pose);
 }
 
 function addMolecule(){
@@ -863,7 +873,6 @@ function addMolecule(){
 }
 
 function updateInteractionScene(now){
-  updatePlacementAnimation(now);
   updateActiveFromTrackedPose();
   scene.updateMatrixWorld(true);
 
@@ -875,16 +884,12 @@ function updateInteractionScene(now){
     updateLinePool(result.links);
     displayedScore+=.24*(result.score-displayedScore);
     const shown=Math.round(displayedScore);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
-    if(result.lockContactCount>=2&&!result.collision){
+    // Anzeige und Einfrieren sind jetzt direkt stringent: Sobald der sichtbare
+    // Günstigkeitswert 75 % erreicht, wird die aktuelle Pose übernommen.
+    if(displayedScore>=LOCK_SCORE_MIN&&!result.collision){
       if(lockCandidateSince===null)lockCandidateSince=now;
       if(now-lockCandidateSince>=LOCK_DWELL_MS)lockFirstMolecule();
     }else lockCandidateSince=null;
-    return;
-  }
-
-  if(placementAnimation){
-    // Während des Einrastens/Einblendens keine transienten Linien zeichnen.
-    updateLinePool(collectAllLinks(fixedMolecules));
     return;
   }
 

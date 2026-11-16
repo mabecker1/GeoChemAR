@@ -17,9 +17,9 @@ export const BULK_CELL=Object.freeze({
 const CONTACT_DISTANCES_A=[3.05,3.18,3.30];
 const APPROACH_ANGLES_DEG=[78,90,102];
 const AZIMUTH_STEP_DEG=30;
-const MAX_CENTER_RADIUS_A=13.0;
+const MAX_CENTER_RADIUS_A=13.5;
 const MIN_CENTER_SEPARATION_A=2.70;
-const MAX_TOTAL_MOLECULES=10;
+const MAX_TOTAL_MOLECULES=20;
 
 const _v1=new THREE.Vector3(),_v2=new THREE.Vector3(),_v3=new THREE.Vector3();
 function toA(sceneDistance){return sceneDistance/ANGSTROM_TO_SCENE;}
@@ -51,7 +51,7 @@ function anchorAxes(fixed){
   const y=new THREE.Vector3().crossVectors(z,x).normalize();
   return {x,y,z,origin:localState(first).center};
 }
-function spatialSpreadBonus(states,axes){
+function axisRanges(states,axes){
   const ranges=[];
   for(const axis of [axes.x,axes.y,axes.z]){
     let lo=Infinity,hi=-Infinity;
@@ -59,10 +59,67 @@ function spatialSpreadBonus(states,axes){
       const val=toA(s.center.clone().sub(axes.origin).dot(axis));
       lo=Math.min(lo,val);hi=Math.max(hi,val);
     }
-    ranges.push(Math.max(0,hi-lo));
+    ranges.push({lo,hi,range:Math.max(0,hi-lo)});
   }
-  ranges.sort((a,b)=>a-b);
-  return 0.18*ranges[0]+0.05*ranges[1];
+  return ranges;
+}
+function threeDimensionalGrowthBonus(existingStates,candidateState,axes){
+  const before=axisRanges(existingStates,axes);
+  const after=axisRanges([...existingStates,candidateState],axes);
+
+  // Reales 3D-Wachstum statt möglichst großer Ausdehnung: bis etwa zwei
+  // Molekülschichten pro Achse wird zusätzliche Breite belohnt; danach wird
+  // weiteres Auseinanderziehen gebremst. So bleibt der 20er-Cluster kompakt.
+  const targetSpanA=10.5,softMaxSpanA=14.0;
+  let compactSpread=0;
+  for(let i=0;i<3;i++){
+    compactSpread+=0.62*(Math.min(after[i].range,targetSpanA)-Math.min(before[i].range,targetSpanA));
+    compactSpread-=1.10*(Math.max(0,after[i].range-softMaxSpanA)-Math.max(0,before[i].range-softMaxSpanA));
+  }
+
+  // Die jeweils dünnste Raumrichtung wird bevorzugt aufgefüllt, bis dort
+  // mindestens mehrere Molekülschichten entstanden sind.
+  const thinnestIndex=before.reduce((best,r,i,a)=>r.range<a[best].range?i:best,0);
+  const thinBefore=before[thinnestIndex].range;
+  const thinGain=Math.max(0,Math.min(after[thinnestIndex].range,8.0)-Math.min(thinBefore,8.0));
+  const layerBoost=1.15*thinGain;
+
+  // Beide Seiten jeder lokalen Achse besetzen: oben/unten, links/rechts und
+  // vorne/hinten. Eine noch völlig leere Gegenseite erhält gezielt Vorrang.
+  const rel=candidateState.center.clone().sub(axes.origin);
+  let balanceGain=0;
+  const axisList=[axes.x,axes.y,axes.z];
+  for(let ai=0;ai<3;ai++){
+    const axis=axisList[ai];
+    let neg=0,pos=0;
+    for(const st of existingStates){
+      const v=toA(st.center.clone().sub(axes.origin).dot(axis));
+      if(v<-0.9)neg++;else if(v>0.9)pos++;
+    }
+    const cv=toA(rel.dot(axis));
+    const beforeImbalance=Math.abs(pos-neg);
+    if(cv>0.9){
+      balanceGain+=0.62*(beforeImbalance-Math.abs((pos+1)-neg));
+      if(pos===0&&neg>=2)balanceGain+=5.0;
+      if(neg===0&&pos>=2)balanceGain-=1.6;
+    }else if(cv<-0.9){
+      balanceGain+=0.62*(beforeImbalance-Math.abs(pos-(neg+1)));
+      if(neg===0&&pos>=2)balanceGain+=5.0;
+      if(pos===0&&neg>=2)balanceGain-=1.6;
+    }
+  }
+
+  // Neue lokale Gitterzellen bevorzugen, damit benachbarte Schichten wirklich
+  // aufgefüllt werden und nicht mehrere Moleküle dieselbe Richtung verlängern.
+  const cellSizeA=4.2;
+  const occupied=new Set(existingStates.map(st=>{
+    const d=st.center.clone().sub(axes.origin);
+    return axisList.map(a=>Math.round(toA(d.dot(a))/cellSizeA)).join(":");
+  }));
+  const cd=candidateState.center.clone().sub(axes.origin);
+  const ckey=axisList.map(a=>Math.round(toA(cd.dot(a))/cellSizeA)).join(":");
+  const novelty=occupied.has(ckey)?0:0.65;
+  return compactSpread+layerBoost+balanceGain+novelty;
 }
 function candidateKey(position,orientationIndex){
   const s=1/ANGSTROM_TO_SCENE;
@@ -87,15 +144,15 @@ function scoreCandidate(candidateState,existingStates,axes){
   const radiusA=toA(candidateState.center.distanceTo(axes.origin));
   if(radiusA>MAX_CENTER_RADIUS_A)return null;
   const densityQuality=Math.exp(-0.5*Math.pow((nearestCenterA-4.7)/1.25,2));
-  const spread=spatialSpreadBonus([...existingStates,candidateState],axes);
+  const growth3D=threeDimensionalGrowthBonus(existingStates,candidateState,axes);
   const score=
-    4.0*totalStrength+
-    0.85*lineCount+
-    0.35*densityQuality+
-    spread+
+    4.6*totalStrength+
+    1.00*lineCount+
+    0.34*densityQuality+
+    growth3D+
     0.015*Math.max(0,-totalEnergy)-
     0.040*Math.max(0,totalEnergy)-
-    0.018*radiusA;
+    0.025*radiusA;
   return {score,totalStrength,lineCount,totalEnergy,radiusA,nearestCenterA};
 }
 

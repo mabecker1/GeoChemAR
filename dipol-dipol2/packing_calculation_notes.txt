@@ -1,4 +1,4 @@
-dipol-dipol2i – automatische Ethanal-Packung
+dipol-dipol2j – automatische Ethanal-Packung
 
 1. Das erste Ethanal ist fest.
 2. Das zweite Ethanal wird ausschließlich vom Benutzer mit dem Markerwürfel ausgerichtet.
@@ -14,8 +14,10 @@ dipol-dipol2i – automatische Ethanal-Packung
 7. Zusätzlich geht die bereits verwendete ESP-Ladungs-/Lennard-Jones-Paarenergie in die
    Auswahl ein. Positive (ungünstige) Paarenergie wird bestraft; sterische Kollisionen
    werden ausgeschlossen.
-8. Räumliche Ausdehnung in drei Richtungen wird als Zusatzterm belohnt, damit kein
-   eindimensionaler Kettenaufbau entsteht.
+8. Räumliche Ausdehnung in drei Richtungen wird als Zusatzterm belohnt. Die jeweils
+   bislang dünnste Raumrichtung erhält einen zusätzlichen Schicht-Bonus; außerdem
+   werden die positive und negative Seite jeder lokalen Achse ausbalanciert. Dadurch
+   entstehen obere/untere sowie vordere/hintere Nachbarschichten statt einer Kette.
 9. Zellmaßstab zur Dichtekontrolle: publizierte USPEX/VASP/PBEsol0-3c-Vorhersage für
    reines Acetaldehyd, 2 Moleküle/Zelle: a=4.960 Å, b=5.655 Å, c=4.536 Å,
    alpha=89.55°, beta=89.70°, gamma=127.17°.
@@ -23,3 +25,7 @@ dipol-dipol2i – automatische Ethanal-Packung
 Literaturgrundlage für Carbonylkontakte: leicht versetzte antiparallele Carbonylpaare
 sind ein häufiges Kristallpackungsmotiv; kurze C···O-Kontakte liegen typischerweise
 unter 3.6 Å und häufig im Bereich um 3.0–3.3 Å.
+
+10. Nach dem manuell fixierten Paar werden 18 weitere Moleküle ergänzt (20 insgesamt).
+11. Automatische Moleküle erscheinen direkt an ihrer berechneten Position; es gibt keine Zoom-Animation.
+12. Das manuelle Paar friert ab 75 % angezeigter Günstigkeit ein. Danach folgt der gesamte Cluster starr der Würfelpose; Touch-/Mausrotation ist deaktiviert.
