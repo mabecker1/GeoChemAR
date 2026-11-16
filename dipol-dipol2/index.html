@@ -27,7 +27,8 @@ button,select{font-family:inherit}
   position:fixed;inset:0;width:100%;height:100%;
   object-fit:cover;background:#000;z-index:1;
 }
-#threeCanvas{position:fixed;z-index:2;pointer-events:none}
+#threeCanvas{position:fixed;z-index:2;pointer-events:auto;touch-action:none;cursor:grab}
+#threeCanvas.orbitDragging{cursor:grabbing}
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
 
 /* Im Unterricht bleiben die technischen Tracking-Diagnosen unsichtbar.
@@ -206,9 +207,6 @@ html.debug-mode #status{display:block}
 #scoreValue{font-size:25px;font-weight:900;font-variant-numeric:tabular-nums}
 #scoreBar{height:10px;margin-top:8px;border-radius:999px;background:rgba(255,255,255,.16);overflow:hidden}
 #scoreFill{height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,#dc2626,#f59e0b,#84cc16,#22c55e);transition:width .10s linear}
-#qualityText{margin-top:7px;font-size:13px;font-weight:800}
-#energyText,#interactionText,#moleculeCount{margin-top:4px;font-size:11px;color:var(--ui-muted);font-variant-numeric:tabular-nums}
-#lockNotice{margin-top:7px;font-size:11px;line-height:1.35;color:#fff}
 @media(max-width:760px){
   #scorePanel{top:12px;left:max(8px,env(safe-area-inset-left));width:min(270px,calc(100vw - 16px));padding:10px 11px}
   #scoreValue{font-size:22px}
@@ -288,11 +286,6 @@ html.debug-mode #status{display:block}
 <div id="scorePanel" aria-live="polite">
   <div class="scoreHeader"><span class="scoreTitle">Günstigkeit der Anordnung</span><span id="scoreValue">–</span></div>
   <div id="scoreBar"><div id="scoreFill"></div></div>
-  <div id="qualityText">Ethanal hinzufügen</div>
-  <div id="energyText"></div>
-  <div id="interactionText">Dipol-Dipol-Wechselwirkungen: 0</div>
-  <div id="moleculeCount">Feste Moleküle: 1 · hinzugefügt: 0/5</div>
-  <div id="lockNotice">Zwei gleichzeitig günstige Dipol-Dipol-Kontakte fixieren das aktuelle Molekül.</div>
 </div>
 
 <div id="densityLegend" class="visible" aria-hidden="false">
@@ -305,9 +298,9 @@ html.debug-mode #status{display:block}
 import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { buildEthanalInstance, setSurfaceVisible, disposeObject3D } from "./ethanalBuilder.js";
-import { evaluateActive, collectAllLinks, qualityLabel } from "./interactionModel.js";
+import { evaluateActive, collectAllLinks } from "./interactionModel.js";
 
-const VERSION="dipol-dipol2 / Core EPA-6a";
+const VERSION="dipol-dipol2a / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -500,11 +493,6 @@ const resetClusterButton=document.getElementById("resetCluster");
 const densityLegend=document.getElementById("densityLegend");
 const scoreValue=document.getElementById("scoreValue");
 const scoreFill=document.getElementById("scoreFill");
-const qualityText=document.getElementById("qualityText");
-const energyText=document.getElementById("energyText");
-const interactionText=document.getElementById("interactionText");
-const moleculeCount=document.getElementById("moleculeCount");
-const lockNotice=document.getElementById("lockNotice");
 
 let apriltag=null, detectorReady=false, cameraReady=false, detectionRunning=false;
 let detectionCounter=0,detectionFPS=0,detectionFpsStart=performance.now();
@@ -588,15 +576,26 @@ for(let id=0;id<=5;id++){
    dipol-dipol2 – starrer Ethanal-Festkörper-Cluster
    ===================================================== */
 
+const CLUSTER_PIVOT=new THREE.Vector3(0,0,-0.40);
+
+// Rohpose des Würfels in Kamerakoordinaten. Das aktuelle Molekül wird daraus
+// in das um das Clusterzentrum drehbare orbitRoot-Koordinatensystem übertragen.
 const trackedCubeRoot=new THREE.Group();
 trackedCubeRoot.visible=false;
 scene.add(trackedCubeRoot);
+
+// Alle sichtbaren Moleküle liegen unter diesem Pivot. Eine Rotation dieses
+// Roots ist eine reine gemeinsame Ansichtsdrehung: Abstände und relative
+// Orientierungen der Moleküle ändern sich dadurch nicht.
+const orbitRoot=new THREE.Group();
+orbitRoot.position.copy(CLUSTER_PIVOT);
+scene.add(orbitRoot);
 
 const interactionLineGroup=new THREE.Group();
 scene.add(interactionLineGroup);
 const MAX_LINES=30;
 const linePool=[];
-const lineMaterial=new THREE.LineDashedMaterial({color:0xf8fafc,transparent:true,opacity:.92,dashSize:.0040,gapSize:.0027,depthTest:true,depthWrite:false});
+const lineMaterial=new THREE.LineDashedMaterial({color:0xf8fafc,transparent:true,opacity:.94,dashSize:.0040,gapSize:.0027,depthTest:true,depthWrite:false});
 for(let i=0;i<MAX_LINES;i++){
   const geo=new THREE.BufferGeometry();
   geo.setAttribute("position",new THREE.Float32BufferAttribute([0,0,0,0,0,0],3));
@@ -612,6 +611,55 @@ let lockCandidateSince=null;
 let displayedScore=0;
 const LOCK_DWELL_MS=320;
 const MAX_ADDED=5;
+
+// Freie Ansichtsdrehung per Maus / Pointer / Touch.
+let orbitYaw=0;
+let orbitPitch=0;
+let orbitPointerId=null;
+let orbitLastX=0;
+let orbitLastY=0;
+function applyOrbitRotation(){
+  const qYaw=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),orbitYaw);
+  const qPitch=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),orbitPitch);
+  orbitRoot.quaternion.copy(qYaw).multiply(qPitch).normalize();
+}
+threeCanvas.addEventListener("pointerdown",event=>{
+  if(orbitPointerId!==null)return;
+  orbitPointerId=event.pointerId;
+  orbitLastX=event.clientX;orbitLastY=event.clientY;
+  threeCanvas.setPointerCapture?.(event.pointerId);
+  threeCanvas.classList.add("orbitDragging");
+  event.preventDefault();
+});
+threeCanvas.addEventListener("pointermove",event=>{
+  if(event.pointerId!==orbitPointerId)return;
+  const dx=event.clientX-orbitLastX;
+  const dy=event.clientY-orbitLastY;
+  orbitLastX=event.clientX;orbitLastY=event.clientY;
+  orbitYaw+=dx*0.0075;
+  orbitPitch=THREE.MathUtils.clamp(orbitPitch+dy*0.0075,-Math.PI*0.47,Math.PI*0.47);
+  applyOrbitRotation();
+  event.preventDefault();
+});
+function endOrbitPointer(event){
+  if(event.pointerId!==orbitPointerId)return;
+  orbitPointerId=null;
+  threeCanvas.releasePointerCapture?.(event.pointerId);
+  threeCanvas.classList.remove("orbitDragging");
+}
+threeCanvas.addEventListener("pointerup",endOrbitPointer);
+threeCanvas.addEventListener("pointercancel",endOrbitPointer);
+
+function updateActiveFromTrackedPose(){
+  if(!activeMolecule)return;
+  if(!trackedCubeRoot.visible){activeMolecule.visible=false;return;}
+  activeMolecule.visible=true;
+  // Physische Würfelpose relativ zum festen Clusterzentrum. Die gemeinsame
+  // orbitRoot-Rotation wird danach automatisch auf alle Moleküle angewandt.
+  const cubeOffset=new THREE.Vector3(0,.032,0).applyQuaternion(trackedCubeRoot.quaternion);
+  activeMolecule.position.copy(trackedCubeRoot.position).add(cubeOffset).sub(CLUSTER_PIVOT);
+  activeMolecule.quaternion.copy(trackedCubeRoot.quaternion);
+}
 
 function updateLinePool(links){
   for(let i=0;i<linePool.length;i++){
@@ -634,98 +682,81 @@ function applyDensityVisibility(){
   densityLegend.classList.toggle("visible",densityVisible);
 }
 
-function updateButtonsAndCount(){
+function updateButtons(){
   addMoleculeButton.disabled=!!activeMolecule||addedLocked>=MAX_ADDED;
   addMoleculeButton.textContent=addedLocked>=MAX_ADDED?"Maximum erreicht (5/5)":activeMolecule?"Ethanal wird ausgerichtet …":`+ Ethanal hinzufügen (${addedLocked+1}/5)`;
-  moleculeCount.textContent=`Feste Moleküle: ${fixedMolecules.length} · hinzugefügt: ${addedLocked}/5`;
 }
 
 function createInitialFixedMolecule(){
   const root=buildEthanalInstance();
-  root.position.set(0,0,-0.40);
+  root.position.set(0,0,0);
   root.quaternion.identity();
-  scene.add(root);
+  orbitRoot.add(root);
   fixedMolecules=[root];
 }
 
 function resetCluster(){
-  if(activeMolecule){trackedCubeRoot.remove(activeMolecule);disposeObject3D(activeMolecule);activeMolecule=null;}
-  for(const m of fixedMolecules){scene.remove(m);disposeObject3D(m);}
+  if(activeMolecule){orbitRoot.remove(activeMolecule);disposeObject3D(activeMolecule);activeMolecule=null;}
+  for(const m of fixedMolecules){orbitRoot.remove(m);disposeObject3D(m);}
   fixedMolecules=[];addedLocked=0;lockCandidateSince=null;displayedScore=0;
+  orbitYaw=0;orbitPitch=0;applyOrbitRotation();
   createInitialFixedMolecule();
   applyDensityVisibility();
   updateLinePool([]);
-  scoreValue.textContent="–";scoreFill.style.width="0%";qualityText.textContent="Ethanal hinzufügen";energyText.textContent="";interactionText.textContent="Dipol-Dipol-Wechselwirkungen: 0";
-  lockNotice.textContent="Zwei gleichzeitig günstige Dipol-Dipol-Kontakte fixieren das aktuelle Molekül.";
-  updateButtonsAndCount();
+  scoreValue.textContent="–";scoreFill.style.width="0%";
+  updateButtons();
 }
 
 function addMolecule(){
   if(activeMolecule||addedLocked>=MAX_ADDED)return;
   activeMolecule=buildEthanalInstance();
-  activeMolecule.position.set(0,.032,0);
-  trackedCubeRoot.add(activeMolecule);
+  activeMolecule.visible=false;
+  orbitRoot.add(activeMolecule);
   setSurfaceVisible(activeMolecule,densityVisible);
   lockCandidateSince=null;displayedScore=0;
-  qualityText.textContent="Würfel bewegen und Molekül günstig ausrichten";
-  energyText.textContent="";scoreValue.textContent="0 %";scoreFill.style.width="0%";
-  updateButtonsAndCount();
+  scoreValue.textContent="0 %";scoreFill.style.width="0%";
+  updateButtons();
 }
 
 function lockActiveMolecule(){
   if(!activeMolecule)return;
-  scene.updateMatrixWorld(true);
-  const locking=activeMolecule;
-  scene.attach(locking); // preserve the exact cube-controlled world pose
-  fixedMolecules.push(locking);
+  fixedMolecules.push(activeMolecule);
   activeMolecule=null;
   addedLocked++;
   lockCandidateSince=null;
   displayedScore=0;
-  qualityText.textContent=addedLocked>=MAX_ADDED?"Festkörper-Cluster vollständig":"Molekül ist fest – nächstes Ethanal hinzufügen";
-  scoreValue.textContent="–";scoreFill.style.width="0%";energyText.textContent="";
-  lockNotice.textContent=addedLocked>=MAX_ADDED?"Maximal fünf zusätzliche Moleküle wurden eingebaut.":"Das fixierte Molekül bleibt jetzt unabhängig von der Würfelbewegung.";
-  updateButtonsAndCount();
+  scoreValue.textContent="–";scoreFill.style.width="0%";
+  updateButtons();
   applyDensityVisibility();
 }
 
 function updateInteractionScene(now){
+  updateActiveFromTrackedPose();
   scene.updateMatrixWorld(true);
-  const activeIsVisible=!!activeMolecule&&trackedCubeRoot.visible;
+  const activeIsVisible=!!activeMolecule&&activeMolecule.visible&&trackedCubeRoot.visible;
   const all=fixedMolecules.slice();
   if(activeIsVisible)all.push(activeMolecule);
   const allLinks=collectAllLinks(all);
   updateLinePool(allLinks);
 
-  if(!activeMolecule){
-    interactionText.textContent=`Dipol-Dipol-Wechselwirkungen: ${allLinks.length}`;
-    return;
-  }
+  if(!activeMolecule)return;
   if(!activeIsVisible){
     lockCandidateSince=null;
     scoreValue.textContent="–";scoreFill.style.width="0%";
-    qualityText.textContent="Würfel wird gesucht …";
-    energyText.textContent="";
-    interactionText.textContent=`Dipol-Dipol-Wechselwirkungen: ${allLinks.length}`;
     return;
   }
+
   const result=evaluateActive(activeMolecule,fixedMolecules);
   displayedScore+=.20*(result.score-displayedScore);
   const shown=Math.round(displayedScore);
   scoreValue.textContent=`${shown} %`;
   scoreFill.style.width=`${shown}%`;
-  qualityText.textContent=qualityLabel(result.score,result.collision);
-  energyText.textContent=`berechnete Wechselwirkungsenergie ≈ ${result.totalEnergy.toFixed(1).replace(".",",")} kJ/mol`;
-  interactionText.textContent=`Dipol-Dipol-Wechselwirkungen: ${result.lineCount}`;
 
   if(result.lineCount>=2&&!result.collision){
     if(lockCandidateSince===null)lockCandidateSince=now;
-    const remain=Math.max(0,LOCK_DWELL_MS-(now-lockCandidateSince));
-    lockNotice.textContent=remain>0?"Zwei günstige Kontakte – Position halten …":"Molekül wird fixiert …";
     if(now-lockCandidateSince>=LOCK_DWELL_MS)lockActiveMolecule();
   }else{
     lockCandidateSince=null;
-    lockNotice.textContent="Zwei gleichzeitig günstige Dipol-Dipol-Kontakte fixieren das aktuelle Molekül.";
   }
 }
 

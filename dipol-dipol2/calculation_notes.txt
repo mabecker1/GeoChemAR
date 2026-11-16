@@ -75,3 +75,10 @@ Es beansprucht keine exakte kristallographische Elementarzelle von festem
 Ethanal. Das entspricht der didaktischen Abstraktion der referenzierten
 Lern-Chemie-Simulation, die ebenfalls ausdrücklich ein vereinfachtes festes
 Molekülgitter verwendet.
+
+
+Version dipol-dipol2a:
+- Ball-and-stick rendering uses the EPA1 atom/bond proportions and materials, uniformly scaled for the cluster.
+- Visible intermolecular dashed contacts are only O(carbonyl)···C(carbonyl) between different ethanal molecules.
+- Mouse/pointer/touch orbit rotates the full virtual arrangement about the central molecule without changing pair distances or interaction energies.
+- The score panel displays only the favorability indicator.
