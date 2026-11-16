@@ -1,31 +1,43 @@
 /*
-  Referenzstruktur für den Button „Günstigste Anordnung“.
+  dipol-dipol2h – dreidimensionales Ethanal-Wachstumsgitter
 
-  Experimentelle Randbedingung:
-  stabile Tieftemperaturphase von Acetaldehyd-d4 bei 5 K,
-  P21/c (Nr. 14), Z=4,
-  a=3.9069 Å, b=5.4224 Å, c=12.1868 Å, beta=94.2970°.
+  Ausgangspunkt ist die für dipol-dipol2 verwendete P21/c-Packungsrechnung
+  (stabile Tieftemperaturphase, Z = 4). Die vier optimierten Basislagen wurden
+  periodisch mit den experimentellen Zellvektoren fortgesetzt. Aus diesem
+  periodischen Gitter wurde um ein Referenzmolekül ein kompakter 10er-Cluster
+  gewählt, der
+    - in allen drei Raumrichtungen wächst,
+    - bei jedem neuen Molekül an den vorhandenen Cluster angebunden bleibt,
+    - viele günstige O···C(=O)-Nachbarschaften enthält.
 
-  Die vier Moleküle wurden mit diesen festen Zellparametern und den P21/c-
-  Symmetrieoperationen aus EINEM unabhängigen Molekül erzeugt. Dessen
-  fraktionelle Lage und Orientierung wurden global (Differential Evolution)
-  mit demselben ESP-Ladungs-/Lennard-Jones-Modell wie in der Anwendung
-  optimiert. Für die beiden improper Symmetrieabbildungen wird bei der
-  Darstellung die äquivalente Spiegelung an der Molekülebene durch eine
-  proper Rotation ersetzt; Ethanal ist achiral und die Carbonylorientierung
-  bleibt dabei erhalten.
+  Target 0 = festes Ausgangsmolekül.
+  Target 1 = Zielposition des EINZIGEN mit dem Würfel ausgerichteten Moleküls.
+  Targets 2…9 = acht automatisch, nacheinander hinzugefügte Moleküle.
+
+  Die Koordinaten sind in Å relativ zu Target 0; die Quaternionen sind relativ
+  zur Orientierung von Target 0. In der vollständigen 10er-Struktur ergeben
+  sich mit der in interactionModel.js verwendeten Kontaktmetrik 16 sichtbare
+  O···C(=O)-Nachbarschaften.
 */
 export const CRYSTAL_REFERENCE=Object.freeze({
   spaceGroup:"P21/c",
-  temperatureK:5,
   Z:4,
   cell:Object.freeze({a:3.9069,b:5.4224,c:12.1868,betaDeg:94.2970}),
-  source:"Ibberson, Yamamuro & Matsuo, J. Mol. Struct. 520 (2000) 265–272",
-  optimization:"P21/c-constrained global packing optimization; ESP charges + LJ",
+  source:"P21/c-periodic packing derived from the dipol-dipol2 packing calculation",
+  totalMolecules:10,
+  manualTargetIndex:1,
+  automaticTargetStart:2,
+  expectedFullContactCount:16,
   targets:Object.freeze([
-    Object.freeze({centerA:Object.freeze([-0.9494726121,-1.7866374208,-1.7675551427]),quaternion:Object.freeze([0.3451212756,0.8745868366,-0.0496468322,0.3369337656])}),
-    Object.freeze({centerA:Object.freeze([ 1.4060298339, 0.9245625792,-4.3087166636]),quaternion:Object.freeze([0.0496468322,-0.3369337656,0.3451212756,0.8745868366])}),
-    Object.freeze({centerA:Object.freeze([ 0.9494726121, 1.7866374208, 1.7675551427]),quaternion:Object.freeze([0.8745868366,-0.3451212756,0.3369337656,0.0496468322])}),
-    Object.freeze({centerA:Object.freeze([-1.4060298339,-0.9245625792, 4.3087166636]),quaternion:Object.freeze([-0.3369337656,-0.0496468322,0.8745868366,-0.3451212756])})
+    Object.freeze({centerA:Object.freeze([ 0.0000000000, 0.0000000000, 0.0000000000]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000])}),
+    Object.freeze({centerA:Object.freeze([ 1.8711473773, 3.1824358619, 2.3932004861]),quaternion:Object.freeze([-0.5702216611,-0.7568529944, 0.3194069538, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([-1.2208225580,-0.9215238147, 4.1251527524]),quaternion:Object.freeze([-0.5702216611,-0.7568529944, 0.3194069538, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([-3.0919699353,-4.1039596766, 1.7319522663]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000])}),
+    Object.freeze({centerA:Object.freeze([-4.3127924933,-5.0254834912, 5.8571050188]),quaternion:Object.freeze([-0.5702216611,-0.7568529944, 0.3194069538, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([ 3.0919699353, 4.1039596766,-1.7319522663]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000])}),
+    Object.freeze({centerA:Object.freeze([ 4.9631173126, 7.2863955384, 0.6612482197]),quaternion:Object.freeze([-0.5702216611,-0.7568529944, 0.3194069538, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([ 0.9067004574, 1.9402649075,-4.9709603274]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([-2.1852694779,-2.1636947691,-3.2390080611]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000])}),
+    Object.freeze({centerA:Object.freeze([-5.2772394131,-6.2676544456,-1.5070557947]),quaternion:Object.freeze([ 0.0000000000, 0.0000000000, 1.0000000000, 0.0000000000])})
   ])
 });

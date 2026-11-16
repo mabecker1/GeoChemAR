@@ -1,5 +1,5 @@
-GeoChemAR dipol-dipol2 – Berechnungsmodell
-============================================
+GeoChemAR dipol-dipol2h – Berechnungsmodell
+=============================================
 
 Darstellung
 -----------
@@ -8,77 +8,35 @@ Darstellung
 - ESP-Farbskala: dieselbe Rot-Gelb-Grün-Cyan-Blau-Skala wie in mesomerie1 / dipol-dipol1.
 - Ball-and-Stick bleibt immer sichtbar; alle Oberflächen lassen sich gemeinsam ausblenden.
 
-Partialladungen und Dipol
+Partialladungen und Paarenergie
+-------------------------------
+Die atomzentrierten ESP-Ladungen stammen aus der RHF/STO-3G-ESP-Anpassung von dipol-dipol2.
+Die Paarenergie kombiniert Coulomb-Beiträge dieser Ladungen mit einem 12-6-Lennard-Jones-Term,
+damit elektrostatisch günstige, aber sterisch unmögliche Überlappungen ausgeschlossen werden.
+
+Sichtbare Dipol-Dipol-Wechselwirkungen
+--------------------------------------
+- Endpunkte sind ausschließlich Carbonyl-O eines Moleküls und Carbonyl-C eines zweiten Moleküls.
+- Pro benachbartem Molekülpaar wird nur der stärkste O···C(=O)-Kontakt gezeichnet.
+- Die Kontaktstärke kombiniert O···C-Abstand und attraktive Paarenergie.
+- Dieselbe Kontaktstärke steuert beim ersten, würfelgebundenen Molekül die Anzeige
+  „Günstigkeit der Anordnung“. Linie und Prozentwert sind daher direkt gekoppelt.
+
+Ablauf
+------
+1. Ein Ethanal-Molekül liegt fest im Zentrum.
+2. Genau ein weiteres Ethanal wird mit dem Markerwürfel ausgerichtet.
+3. Sobald ein ausreichend günstiger O···C(=O)-Kontakt stabil erreicht ist, rastet dieses
+   Molekül weich in den berechneten Festkörperplatz ein.
+4. Danach werden per Klick acht weitere Moleküle nacheinander automatisch ergänzt.
+5. Insgesamt sind somit 10 Moleküle sichtbar.
+
+Automatische 3D-Anordnung
 -------------------------
-Aus dem RHF/STO-3G-Elektrostatikpotential wurden atomzentrierte Punktladungen
-per beschränkter Least-Squares-Anpassung bestimmt (Gesamtladung = 0). Alle
-Ladungen wurden danach mit demselben Faktor skaliert, sodass der Betrag des
-Moleküldipols 2.69 D beträgt. Die räumliche Ladungsverteilung und Dipolrichtung
-bleiben dadurch aus der ESP-Anpassung erhalten.
+Die Zielpositionen sind aus einer periodischen Fortsetzung der für dipol-dipol2 verwendeten
+P21/c-Packungsrechnung abgeleitet. Aus dem periodischen Gitter wurde ein kompakter,
+zusammenhängender 10er-Cluster gewählt, der in allen drei Raumrichtungen wächst und viele
+attraktive O···C(=O)-Nachbarschaften enthält.
 
-Atomreihenfolge und verwendete Ladungen [e]:
-C(CH3)  -0.74898317
-C(CHO)  +0.80751800
-O       -0.54760863
-H       +0.15698331
-H       +0.21186732
-H       +0.21195320
-H(CHO)  -0.09173003
-
-Berechneter positiver Ladungsschwerpunkt [Angstrom]:
-( 0.17793577, -0.13195663, 0.11047179 )
-Berechneter negativer Ladungsschwerpunkt [Angstrom]:
-(-0.08011782, -0.44194984, 0.10411029 )
-Kalibrierter Dipolvektor [Debye]:
-(1.72080298, 2.06715688, 0.04242101), Betrag 2.69 D
-
-Wechselwirkungsenergie
-----------------------
-Für jedes Paar aus aktuellem und bereits festem Molekül wird in jedem Frame
-berechnet:
-
-U_pair = U_Coulomb + U_LJ
-
-Coulomb-Anteil:
-U_Coulomb = Sum_ij 138.935456 * q_i*q_j/(epsilon_eff*r_ij[nm])  kJ/mol
-mit epsilon_eff = 2.5 als kurzreichweitiger Dämpfung der atomzentrierten
-Punktladungen im kondensierten Modell.
-
-Kurzreichweitige Abstoßung/Dispersion:
-12-6-Lennard-Jones-Terme mit generischen elementweisen vdW-Radien und kleinen
-Dispersions-Welltiefen. Dieser Anteil verhindert insbesondere, dass eine nur
-elektrostatisch günstige Anordnung Atome unrealistisch ineinanderschiebt.
-
-Die angezeigte Günstigkeit ist eine glatte 0–100-%-Abbildung der aktuellen
-negativen Gesamt-Wechselwirkungsenergie mit allen festen Nachbarn innerhalb
-von 8 Angstrom. Sterische Kollisionen werden unabhängig von der Coulomb-
-Energie als ungünstig bewertet.
-
-Dipol-Dipol-Linien und Fixierung
---------------------------------
-Zwischen positivem und negativem Ladungsschwerpunkt zweier Moleküle erscheint
-eine gestrichelte Linie, wenn
-- das Molekülpaar insgesamt deutlich günstig ist (U_pair <= -2.5 kJ/mol),
-- keine sterische Kollision vorliegt und
-- der Abstand der gegensinnigen Ladungsschwerpunkte 2.15 bis 4.10 Angstrom beträgt.
-
-Sobald das aktuell würfelgebundene Molekül mindestens zwei solche Kontakte
-für 320 ms gleichzeitig hält, wird seine vollständige aktuelle 3D-Pose
-fixiert. Danach ist es unabhängig von weiteren Würfelbewegungen. Maximal fünf
-zusätzliche Ethanal-Moleküle können so an das anfangs feste Zentralmolekül
-angebaut werden.
-
-Festkörper-Modell
------------------
-Das Programm bildet einen starren, energetisch orientierten Molekülcluster.
-Es beansprucht keine exakte kristallographische Elementarzelle von festem
-Ethanal. Das entspricht der didaktischen Abstraktion der referenzierten
-Lern-Chemie-Simulation, die ebenfalls ausdrücklich ein vereinfachtes festes
-Molekülgitter verwendet.
-
-
-Version dipol-dipol2a:
-- Ball-and-stick rendering uses the EPA1 atom/bond proportions and materials, uniformly scaled for the cluster.
-- Visible intermolecular dashed contacts are only O(carbonyl)···C(carbonyl) between different ethanal molecules.
-- Mouse/pointer/touch orbit rotates the full virtual arrangement about the central molecule without changing pair distances or interaction energies.
-- The score panel displays only the favorability indicator.
+Mit der verwendeten Kontaktmetrik besitzt der vollständige Cluster 16 sichtbare
+Dipol-Dipol-Nachbarschaften; bereits bei vier Molekülen sind es 5.

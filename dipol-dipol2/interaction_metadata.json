@@ -99,13 +99,24 @@
   ],
   "visualInteractionLines": {
     "endpointRule": "exclusively carbonyl O of one ethanal to carbonyl C of another ethanal",
-    "carbonylCAtomIndexZeroBased": 1,
-    "carbonylOAtomIndexZeroBased": 2,
-    "distanceRangeAngstrom": [
-      2.45,
-      3.85
+    "perPairRule": "only the strongest qualifying O...C(=O) contact of each neighboring molecule pair is shown",
+    "contactIdealAngstrom": 4.08,
+    "contactVisibleDistanceRangeAngstrom": [
+      2.7,
+      5.15
     ],
-    "pairEnergyMustBeAtMostKJMol": -1.8
+    "contactStrengthVisibleMinimum": 0.2,
+    "contactStrengthManualLockMinimum": 0.78
   },
-  "ballAndStick": "EPA1 proportions and materials, uniformly scaled to 50% for cluster display"
+  "ballAndStick": "EPA1 proportions and materials, uniformly scaled to 50% for cluster display",
+  "growthModel": {
+    "initialFixedMolecules": 1,
+    "manualCubeAlignedMolecules": 1,
+    "automaticMolecules": 8,
+    "totalMolecules": 10,
+    "referencePacking": "periodic P21/c-derived packing cluster",
+    "expectedVisibleContactsAt4Molecules": 5,
+    "expectedVisibleContactsAt10Molecules": 16,
+    "growthDirections": "three-dimensional"
+  }
 }

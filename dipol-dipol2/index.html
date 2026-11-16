@@ -281,7 +281,6 @@ html.debug-mode #status{display:block}
   </div>
   <div class="controlGroup overlayGroup">
     <button id="densityToggle" class="toggleControl active" type="button" aria-pressed="true">Elektronendichteoberflächen</button>
-    <button id="optimalArrangement" class="optimalControl" type="button" hidden>Günstigste Anordnung</button>
     <button id="resetCluster" class="resetControl" type="button">Neu starten</button>
   </div>
 </div>
@@ -384,7 +383,7 @@ async function loadMoleculeModules(){
   }
 }
 
-const VERSION="dipol-dipol2g / Core EPA-6a";
+const VERSION="dipol-dipol2h / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -574,7 +573,6 @@ const errorBox=document.getElementById("error");
 const addMoleculeButton=document.getElementById("addMolecule");
 const densityToggleButton=document.getElementById("densityToggle");
 const resetClusterButton=document.getElementById("resetCluster");
-const optimalArrangementButton=document.getElementById("optimalArrangement");
 const densityLegend=document.getElementById("densityLegend");
 const scoreValue=document.getElementById("scoreValue");
 const scoreFill=document.getElementById("scoreFill");
@@ -658,91 +656,79 @@ for(let id=0;id<=5;id++){
 }
 
 /* =====================================================
-   dipol-dipol2 – starrer Ethanal-Festkörper-Cluster
+   dipol-dipol2h – manuelles erstes Molekül + automatisches 3D-Wachstum
    ===================================================== */
 
 const CLUSTER_PIVOT=new THREE.Vector3(0,0,-0.40);
-
-// Rohpose des Würfels in Kamerakoordinaten. Das aktuelle Molekül wird daraus
-// in das um das Clusterzentrum drehbare orbitRoot-Koordinatensystem übertragen.
 const trackedCubeRoot=new THREE.Group();
 trackedCubeRoot.visible=false;
 scene.add(trackedCubeRoot);
 
-// Alle sichtbaren Moleküle liegen unter diesem Pivot. Eine Rotation dieses
-// Roots ist eine reine gemeinsame Ansichtsdrehung: Abstände und relative
-// Orientierungen der Moleküle ändern sich dadurch nicht.
 const orbitRoot=new THREE.Group();
 orbitRoot.position.copy(CLUSTER_PIVOT);
 scene.add(orbitRoot);
 
 const interactionLineGroup=new THREE.Group();
 scene.add(interactionLineGroup);
-const MAX_LINES=30;
+const MAX_LINES=40;
 const linePool=[];
-const lineMaterial=new THREE.LineDashedMaterial({color:0xf8fafc,transparent:true,opacity:.94,dashSize:.0040,gapSize:.0027,depthTest:true,depthWrite:false});
+const lineMaterial=new THREE.LineDashedMaterial({
+  color:0xf8fafc,transparent:true,opacity:.94,
+  dashSize:.0040,gapSize:.0027,depthTest:true,depthWrite:false
+});
 for(let i=0;i<MAX_LINES;i++){
   const geo=new THREE.BufferGeometry();
   geo.setAttribute("position",new THREE.Float32BufferAttribute([0,0,0,0,0,0],3));
   geo.setAttribute("lineDistance",new THREE.Float32BufferAttribute([0,1],1));
-  const line=new THREE.Line(geo,lineMaterial);line.visible=false;line.renderOrder=12;interactionLineGroup.add(line);linePool.push(line);
+  const line=new THREE.Line(geo,lineMaterial);
+  line.visible=false;line.renderOrder=12;interactionLineGroup.add(line);linePool.push(line);
 }
 
 let fixedMolecules=[];
 let activeMolecule=null;
 let densityVisible=true;
-let addedLocked=0;
+let manualPlacementCompleted=false;
 let lockCandidateSince=null;
 let displayedScore=0;
-const LOCK_DWELL_MS=320;
-const MAX_TOTAL=4;
-const MAX_ADDED=MAX_TOTAL-1;
-let crystalMode=false;
-let crystalAnimation=null;
+let placementAnimation=null;
+const LOCK_DWELL_MS=340;
+const AUTO_ANIMATION_MS=420;
 
-// Freie Ansichtsdrehung per Maus / Pointer / Touch.
-let orbitYaw=0;
-let orbitPitch=0;
-let orbitPointerId=null;
-let orbitLastX=0;
-let orbitLastY=0;
+let orbitYaw=0,orbitPitch=0,orbitPointerId=null,orbitLastX=0,orbitLastY=0;
 function applyOrbitRotation(){
   const qYaw=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),orbitYaw);
   const qPitch=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),orbitPitch);
   orbitRoot.quaternion.copy(qYaw).multiply(qPitch).normalize();
 }
-function orbitEventBlocked(target){
-  return !!target?.closest?.("#epaControls,#scorePanel,#densityLegend,button,select,input");
-}
+function orbitEventBlocked(target){return !!target?.closest?.("#epaControls,#scorePanel,#densityLegend,button,select,input");}
 window.addEventListener("pointerdown",event=>{
   if(orbitPointerId!==null||orbitEventBlocked(event.target))return;
-  orbitPointerId=event.pointerId;
-  orbitLastX=event.clientX;orbitLastY=event.clientY;
-  try{document.body.setPointerCapture?.(event.pointerId);}catch{}
+  orbitPointerId=event.pointerId;orbitLastX=event.clientX;orbitLastY=event.clientY;
 });
 window.addEventListener("pointermove",event=>{
   if(event.pointerId!==orbitPointerId)return;
-  const dx=event.clientX-orbitLastX;
-  const dy=event.clientY-orbitLastY;
+  const dx=event.clientX-orbitLastX,dy=event.clientY-orbitLastY;
   orbitLastX=event.clientX;orbitLastY=event.clientY;
-  orbitYaw+=dx*0.0075;
-  orbitPitch=THREE.MathUtils.clamp(orbitPitch+dy*0.0075,-Math.PI*0.47,Math.PI*0.47);
-  applyOrbitRotation();
-  event.preventDefault();
+  orbitYaw+=dx*.0075;
+  orbitPitch=THREE.MathUtils.clamp(orbitPitch+dy*.0075,-Math.PI*.47,Math.PI*.47);
+  applyOrbitRotation();event.preventDefault();
 },{passive:false});
-function endOrbitPointer(event){
-  if(event.pointerId!==orbitPointerId)return;
-  orbitPointerId=null;
-}
+function endOrbitPointer(event){if(event.pointerId===orbitPointerId)orbitPointerId=null;}
 window.addEventListener("pointerup",endOrbitPointer);
 window.addEventListener("pointercancel",endOrbitPointer);
+
+function targetPose(index){
+  const target=crystalReference.targets[index];
+  return {
+    position:new THREE.Vector3(...target.centerA).multiplyScalar(angstromToScene),
+    quaternion:new THREE.Quaternion(...target.quaternion).normalize()
+  };
+}
 
 function updateActiveFromTrackedPose(){
   if(!activeMolecule)return;
   if(!trackedCubeRoot.visible){activeMolecule.visible=false;return;}
   activeMolecule.visible=true;
-  // Physische Würfelpose relativ zum festen Clusterzentrum. Die gemeinsame
-  // orbitRoot-Rotation wird danach automatisch auf alle Moleküle angewandt.
   const cubeOffset=new THREE.Vector3(0,.032,0).applyQuaternion(trackedCubeRoot.quaternion);
   activeMolecule.position.copy(trackedCubeRoot.position).add(cubeOffset).sub(CLUSTER_PIVOT);
   activeMolecule.quaternion.copy(trackedCubeRoot.quaternion);
@@ -764,155 +750,152 @@ function updateLinePool(links){
 function applyDensityVisibility(){
   for(const m of fixedMolecules)setSurfaceVisible(m,densityVisible);
   if(activeMolecule)setSurfaceVisible(activeMolecule,densityVisible);
+  if(placementAnimation?.root)setSurfaceVisible(placementAnimation.root,densityVisible);
   densityToggleButton.classList.toggle("active",densityVisible);
   densityToggleButton.setAttribute("aria-pressed",densityVisible?"true":"false");
   densityLegend.classList.toggle("visible",densityVisible);
 }
 
 function updateButtons(){
-  const totalFixed=fixedMolecules.length;
-  addMoleculeButton.disabled=crystalMode||!!activeMolecule||totalFixed>=MAX_TOTAL;
-  if(crystalMode){
-    addMoleculeButton.textContent="Kristallstruktur";
-  }else if(totalFixed>=MAX_TOTAL){
-    addMoleculeButton.textContent=`Maximum erreicht (${MAX_TOTAL}/${MAX_TOTAL})`;
-  }else if(activeMolecule){
+  const maxTotal=crystalReference?.totalMolecules??10;
+  const busy=!!activeMolecule||!!placementAnimation;
+  addMoleculeButton.disabled=busy||fixedMolecules.length>=maxTotal;
+
+  if(activeMolecule){
     addMoleculeButton.textContent="Ethanal wird ausgerichtet …";
+  }else if(placementAnimation){
+    addMoleculeButton.textContent="Ethanal wird hinzugefügt …";
+  }else if(fixedMolecules.length>=maxTotal){
+    addMoleculeButton.textContent=`Maximum erreicht (${maxTotal}/${maxTotal})`;
+  }else if(!manualPlacementCompleted){
+    addMoleculeButton.textContent=`+ Ethanal ausrichten (${fixedMolecules.length+1}/${maxTotal})`;
   }else{
-    addMoleculeButton.textContent=`+ Ethanal hinzufügen (${totalFixed+1}/${MAX_TOTAL})`;
+    addMoleculeButton.textContent=`+ Ethanal automatisch hinzufügen (${fixedMolecules.length+1}/${maxTotal})`;
   }
-  optimalArrangementButton.hidden=!(totalFixed===MAX_TOTAL&&!activeMolecule&&!crystalMode);
 }
 
 function createInitialFixedMolecule(){
   const root=buildEthanalInstance();
-  root.position.set(0,0,0);
-  root.quaternion.identity();
-  orbitRoot.add(root);
-  fixedMolecules=[root];
+  const pose=targetPose(0);
+  root.position.copy(pose.position);root.quaternion.copy(pose.quaternion);
+  orbitRoot.add(root);fixedMolecules=[root];
 }
 
 function resetCluster(){
   if(activeMolecule){orbitRoot.remove(activeMolecule);disposeObject3D(activeMolecule);activeMolecule=null;}
+  if(placementAnimation?.root){orbitRoot.remove(placementAnimation.root);disposeObject3D(placementAnimation.root);}
+  placementAnimation=null;
   for(const m of fixedMolecules){orbitRoot.remove(m);disposeObject3D(m);}
-  fixedMolecules=[];addedLocked=0;lockCandidateSince=null;displayedScore=0;crystalMode=false;crystalAnimation=null;
+  fixedMolecules=[];manualPlacementCompleted=false;lockCandidateSince=null;displayedScore=0;
   orbitYaw=0;orbitPitch=0;applyOrbitRotation();
   createInitialFixedMolecule();
-  applyDensityVisibility();
-  updateLinePool([]);
-  scoreValue.textContent="–";scoreFill.style.width="0%";
-  updateButtons();
+  applyDensityVisibility();updateLinePool([]);
+  scoreValue.textContent="–";scoreFill.style.width="0%";updateButtons();
+}
+
+function startManualMolecule(){
+  if(activeMolecule||placementAnimation||manualPlacementCompleted||fixedMolecules.length!==1)return;
+  activeMolecule=buildEthanalInstance();activeMolecule.visible=false;orbitRoot.add(activeMolecule);
+  setSurfaceVisible(activeMolecule,densityVisible);
+  lockCandidateSince=null;displayedScore=0;scoreValue.textContent="0 %";scoreFill.style.width="0%";updateButtons();
+}
+
+function clusterSmoothstep01(t){t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);}
+function beginPlacementAnimation(root,targetIndex,{manual=false}={}){
+  const target=targetPose(targetIndex);
+  placementAnimation={
+    root,targetIndex,manual,start:performance.now(),duration:AUTO_ANIMATION_MS,
+    startPosition:root.position.clone(),startQuaternion:root.quaternion.clone(),
+    startScale:root.scale.clone(),targetPosition:target.position,targetQuaternion:target.quaternion
+  };
+  root.visible=true;updateButtons();
+}
+
+function finishPlacementAnimation(){
+  const a=placementAnimation;if(!a)return;
+  a.root.position.copy(a.targetPosition);a.root.quaternion.copy(a.targetQuaternion);a.root.scale.setScalar(1);
+  fixedMolecules.push(a.root);
+  if(a.manual)manualPlacementCompleted=true;
+  placementAnimation=null;lockCandidateSince=null;displayedScore=0;
+  scene.updateMatrixWorld(true);
+  const cluster=evaluateCluster(fixedMolecules);
+  updateLinePool(cluster.links);
+  const shown=Math.round(cluster.score);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
+  applyDensityVisibility();updateButtons();
+}
+
+function updatePlacementAnimation(now){
+  if(!placementAnimation)return;
+  const a=placementAnimation,t=clusterSmoothstep01((now-a.start)/a.duration);
+  a.root.position.copy(a.startPosition).lerp(a.targetPosition,t);
+  a.root.quaternion.copy(a.startQuaternion).slerp(a.targetQuaternion,t).normalize();
+  if(!a.manual){
+    const s=THREE.MathUtils.lerp(.18,1,t);a.root.scale.setScalar(s);
+  }
+  if(t>=1)finishPlacementAnimation();
+}
+
+function lockFirstMolecule(){
+  if(!activeMolecule)return;
+  const root=activeMolecule;activeMolecule=null;
+  beginPlacementAnimation(root,crystalReference.manualTargetIndex,{manual:true});
+}
+
+function addAutomaticMolecule(){
+  const maxTotal=crystalReference.totalMolecules;
+  if(!manualPlacementCompleted||activeMolecule||placementAnimation||fixedMolecules.length>=maxTotal)return;
+  const targetIndex=fixedMolecules.length;
+  const root=buildEthanalInstance();
+  const target=targetPose(targetIndex);
+  // Das Molekül erscheint bereits am berechneten Gitterplatz und wächst weich ein.
+  root.position.copy(target.position);root.quaternion.copy(target.quaternion);root.scale.setScalar(.18);
+  orbitRoot.add(root);setSurfaceVisible(root,densityVisible);
+  beginPlacementAnimation(root,targetIndex,{manual:false});
 }
 
 function addMolecule(){
-  if(activeMolecule||fixedMolecules.length>=MAX_TOTAL||crystalMode)return;
-  activeMolecule=buildEthanalInstance();
-  activeMolecule.visible=false;
-  orbitRoot.add(activeMolecule);
-  setSurfaceVisible(activeMolecule,densityVisible);
-  lockCandidateSince=null;displayedScore=0;
-  scoreValue.textContent="0 %";scoreFill.style.width="0%";
-  updateButtons();
-}
-
-function lockActiveMolecule(){
-  if(!activeMolecule)return;
-  fixedMolecules.push(activeMolecule);
-  activeMolecule=null;
-  addedLocked++;
-  lockCandidateSince=null;
-  displayedScore=0;
-  scoreValue.textContent="–";scoreFill.style.width="0%";
-  updateButtons();
-  applyDensityVisibility();
+  if(!manualPlacementCompleted)startManualMolecule();
+  else addAutomaticMolecule();
 }
 
 function updateInteractionScene(now){
-  updateCrystalAnimation(now);
+  updatePlacementAnimation(now);
   updateActiveFromTrackedPose();
   scene.updateMatrixWorld(true);
-  const activeIsVisible=!!activeMolecule&&activeMolecule.visible&&trackedCubeRoot.visible;
 
   if(activeMolecule){
-    if(!activeIsVisible){
-      updateLinePool([]);
-      lockCandidateSince=null;
-      scoreValue.textContent="–";scoreFill.style.width="0%";
-      return;
+    if(!activeMolecule.visible||!trackedCubeRoot.visible){
+      updateLinePool([]);lockCandidateSince=null;scoreValue.textContent="–";scoreFill.style.width="0%";return;
     }
-
-    // STRINGENZ: Solange ein Molekül bewegt wird, werden ausschließlich
-    // dessen Kontakte gezeichnet. Genau dieselben Kontakte erzeugen den Score.
     const result=evaluateActive(activeMolecule,fixedMolecules);
     updateLinePool(result.links);
     displayedScore+=.24*(result.score-displayedScore);
-    const shown=Math.round(displayedScore);
-    scoreValue.textContent=`${shown} %`;
-    scoreFill.style.width=`${shown}%`;
-
-    if(result.lockContactCount>=2&&!result.collision){
+    const shown=Math.round(displayedScore);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
+    if(result.lockContactCount>=1&&!result.collision){
       if(lockCandidateSince===null)lockCandidateSince=now;
-      if(now-lockCandidateSince>=LOCK_DWELL_MS)lockActiveMolecule();
-    }else{
-      lockCandidateSince=null;
-    }
+      if(now-lockCandidateSince>=LOCK_DWELL_MS)lockFirstMolecule();
+    }else lockCandidateSince=null;
     return;
   }
 
-  // Ohne aktives Molekül ist wieder das gesamte Netzwerk der festen
-  // Moleküle sichtbar. Im Kristallmodus wird derselbe Kontakt-Score gezeigt.
+  if(placementAnimation){
+    // Während des Einrastens/Einblendens keine transienten Linien zeichnen.
+    updateLinePool(collectAllLinks(fixedMolecules));
+    return;
+  }
+
   const cluster=evaluateCluster(fixedMolecules);
   updateLinePool(cluster.links);
-  if(crystalMode){
-    const shown=Math.round(cluster.score);
-    scoreValue.textContent=`${shown} %`;
-    scoreFill.style.width=`${shown}%`;
+  if(manualPlacementCompleted){
+    const shown=Math.round(cluster.score);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
   }else{
-    scoreValue.textContent="–";
-    scoreFill.style.width="0%";
-  }
-}
-
-function crystalSmoothstep01(t){t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);}
-function startCrystalArrangement(){
-  if(activeMolecule||fixedMolecules.length!==MAX_TOTAL||!crystalReference||crystalMode)return;
-  crystalMode=true;
-  const starts=fixedMolecules.map(m=>({position:m.position.clone(),quaternion:m.quaternion.clone()}));
-  const targets=crystalReference.targets.map(t=>({
-    position:new THREE.Vector3(...t.centerA).multiplyScalar(angstromToScene),
-    quaternion:new THREE.Quaternion(...t.quaternion).normalize()
-  }));
-  crystalAnimation={start:performance.now(),duration:1250,starts,targets};
-  optimalArrangementButton.hidden=true;
-  updateButtons();
-}
-
-function updateCrystalAnimation(now){
-  if(!crystalAnimation)return;
-  const t=crystalSmoothstep01((now-crystalAnimation.start)/crystalAnimation.duration);
-  for(let i=0;i<fixedMolecules.length;i++){
-    const m=fixedMolecules[i],s=crystalAnimation.starts[i],target=crystalAnimation.targets[i];
-    m.position.copy(s.position).lerp(target.position,t);
-    m.quaternion.copy(s.quaternion).slerp(target.quaternion,t).normalize();
-  }
-  if(t>=1){
-    for(let i=0;i<fixedMolecules.length;i++){
-      fixedMolecules[i].position.copy(crystalAnimation.targets[i].position);
-      fixedMolecules[i].quaternion.copy(crystalAnimation.targets[i].quaternion);
-    }
-    crystalAnimation=null;
-    scene.updateMatrixWorld(true);
-    const cluster=evaluateCluster(fixedMolecules);
-    updateLinePool(cluster.links);
-    const shown=Math.round(cluster.score);
-    scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
+    scoreValue.textContent="–";scoreFill.style.width="0%";
   }
 }
 
 addMoleculeButton.addEventListener("click",addMolecule);
 densityToggleButton.addEventListener("click",()=>{densityVisible=!densityVisible;applyDensityVisibility();});
-resetClusterButton.addEventListener("click",()=>resetCluster());
-optimalArrangementButton.addEventListener("click",startCrystalArrangement);
+resetClusterButton.addEventListener("click",resetCluster);
 
 const basisChange=new THREE.Matrix4().set(1,0,0,0, 0,-1,0,0, 0,0,-1,0, 0,0,0,1);
 function convertAprilPose(pose){

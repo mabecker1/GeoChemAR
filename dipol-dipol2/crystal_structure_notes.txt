@@ -1,18 +1,9 @@
-Referenz für „Günstigste Anordnung“
-===================================
+dipol-dipol2h – Wachstum des Ethanal-Festkörperclusters
 
-Experimentelle Kristallphase:
-- stabile Tieftemperaturphase von Acetaldehyd-d4, 5 K
-- Raumgruppe P21/c (Nr. 14), Z = 4
-- a = 3.9069 Å, b = 5.4224 Å, c = 12.1868 Å, beta = 94.2970°
-- Quelle: R. M. Ibberson, O. Yamamuro, T. Matsuo, Journal of Molecular Structure 520 (2000) 265–272.
-
-Berechnung der dargestellten Viererpackung:
-- experimentelle Zellparameter und P21/c-Symmetrie fest vorgegeben
-- ein unabhängiges Ethanal-Molekül als Freiheitsgrad
-- globale Suche der fraktionellen Lage + drei Orientierungswinkel mit Differential Evolution
-- Zielfunktion: dieselben atomzentrierten ESP-Partialladungen und Lennard-Jones-Beiträge wie in dipol-dipol2
-- vier Moleküle werden anschließend über die P21/c-Symmetrieoperationen erzeugt
-
-Hinweis:
-Die öffentlich zugängliche Zusammenfassung der Neutronenarbeit liefert Raumgruppe, Zellparameter und Z, aber nicht die vollständigen verfeinerten fraktionellen Atomkoordinaten. Die in der Anwendung gezeigte Packung ist deshalb eine P21/c- und zellparametergetreue, energetisch optimierte Rekonstruktion der stabilen Kristallphase, keine behauptete 1:1-Wiedergabe unveröffentlichter Atomkoordinaten.
+- Molekül 1: festes Ausgangsmolekül.
+- Molekül 2: einziges Molekül, das mit dem Markerwürfel ausgerichtet wird.
+- Moleküle 3–10: acht automatische Ergänzungen, je ein Molekül pro Klick.
+- Die automatischen Zielpositionen stammen aus einer periodischen Fortsetzung der für dipol-dipol2 berechneten P21/c-Packung.
+- Auswahl der 10 Positionen: kompakter, zusammenhängender 3D-Cluster mit hoher Zahl attraktiver O···C(=O)-Nachbarschaften und Ausdehnung in allen drei Raumrichtungen.
+- Vollständiger Cluster: 16 sichtbare O···C(=O)-Nachbarschaften mit der in interactionModel.js verwendeten Kontaktmetrik.
+- Wie in der Lern-Chemie-Simulation wird pro benachbartem Molekülpaar nur die stärkste Wechselwirkung als gestrichelte Linie gezeigt.
