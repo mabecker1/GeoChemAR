@@ -30,6 +30,47 @@ function scenePts(data,center){return data.atoms.map(a=>v(...a[1]).sub(center).m
 function buildModel(data){const g=new THREE.Group();const c=moleculeCenter(data);const pts=scenePts(data,c);for(const b of data.bonds)addBond(g,data,b,pts);for(let i=0;i<data.atoms.length;i++)g.add(createAtom(data.atoms[i][0],pts[i]));return {group:g,center:c};}
 function createSurface(key,center){const raw=SURFACES[key];const pb=decodeB64(raw.positionsB64),src=new Float32Array(pb.buffer),pos=new Float32Array(src.length);for(let i=0;i<src.length;i+=3){pos[i]=(src[i]-center.x)*ANGSTROM_TO_SCENE;pos[i+1]=(src[i+1]-center.y)*ANGSTROM_TO_SCENE;pos[i+2]=(src[i+2]-center.z)*ANGSTROM_TO_SCENE;}const cb=decodeB64(raw.colorsB64),ib=decodeB64(raw.indicesB64),idx=new Uint32Array(ib.buffer),corr=new Uint32Array(idx.length);for(let i=0;i<idx.length;i+=3){corr[i]=idx[i];corr[i+1]=idx[i+2];corr[i+2]=idx[i+1];}const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.BufferAttribute(pos,3));geo.setAttribute("color",new THREE.BufferAttribute(cb,3,true));geo.setIndex(new THREE.BufferAttribute(corr,1));geo.computeVertexNormals();const mesh=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({vertexColors:true,transparent:true,opacity:.86,shininess:72,specular:0x555555,side:THREE.FrontSide,depthWrite:false}));mesh.renderOrder=3;return mesh;}
 
-export function buildComparison(){const root=new THREE.Group();const entries={};for(const key of ORDER){const data=MOLECULES[key],wrap=new THREE.Group();wrap.position.copy(POSITIONS[key]);const built=buildModel(data),model=built.group,surface=createSurface(key,built.center);wrap.add(model,surface);root.add(wrap);entries[key]={wrap,model,surface,data};}root.userData.entries=entries;root.userData.surfaceMeta=SURFACE_META;return root;}
-export function setComparisonState(root,{surfaces=true,mode="PROPANE"}={}){const entries=root?.userData?.entries;if(!entries)return;for(const key of ORDER){const on=mode===key;entries[key].wrap.visible=on;entries[key].wrap.position.copy(on?new THREE.Vector3(0,0.032,0):POSITIONS[key]);entries[key].model.visible=on;entries[key].surface.visible=on&&surfaces;}}
+function centerEntryOnCube(wrap,model,surface){
+  // Compute the real visible 3D bounds of model + density surface and shift
+  // the complete entry so that its visual center lies on the cube center.
+  // This avoids residual offsets for asymmetric molecules such as ethanol.
+  wrap.updateMatrixWorld(true);
+  const box=new THREE.Box3();
+  box.expandByObject(model);
+  box.expandByObject(surface);
+  const center=box.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  surface.position.sub(center);
+  wrap.updateMatrixWorld(true);
+}
+
+export function buildComparison(){
+  const root=new THREE.Group();
+  const entries={};
+  for(const key of ORDER){
+    const data=MOLECULES[key];
+    const wrap=new THREE.Group();
+    const built=buildModel(data);
+    const model=built.group;
+    const surface=createSurface(key,built.center);
+    wrap.add(model,surface);
+    centerEntryOnCube(wrap,model,surface);
+    root.add(wrap);
+    entries[key]={wrap,model,surface,data};
+  }
+  root.userData.entries=entries;
+  root.userData.surfaceMeta=SURFACE_META;
+  return root;
+}
+
+export function setComparisonState(root,{surfaces=true,mode="PROPANE"}={}){
+  const entries=root?.userData?.entries;if(!entries)return;
+  for(const key of ORDER){
+    const on=mode===key;
+    entries[key].wrap.visible=on;
+    entries[key].wrap.position.set(0,0.032,0);
+    entries[key].model.visible=on;
+    entries[key].surface.visible=on&&surfaces;
+  }
+}
 export function disposeObject3D(root){if(!root)return;const gs=new Set(),ms=new Set();root.traverse(o=>{if(o.geometry)gs.add(o.geometry);if(o.material){for(const m of (Array.isArray(o.material)?o.material:[o.material]))ms.add(m);}});for(const g of gs)g.dispose?.();for(const m of ms)m.dispose?.();}

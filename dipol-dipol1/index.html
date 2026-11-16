@@ -271,10 +271,9 @@ html.debug-mode #status{display:block}
 <div id="densityLegend" class="visible" aria-hidden="false">
   <div>
     <div class="legendTitle">Elektronendichteoberfläche</div>
-    <div style="font-size:11px;color:var(--ui-muted);margin-top:1px;">gemeinsame ESP-Skala</div>
   </div>
   <div class="legendBar"></div>
-  <div class="legendLabels"><span>elektronenreicher / negativer</span><span>≈ 0</span><span>elektronenärmer / positiver</span></div>
+  <div class="legendLabels"><span>elektronenreicher / negativer</span><span>elektronenärmer / positiver</span></div>
 </div>
 <div id="error"></div>
 <script type="module">
@@ -282,7 +281,7 @@ import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { buildComparison, setComparisonState, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="dipol-dipol1b / Core EPA-6a";
+const VERSION="dipol-dipol1c / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
