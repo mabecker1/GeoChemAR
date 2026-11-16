@@ -40,3 +40,6 @@ attraktive O···C(=O)-Nachbarschaften enthält.
 
 Mit der verwendeten Kontaktmetrik besitzt der vollständige Cluster 16 sichtbare
 Dipol-Dipol-Nachbarschaften; bereits bei vier Molekülen sind es 5.
+
+
+2i: Das manuell platzierte zweite Molekül bleibt nach dem Fixieren exakt unverändert. Automatische Moleküle werden bei jedem Klick neu aus mehreren hundert Carbonyl-O···Carbonyl-C-Kandidaten optimiert. Sie übernehmen ausschließlich eine der beiden Orientierungen des manuellen Ankerpaars.

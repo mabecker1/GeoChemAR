@@ -361,13 +361,14 @@ let disposeObject3D=null;
 let evaluateActive=null;
 let collectAllLinks=null;
 let evaluateCluster=null;
-let crystalReference=null;
+let findBestNextPose=null;
+let packingConstants=null;
 let angstromToScene=null;
 
 async function loadMoleculeModules(){
   const builder=await import("./ethanalBuilder.js");
   const interaction=await import("./interactionModel.js");
-  const crystal=await import("./crystalStructure.js");
+  const packing=await import("./packingOptimizer.js");
   buildEthanalInstance=builder.buildEthanalInstance;
   setSurfaceVisible=builder.setSurfaceVisible;
   disposeObject3D=builder.disposeObject3D;
@@ -375,15 +376,16 @@ async function loadMoleculeModules(){
   evaluateActive=interaction.evaluateActive;
   collectAllLinks=interaction.collectAllLinks;
   evaluateCluster=interaction.evaluateCluster;
-  crystalReference=crystal.CRYSTAL_REFERENCE;
+  findBestNextPose=packing.findBestNextPose;
+  packingConstants=packing.PACKING_CONSTANTS;
   if(typeof buildEthanalInstance!=="function"||typeof setSurfaceVisible!=="function"||
      typeof evaluateActive!=="function"||typeof collectAllLinks!=="function"||
-     typeof evaluateCluster!=="function"||!crystalReference||!Number.isFinite(angstromToScene)){
+     typeof evaluateCluster!=="function"||typeof findBestNextPose!=="function"||!packingConstants||!Number.isFinite(angstromToScene)){
     throw new Error("Molekülmodule konnten nicht vollständig geladen werden.");
   }
 }
 
-const VERSION="dipol-dipol2h / Core EPA-6a";
+const VERSION="dipol-dipol2i / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -656,7 +658,7 @@ for(let id=0;id<=5;id++){
 }
 
 /* =====================================================
-   dipol-dipol2h – manuelles erstes Molekül + automatisches 3D-Wachstum
+   dipol-dipol2i – manuelles Ankerpaar + berechnetes 3D-Wachstum
    ===================================================== */
 
 const CLUSTER_PIVOT=new THREE.Vector3(0,0,-0.40);
@@ -717,21 +719,22 @@ function endOrbitPointer(event){if(event.pointerId===orbitPointerId)orbitPointer
 window.addEventListener("pointerup",endOrbitPointer);
 window.addEventListener("pointercancel",endOrbitPointer);
 
-function targetPose(index){
-  const target=crystalReference.targets[index];
-  return {
-    position:new THREE.Vector3(...target.centerA).multiplyScalar(angstromToScene),
-    quaternion:new THREE.Quaternion(...target.quaternion).normalize()
-  };
-}
-
+const _activeWorldMatrix=new THREE.Matrix4();
+const _activeLocalMatrix=new THREE.Matrix4();
+const _activeWorldPos=new THREE.Vector3();
+const _activeWorldQuat=new THREE.Quaternion();
+const _activeWorldScale=new THREE.Vector3(1,1,1);
 function updateActiveFromTrackedPose(){
   if(!activeMolecule)return;
   if(!trackedCubeRoot.visible){activeMolecule.visible=false;return;}
   activeMolecule.visible=true;
   const cubeOffset=new THREE.Vector3(0,.032,0).applyQuaternion(trackedCubeRoot.quaternion);
-  activeMolecule.position.copy(trackedCubeRoot.position).add(cubeOffset).sub(CLUSTER_PIVOT);
-  activeMolecule.quaternion.copy(trackedCubeRoot.quaternion);
+  _activeWorldPos.copy(trackedCubeRoot.position).add(cubeOffset);
+  _activeWorldQuat.copy(trackedCubeRoot.quaternion);
+  _activeWorldMatrix.compose(_activeWorldPos,_activeWorldQuat,_activeWorldScale);
+  orbitRoot.updateMatrixWorld(true);
+  _activeLocalMatrix.copy(orbitRoot.matrixWorld).invert().multiply(_activeWorldMatrix);
+  _activeLocalMatrix.decompose(activeMolecule.position,activeMolecule.quaternion,activeMolecule.scale);
 }
 
 function updateLinePool(links){
@@ -757,7 +760,7 @@ function applyDensityVisibility(){
 }
 
 function updateButtons(){
-  const maxTotal=crystalReference?.totalMolecules??10;
+  const maxTotal=packingConstants?.totalMolecules??10;
   const busy=!!activeMolecule||!!placementAnimation;
   addMoleculeButton.disabled=busy||fixedMolecules.length>=maxTotal;
 
@@ -776,8 +779,7 @@ function updateButtons(){
 
 function createInitialFixedMolecule(){
   const root=buildEthanalInstance();
-  const pose=targetPose(0);
-  root.position.copy(pose.position);root.quaternion.copy(pose.quaternion);
+  root.position.set(0,0,0);root.quaternion.identity();
   orbitRoot.add(root);fixedMolecules=[root];
 }
 
@@ -801,21 +803,16 @@ function startManualMolecule(){
 }
 
 function clusterSmoothstep01(t){t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);}
-function beginPlacementAnimation(root,targetIndex,{manual=false}={}){
-  const target=targetPose(targetIndex);
-  placementAnimation={
-    root,targetIndex,manual,start:performance.now(),duration:AUTO_ANIMATION_MS,
-    startPosition:root.position.clone(),startQuaternion:root.quaternion.clone(),
-    startScale:root.scale.clone(),targetPosition:target.position,targetQuaternion:target.quaternion
-  };
-  root.visible=true;updateButtons();
+function beginAutomaticPlacement(root,pose){
+  root.position.copy(pose.position);root.quaternion.copy(pose.quaternion);root.scale.setScalar(.18);root.visible=true;
+  placementAnimation={root,start:performance.now(),duration:AUTO_ANIMATION_MS,targetScale:1,meta:pose.meta};
+  updateButtons();
 }
 
 function finishPlacementAnimation(){
   const a=placementAnimation;if(!a)return;
-  a.root.position.copy(a.targetPosition);a.root.quaternion.copy(a.targetQuaternion);a.root.scale.setScalar(1);
+  a.root.scale.setScalar(1);
   fixedMolecules.push(a.root);
-  if(a.manual)manualPlacementCompleted=true;
   placementAnimation=null;lockCandidateSince=null;displayedScore=0;
   scene.updateMatrixWorld(true);
   const cluster=evaluateCluster(fixedMolecules);
@@ -827,30 +824,37 @@ function finishPlacementAnimation(){
 function updatePlacementAnimation(now){
   if(!placementAnimation)return;
   const a=placementAnimation,t=clusterSmoothstep01((now-a.start)/a.duration);
-  a.root.position.copy(a.startPosition).lerp(a.targetPosition,t);
-  a.root.quaternion.copy(a.startQuaternion).slerp(a.targetQuaternion,t).normalize();
-  if(!a.manual){
-    const s=THREE.MathUtils.lerp(.18,1,t);a.root.scale.setScalar(s);
-  }
+  a.root.scale.setScalar(THREE.MathUtils.lerp(.18,a.targetScale,t));
   if(t>=1)finishPlacementAnimation();
 }
 
 function lockFirstMolecule(){
   if(!activeMolecule)return;
+  // WICHTIG: exakt die vom Würfel eingestellte Pose übernehmen. Keine
+  // nachträgliche Drehung, Verschiebung oder Kristall-Snap-Animation.
   const root=activeMolecule;activeMolecule=null;
-  beginPlacementAnimation(root,crystalReference.manualTargetIndex,{manual:true});
+  root.visible=true;root.scale.setScalar(1);
+  fixedMolecules.push(root);
+  manualPlacementCompleted=true;
+  lockCandidateSince=null;displayedScore=0;
+  scene.updateMatrixWorld(true);
+  const cluster=evaluateCluster(fixedMolecules);
+  updateLinePool(cluster.links);
+  const shown=Math.round(cluster.score);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
+  applyDensityVisibility();updateButtons();
 }
 
 function addAutomaticMolecule(){
-  const maxTotal=crystalReference.totalMolecules;
+  const maxTotal=packingConstants.totalMolecules;
   if(!manualPlacementCompleted||activeMolecule||placementAnimation||fixedMolecules.length>=maxTotal)return;
-  const targetIndex=fixedMolecules.length;
+  const pose=findBestNextPose(fixedMolecules);
+  if(!pose){
+    showError(new Error("Für die aktuelle Ankeranordnung wurde kein kollisionsfreier günstiger Carbonyl-Nachbar gefunden."));
+    return;
+  }
   const root=buildEthanalInstance();
-  const target=targetPose(targetIndex);
-  // Das Molekül erscheint bereits am berechneten Gitterplatz und wächst weich ein.
-  root.position.copy(target.position);root.quaternion.copy(target.quaternion);root.scale.setScalar(.18);
   orbitRoot.add(root);setSurfaceVisible(root,densityVisible);
-  beginPlacementAnimation(root,targetIndex,{manual:false});
+  beginAutomaticPlacement(root,pose);
 }
 
 function addMolecule(){
@@ -871,7 +875,7 @@ function updateInteractionScene(now){
     updateLinePool(result.links);
     displayedScore+=.24*(result.score-displayedScore);
     const shown=Math.round(displayedScore);scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
-    if(result.lockContactCount>=1&&!result.collision){
+    if(result.lockContactCount>=2&&!result.collision){
       if(lockCandidateSince===null)lockCandidateSince=now;
       if(now-lockCandidateSince>=LOCK_DWELL_MS)lockFirstMolecule();
     }else lockCandidateSince=null;
