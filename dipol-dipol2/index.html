@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – dipol-dipol2e</title>
+<title>GeoChemAR – dipol-dipol2g</title>
 <style>
 :root{
   --ui-green:#2fac16;
@@ -195,6 +195,9 @@ html.debug-mode #status{display:block}
 #epaControls .primaryAdd{min-width:190px;padding:0 14px;font-size:13px;font-weight:800;background:var(--ui-green);color:#fff;border-color:var(--ui-green)}
 #epaControls .primaryAdd:hover:not(:disabled){background:var(--ui-green-dark);border-color:var(--ui-green-dark)}
 #epaControls .resetControl{min-width:auto;padding:0 12px;font-size:13px;font-weight:700}
+#epaControls .optimalControl{min-width:170px;padding:0 14px;font-size:13px;font-weight:800;background:#2563eb;color:#fff;border-color:#2563eb}
+#epaControls .optimalControl:hover:not(:disabled){background:#1d4ed8;border-color:#1d4ed8}
+#epaControls .optimalControl[hidden]{display:none}
 #scorePanel{
   position:fixed;left:14px;top:14px;z-index:19;width:min(310px,calc(100vw - 28px));
   padding:12px 13px;border:1px solid var(--ui-panel-border);border-radius:14px;
@@ -278,6 +281,7 @@ html.debug-mode #status{display:block}
   </div>
   <div class="controlGroup overlayGroup">
     <button id="densityToggle" class="toggleControl active" type="button" aria-pressed="true">Elektronendichteoberflächen</button>
+    <button id="optimalArrangement" class="optimalControl" type="button" hidden>Günstigste Anordnung</button>
     <button id="resetCluster" class="resetControl" type="button">Neu starten</button>
   </div>
 </div>
@@ -357,22 +361,30 @@ let setSurfaceVisible=null;
 let disposeObject3D=null;
 let evaluateActive=null;
 let collectAllLinks=null;
+let evaluateCluster=null;
+let crystalReference=null;
+let angstromToScene=null;
 
 async function loadMoleculeModules(){
   const builder=await import("./ethanalBuilder.js");
   const interaction=await import("./interactionModel.js");
+  const crystal=await import("./crystalStructure.js");
   buildEthanalInstance=builder.buildEthanalInstance;
   setSurfaceVisible=builder.setSurfaceVisible;
   disposeObject3D=builder.disposeObject3D;
+  angstromToScene=builder.ANGSTROM_TO_SCENE;
   evaluateActive=interaction.evaluateActive;
   collectAllLinks=interaction.collectAllLinks;
+  evaluateCluster=interaction.evaluateCluster;
+  crystalReference=crystal.CRYSTAL_REFERENCE;
   if(typeof buildEthanalInstance!=="function"||typeof setSurfaceVisible!=="function"||
-     typeof evaluateActive!=="function"||typeof collectAllLinks!=="function"){
+     typeof evaluateActive!=="function"||typeof collectAllLinks!=="function"||
+     typeof evaluateCluster!=="function"||!crystalReference||!Number.isFinite(angstromToScene)){
     throw new Error("Molekülmodule konnten nicht vollständig geladen werden.");
   }
 }
 
-const VERSION="dipol-dipol2f / Core EPA-6a";
+const VERSION="dipol-dipol2g / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -562,6 +574,7 @@ const errorBox=document.getElementById("error");
 const addMoleculeButton=document.getElementById("addMolecule");
 const densityToggleButton=document.getElementById("densityToggle");
 const resetClusterButton=document.getElementById("resetCluster");
+const optimalArrangementButton=document.getElementById("optimalArrangement");
 const densityLegend=document.getElementById("densityLegend");
 const scoreValue=document.getElementById("scoreValue");
 const scoreFill=document.getElementById("scoreFill");
@@ -682,7 +695,10 @@ let addedLocked=0;
 let lockCandidateSince=null;
 let displayedScore=0;
 const LOCK_DWELL_MS=320;
-const MAX_ADDED=5;
+const MAX_TOTAL=4;
+const MAX_ADDED=MAX_TOTAL-1;
+let crystalMode=false;
+let crystalAnimation=null;
 
 // Freie Ansichtsdrehung per Maus / Pointer / Touch.
 let orbitYaw=0;
@@ -754,8 +770,18 @@ function applyDensityVisibility(){
 }
 
 function updateButtons(){
-  addMoleculeButton.disabled=!!activeMolecule||addedLocked>=MAX_ADDED;
-  addMoleculeButton.textContent=addedLocked>=MAX_ADDED?"Maximum erreicht (5/5)":activeMolecule?"Ethanal wird ausgerichtet …":`+ Ethanal hinzufügen (${addedLocked+1}/5)`;
+  const totalFixed=fixedMolecules.length;
+  addMoleculeButton.disabled=crystalMode||!!activeMolecule||totalFixed>=MAX_TOTAL;
+  if(crystalMode){
+    addMoleculeButton.textContent="Kristallstruktur";
+  }else if(totalFixed>=MAX_TOTAL){
+    addMoleculeButton.textContent=`Maximum erreicht (${MAX_TOTAL}/${MAX_TOTAL})`;
+  }else if(activeMolecule){
+    addMoleculeButton.textContent="Ethanal wird ausgerichtet …";
+  }else{
+    addMoleculeButton.textContent=`+ Ethanal hinzufügen (${totalFixed+1}/${MAX_TOTAL})`;
+  }
+  optimalArrangementButton.hidden=!(totalFixed===MAX_TOTAL&&!activeMolecule&&!crystalMode);
 }
 
 function createInitialFixedMolecule(){
@@ -769,7 +795,7 @@ function createInitialFixedMolecule(){
 function resetCluster(){
   if(activeMolecule){orbitRoot.remove(activeMolecule);disposeObject3D(activeMolecule);activeMolecule=null;}
   for(const m of fixedMolecules){orbitRoot.remove(m);disposeObject3D(m);}
-  fixedMolecules=[];addedLocked=0;lockCandidateSince=null;displayedScore=0;
+  fixedMolecules=[];addedLocked=0;lockCandidateSince=null;displayedScore=0;crystalMode=false;crystalAnimation=null;
   orbitYaw=0;orbitPitch=0;applyOrbitRotation();
   createInitialFixedMolecule();
   applyDensityVisibility();
@@ -779,7 +805,7 @@ function resetCluster(){
 }
 
 function addMolecule(){
-  if(activeMolecule||addedLocked>=MAX_ADDED)return;
+  if(activeMolecule||fixedMolecules.length>=MAX_TOTAL||crystalMode)return;
   activeMolecule=buildEthanalInstance();
   activeMolecule.visible=false;
   orbitRoot.add(activeMolecule);
@@ -802,38 +828,91 @@ function lockActiveMolecule(){
 }
 
 function updateInteractionScene(now){
+  updateCrystalAnimation(now);
   updateActiveFromTrackedPose();
   scene.updateMatrixWorld(true);
   const activeIsVisible=!!activeMolecule&&activeMolecule.visible&&trackedCubeRoot.visible;
-  const all=fixedMolecules.slice();
-  if(activeIsVisible)all.push(activeMolecule);
-  const allLinks=collectAllLinks(all);
-  updateLinePool(allLinks);
 
-  if(!activeMolecule)return;
-  if(!activeIsVisible){
-    lockCandidateSince=null;
-    scoreValue.textContent="–";scoreFill.style.width="0%";
+  if(activeMolecule){
+    if(!activeIsVisible){
+      updateLinePool([]);
+      lockCandidateSince=null;
+      scoreValue.textContent="–";scoreFill.style.width="0%";
+      return;
+    }
+
+    // STRINGENZ: Solange ein Molekül bewegt wird, werden ausschließlich
+    // dessen Kontakte gezeichnet. Genau dieselben Kontakte erzeugen den Score.
+    const result=evaluateActive(activeMolecule,fixedMolecules);
+    updateLinePool(result.links);
+    displayedScore+=.24*(result.score-displayedScore);
+    const shown=Math.round(displayedScore);
+    scoreValue.textContent=`${shown} %`;
+    scoreFill.style.width=`${shown}%`;
+
+    if(result.lockContactCount>=2&&!result.collision){
+      if(lockCandidateSince===null)lockCandidateSince=now;
+      if(now-lockCandidateSince>=LOCK_DWELL_MS)lockActiveMolecule();
+    }else{
+      lockCandidateSince=null;
+    }
     return;
   }
 
-  const result=evaluateActive(activeMolecule,fixedMolecules);
-  displayedScore+=.20*(result.score-displayedScore);
-  const shown=Math.round(displayedScore);
-  scoreValue.textContent=`${shown} %`;
-  scoreFill.style.width=`${shown}%`;
-
-  if(result.lineCount>=2&&!result.collision){
-    if(lockCandidateSince===null)lockCandidateSince=now;
-    if(now-lockCandidateSince>=LOCK_DWELL_MS)lockActiveMolecule();
+  // Ohne aktives Molekül ist wieder das gesamte Netzwerk der festen
+  // Moleküle sichtbar. Im Kristallmodus wird derselbe Kontakt-Score gezeigt.
+  const cluster=evaluateCluster(fixedMolecules);
+  updateLinePool(cluster.links);
+  if(crystalMode){
+    const shown=Math.round(cluster.score);
+    scoreValue.textContent=`${shown} %`;
+    scoreFill.style.width=`${shown}%`;
   }else{
-    lockCandidateSince=null;
+    scoreValue.textContent="–";
+    scoreFill.style.width="0%";
+  }
+}
+
+function crystalSmoothstep01(t){t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);}
+function startCrystalArrangement(){
+  if(activeMolecule||fixedMolecules.length!==MAX_TOTAL||!crystalReference||crystalMode)return;
+  crystalMode=true;
+  const starts=fixedMolecules.map(m=>({position:m.position.clone(),quaternion:m.quaternion.clone()}));
+  const targets=crystalReference.targets.map(t=>({
+    position:new THREE.Vector3(...t.centerA).multiplyScalar(angstromToScene),
+    quaternion:new THREE.Quaternion(...t.quaternion).normalize()
+  }));
+  crystalAnimation={start:performance.now(),duration:1250,starts,targets};
+  optimalArrangementButton.hidden=true;
+  updateButtons();
+}
+
+function updateCrystalAnimation(now){
+  if(!crystalAnimation)return;
+  const t=crystalSmoothstep01((now-crystalAnimation.start)/crystalAnimation.duration);
+  for(let i=0;i<fixedMolecules.length;i++){
+    const m=fixedMolecules[i],s=crystalAnimation.starts[i],target=crystalAnimation.targets[i];
+    m.position.copy(s.position).lerp(target.position,t);
+    m.quaternion.copy(s.quaternion).slerp(target.quaternion,t).normalize();
+  }
+  if(t>=1){
+    for(let i=0;i<fixedMolecules.length;i++){
+      fixedMolecules[i].position.copy(crystalAnimation.targets[i].position);
+      fixedMolecules[i].quaternion.copy(crystalAnimation.targets[i].quaternion);
+    }
+    crystalAnimation=null;
+    scene.updateMatrixWorld(true);
+    const cluster=evaluateCluster(fixedMolecules);
+    updateLinePool(cluster.links);
+    const shown=Math.round(cluster.score);
+    scoreValue.textContent=`${shown} %`;scoreFill.style.width=`${shown}%`;
   }
 }
 
 addMoleculeButton.addEventListener("click",addMolecule);
 densityToggleButton.addEventListener("click",()=>{densityVisible=!densityVisible;applyDensityVisibility();});
 resetClusterButton.addEventListener("click",()=>resetCluster());
+optimalArrangementButton.addEventListener("click",startCrystalArrangement);
 
 const basisChange=new THREE.Matrix4().set(1,0,0,0, 0,-1,0,0, 0,0,-1,0, 0,0,0,1);
 function convertAprilPose(pose){
