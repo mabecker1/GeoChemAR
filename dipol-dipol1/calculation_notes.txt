@@ -1,0 +1,24 @@
+GeoChemAR dipol-dipol1 – Propan / Ethanal / Ethanol
+
+Elektronendichteoberflächen
+--------------------------
+Methode: Restricted Hartree-Fock (RHF)
+Basissatz: STO-3G
+Elektronendichte-Isowert: 0.002000 e/bohr^3
+
+Die 3D-Geometrien wurden zunächst mit RDKit erzeugt und per UFF optimiert.
+Auf diesen Geometrien wurde für jedes Molekül eine eigene RHF/STO-3G-
+Dichtematrix berechnet. Die dargestellte Oberfläche ist die Isodichtefläche
+rho = 0.002 e/bohr^3. Das elektrostatische Potential (ESP) wurde anschließend
+an jedem Oberflächenvertex aus Kern- und Elektronenbeitrag berechnet.
+
+Farbskala
+---------
+Rot -> Gelb -> Grün -> Cyan -> Blau, entsprechend Mesomerie1.
+Für den direkten Vergleich verwenden alle drei Moleküle dieselbe Skala.
+Die Skala ist um ESP = 0 zentriert; die Grenzen ergeben sich aus dem größeren
+Betrag des gemeinsamen 2. bzw. 98. Perzentils aller drei Oberflächen.
+Dadurch bedeutet Grün ungefähr ESP = 0 und die Farben sind zwischen den
+Molekülen direkt vergleichbar.
+
+Alle drei erzeugten Oberflächen wurden auf geschlossene Dreiecksnetze geprüft.
