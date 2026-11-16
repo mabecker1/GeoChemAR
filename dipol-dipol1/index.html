@@ -188,9 +188,6 @@ html.debug-mode #status{display:block}
 }
 
 
-#comparisonLabels{position:fixed;inset:0;z-index:18;pointer-events:none;}
-.molLabel{position:fixed;display:none;transform:translate(-50%,-50%);padding:7px 11px;border-radius:10px;background:rgba(18,22,27,.88);border:1px solid rgba(255,255,255,.18);color:#fff;font-size:14px;font-weight:800;line-height:1.1;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.25);}
-.molLabel small{display:block;font-size:11px;font-weight:600;color:#d0d5dd;margin-top:2px;text-align:center;}
 .methodChip{display:flex;align-items:center;min-height:40px;padding:0 11px;border-radius:10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;}
 
 /* Smartphone: kompakt unten, trotzdem gut antippbar */
@@ -253,19 +250,16 @@ html.debug-mode #status{display:block}
 <div id="status">AprilTag wird geladen …</div>
 <div id="epaControls" aria-label="Vergleichswerkzeuge">
   <div class="controlGroup moleculeGroup">
-    <label for="compareMode">Ansicht</label>
+    <label for="compareMode">Molekül</label>
     <select id="compareMode">
-      <option value="ALL">Alle drei Moleküle</option>
       <option value="PROPANE">Propan</option>
       <option value="ETHANAL">Ethanal</option>
       <option value="ETHANOL">Ethanol</option>
     </select>
   </div>
   <div class="controlGroup overlayGroup">
-    <button id="modelToggle" class="toggleControl active" type="button" aria-pressed="true">Ball-and-Stick</button>
     <button id="densityToggle" class="toggleControl active" type="button" aria-pressed="true">Elektronendichteoberflächen</button>
   </div>
-  <div class="controlGroup"><div class="methodChip">RHF/STO-3G · ρ = 0,002 e/bohr³</div></div>
   <div class="controlGroup zoomGroup" aria-label="Zoom">
     <button id="zoomOut" type="button" aria-label="Verkleinern">−</button>
     <span id="zoomValue">100 %</span>
@@ -282,19 +276,13 @@ html.debug-mode #status{display:block}
   <div class="legendBar"></div>
   <div class="legendLabels"><span>elektronenreicher / negativer</span><span>≈ 0</span><span>elektronenärmer / positiver</span></div>
 </div>
-<div id="comparisonLabels">
-  <div id="label-PROPANE" class="molLabel">Propan<small>C₃H₈</small></div>
-  <div id="label-ETHANAL" class="molLabel">Ethanal<small>C₂H₄O</small></div>
-  <div id="label-ETHANOL" class="molLabel">Ethanol<small>C₂H₆O</small></div>
-</div>
-
 <div id="error"></div>
 <script type="module">
 import * as THREE from "../libs/three.module.min.js";
 import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
-import { buildComparison, setComparisonState, getLabelAnchors, disposeObject3D } from "./moleculeBuilder.js";
+import { buildComparison, setComparisonState, disposeObject3D } from "./moleculeBuilder.js";
 
-const VERSION="dipol-dipol1 / RHF-STO-3G / Core EPA-6a";
+const VERSION="dipol-dipol1b / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -481,11 +469,9 @@ const status=document.getElementById("status");
 const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
 if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
 const errorBox=document.getElementById("error");
-const modelToggleButton=document.getElementById("modelToggle");
 const densityToggleButton=document.getElementById("densityToggle");
 const densityLegend=document.getElementById("densityLegend");
 const compareModeSelect=document.getElementById("compareMode");
-const labelElements={PROPANE:document.getElementById("label-PROPANE"),ETHANAL:document.getElementById("label-ETHANAL"),ETHANOL:document.getElementById("label-ETHANOL")};
 const zoomOutButton=document.getElementById("zoomOut");
 const zoomInButton=document.getElementById("zoomIn");
 const zoomResetButton=document.getElementById("zoomReset");
@@ -580,24 +566,19 @@ trackedCubeRoot.visible=false;
 scene.add(trackedCubeRoot);
 
 let comparisonRoot=null;
-let labelAnchors={};
-let modelsVisible=true;
 let densityVisible=true;
-let compareMode="ALL";
+let compareMode="PROPANE";
 let comparisonZoom=1.0;
 
 function applyComparisonState(){
   if(!comparisonRoot)return;
-  setComparisonState(comparisonRoot,{models:modelsVisible,surfaces:densityVisible,mode:compareMode});
-  modelToggleButton.classList.toggle("active",modelsVisible);
-  modelToggleButton.setAttribute("aria-pressed",modelsVisible?"true":"false");
+  setComparisonState(comparisonRoot,{surfaces:densityVisible,mode:compareMode});
   densityToggleButton.classList.toggle("active",densityVisible);
   densityToggleButton.setAttribute("aria-pressed",densityVisible?"true":"false");
   densityLegend.classList.toggle("visible",densityVisible);
 }
 function setZoom(v){comparisonZoom=THREE.MathUtils.clamp(v,.62,1.55);contentRoot.scale.setScalar(comparisonZoom);zoomValue.textContent=`${Math.round(comparisonZoom*100)} %`;}
-function buildScene(){if(comparisonRoot){contentRoot.remove(comparisonRoot);disposeObject3D(comparisonRoot);}comparisonRoot=buildComparison();contentRoot.add(comparisonRoot);labelAnchors=getLabelAnchors(comparisonRoot);setZoom(1);applyComparisonState();}
-modelToggleButton.addEventListener("click",()=>{modelsVisible=!modelsVisible;applyComparisonState();});
+function buildScene(){if(comparisonRoot){contentRoot.remove(comparisonRoot);disposeObject3D(comparisonRoot);}comparisonRoot=buildComparison();contentRoot.add(comparisonRoot);compareModeSelect.value=compareMode;setZoom(1);applyComparisonState();}
 densityToggleButton.addEventListener("click",()=>{densityVisible=!densityVisible;applyComparisonState();});
 compareModeSelect.addEventListener("change",()=>{compareMode=compareModeSelect.value;applyComparisonState();});
 zoomOutButton.addEventListener("click",()=>setZoom(comparisonZoom-.10));
@@ -605,20 +586,6 @@ zoomInButton.addEventListener("click",()=>setZoom(comparisonZoom+.10));
 zoomResetButton.addEventListener("click",()=>setZoom(1));
 buildScene();
 
-const labelWorld=new THREE.Vector3(),labelNdc=new THREE.Vector3();
-function updateComparisonLabels(){
-  for(const key of ["PROPANE","ETHANAL","ETHANOL"]){
-    const el=labelElements[key],anchor=labelAnchors[key];
-    const shouldShow=trackedCubeRoot.visible&&(compareMode==="ALL"||compareMode===key)&&anchor?.parent?.visible;
-    if(!shouldShow){el.style.display="none";continue;}
-    anchor.getWorldPosition(labelWorld);labelNdc.copy(labelWorld).project(camera);
-    if(labelNdc.z<-1||labelNdc.z>1||Math.abs(labelNdc.x)>1.15||Math.abs(labelNdc.y)>1.15){el.style.display="none";continue;}
-    const rect=threeCanvas.getBoundingClientRect();
-    el.style.left=`${rect.left+(labelNdc.x*.5+.5)*rect.width}px`;
-    el.style.top=`${rect.top+(-labelNdc.y*.5+.5)*rect.height}px`;
-    el.style.display="block";
-  }
-}
 
 const basisChange=new THREE.Matrix4().set(1,0,0,0, 0,-1,0,0, 0,0,-1,0, 0,0,0,1);
 function convertAprilPose(pose){
@@ -2424,7 +2391,7 @@ function updateStatus(now){
     `\nBusy übersprungen: ${skippedBecauseBusy}`+
     `\nVideo-Frames verpasst: ${skippedPresentedFrames}`;
 }
-function animate(now){requestAnimationFrame(animate);updateRenderedPose(now);updateComparisonLabels();updateStatus(now);renderer.render(scene,camera);}
+function animate(now){requestAnimationFrame(animate);updateRenderedPose(now);updateStatus(now);renderer.render(scene,camera);}
 function showError(e){console.error(e);errorBox.style.display="block";errorBox.textContent="FEHLER:\n"+(e?.stack||String(e));}
 async function start(){try{status.textContent="AprilTag wird geladen …";await initializeAprilTag();status.textContent="AprilTag bereit ✓\nKamera wird gestartet …";await startCamera();startVideoProcessing();requestAnimationFrame(animate);}catch(e){showError(e);}}
 start();
