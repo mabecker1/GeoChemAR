@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>GeoChemAR – dipol-dipol2</title>
+<title>GeoChemAR – dipol-dipol2b</title>
 <style>
 :root{
   --ui-green:#2fac16;
@@ -27,8 +27,9 @@ button,select{font-family:inherit}
   position:fixed;inset:0;width:100%;height:100%;
   object-fit:cover;background:#000;z-index:1;
 }
-#threeCanvas{position:fixed;z-index:2;pointer-events:auto;touch-action:none;cursor:grab}
-#threeCanvas.orbitDragging{cursor:grabbing}
+#threeCanvas{position:fixed;z-index:2;pointer-events:none;background:transparent!important}
+#orbitInput{position:fixed;inset:0;z-index:3;pointer-events:auto;touch-action:none;cursor:grab;background:transparent}
+#orbitInput.orbitDragging{cursor:grabbing}
 #analysisCanvas,#recoveryCanvas,#flowCanvas{display:none}
 
 /* Im Unterricht bleiben die technischen Tracking-Diagnosen unsichtbar.
@@ -272,6 +273,7 @@ html.debug-mode #status{display:block}
 <canvas id="recoveryCanvas" width="320" height="320"></canvas>
 <canvas id="flowCanvas" width="320" height="240"></canvas>
 <canvas id="threeCanvas" width="640" height="480"></canvas>
+<div id="orbitInput" aria-label="Ansicht drehen"></div>
 <div id="status">AprilTag wird geladen …</div>
 <div id="epaControls" aria-label="Dipol-Dipol-Werkzeuge">
   <div class="controlGroup">
@@ -300,7 +302,7 @@ import * as Comlink from "https://unpkg.com/comlink/dist/esm/comlink.mjs";
 import { buildEthanalInstance, setSurfaceVisible, disposeObject3D } from "./ethanalBuilder.js";
 import { evaluateActive, collectAllLinks } from "./interactionModel.js";
 
-const VERSION="dipol-dipol2a / Core EPA-6a";
+const VERSION="dipol-dipol2b / Core EPA-6a";
 const WIDTH=640, HEIGHT=480;
 const TAG_SIZE=0.0395, CUBE_SIZE=0.045, HALF_CUBE=CUBE_SIZE/2;
 const MAX_PREDICTION_TIME_MS=240, MAX_HOLD_TIME_MS=450;
@@ -483,6 +485,7 @@ const recoveryCtx=recoveryCanvas.getContext("2d",{willReadFrequently:true});
 const flowCanvas=document.getElementById("flowCanvas");
 const flowCtx=flowCanvas.getContext("2d",{willReadFrequently:true});
 const threeCanvas=document.getElementById("threeCanvas");
+const orbitInput=document.getElementById("orbitInput");
 const status=document.getElementById("status");
 const DEBUG_MODE=new URLSearchParams(window.location.search).get("debug")==="1";
 if(DEBUG_MODE)document.documentElement.classList.add("debug-mode");
@@ -523,8 +526,9 @@ let flowLastText="–";
 
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(verticalFovDeg,WIDTH/HEIGHT,0.01,10);
-const renderer=new THREE.WebGLRenderer({canvas:threeCanvas,alpha:true,antialias:true});
-renderer.setPixelRatio(1); renderer.setSize(WIDTH,HEIGHT,false); renderer.setClearColor(0x000000,0);
+const renderer=new THREE.WebGLRenderer({canvas:threeCanvas,alpha:true,antialias:true,premultipliedAlpha:true});
+renderer.setPixelRatio(1); renderer.setSize(WIDTH,HEIGHT,false); renderer.setClearColor(0x000000,0); renderer.setClearAlpha(0);
+threeCanvas.style.background="transparent";
 scene.add(new THREE.AmbientLight(0xffffff,2));
 const dl=new THREE.DirectionalLight(0xffffff,2); dl.position.set(1,2,2); scene.add(dl);
 
@@ -623,15 +627,15 @@ function applyOrbitRotation(){
   const qPitch=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),orbitPitch);
   orbitRoot.quaternion.copy(qYaw).multiply(qPitch).normalize();
 }
-threeCanvas.addEventListener("pointerdown",event=>{
+orbitInput.addEventListener("pointerdown",event=>{
   if(orbitPointerId!==null)return;
   orbitPointerId=event.pointerId;
   orbitLastX=event.clientX;orbitLastY=event.clientY;
-  threeCanvas.setPointerCapture?.(event.pointerId);
-  threeCanvas.classList.add("orbitDragging");
+  orbitInput.setPointerCapture?.(event.pointerId);
+  orbitInput.classList.add("orbitDragging");
   event.preventDefault();
 });
-threeCanvas.addEventListener("pointermove",event=>{
+orbitInput.addEventListener("pointermove",event=>{
   if(event.pointerId!==orbitPointerId)return;
   const dx=event.clientX-orbitLastX;
   const dy=event.clientY-orbitLastY;
@@ -644,11 +648,11 @@ threeCanvas.addEventListener("pointermove",event=>{
 function endOrbitPointer(event){
   if(event.pointerId!==orbitPointerId)return;
   orbitPointerId=null;
-  threeCanvas.releasePointerCapture?.(event.pointerId);
-  threeCanvas.classList.remove("orbitDragging");
+  orbitInput.releasePointerCapture?.(event.pointerId);
+  orbitInput.classList.remove("orbitDragging");
 }
-threeCanvas.addEventListener("pointerup",endOrbitPointer);
-threeCanvas.addEventListener("pointercancel",endOrbitPointer);
+orbitInput.addEventListener("pointerup",endOrbitPointer);
+orbitInput.addEventListener("pointercancel",endOrbitPointer);
 
 function updateActiveFromTrackedPose(){
   if(!activeMolecule)return;
