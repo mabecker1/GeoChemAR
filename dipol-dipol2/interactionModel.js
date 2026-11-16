@@ -101,7 +101,7 @@ export function evaluateActive(active,fixed){
 export function collectAllLinks(instances){
   const links=[];
   for(let i=0;i<instances.length;i++){
-    for(let j=i+1;j<instances.length;j++)links.push(...linksForPair(evaluatePair(instances[i],instances[j]))
+    for(let j=i+1;j<instances.length;j++)links.push(...linksForPair(evaluatePair(instances[i],instances[j])))
   }
   return links;
 }
